@@ -1,7 +1,7 @@
 # Ghost - Open Technology Fund Grant Outline
 
 **Applicant:** LucieRaven (Ghost Project)  
-**Funding Request:** $50,000 USD  
+**Funding Request:** $100,000 USD  
 **Duration:** 12 months  
 
 ---
@@ -92,19 +92,6 @@ Ghost is accessible as a Tor Hidden Service, providing:
 - **Community interest:** Organic adoption from privacy-conscious users
 
 ---
-
-## Funding Request: $50,000
-
-### Budget Allocation
-
-| Category | Amount | Purpose |
-|----------|--------|---------|
-| **Security Audit** | $20,000 | Independent cryptographic review by recognized firm |
-| **Tor Infrastructure** | $8,000 | Hidden Service hosting, redundancy, monitoring |
-| **Bug Bounty Program** | $10,000 | Incentivize responsible disclosure |
-| **Development** | $7,000 | Post-quantum crypto research, UI/UX improvements |
-| **Documentation** | $3,000 | Threat model review, user guides, translations |
-| **Operations** | $2,000 | Domain, hosting, administrative costs |
 
 ### Milestones
 
