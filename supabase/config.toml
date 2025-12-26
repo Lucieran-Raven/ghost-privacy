@@ -1,0 +1,25 @@
+project_id = "ppglgiajsaonrpcocdae"
+
+[functions.detect-honeypot]
+verify_jwt = false
+
+# Edge Functions - JWT disabled for anonymous session management
+# Security: Rate limiting + input validation enforced server-side
+[functions.create-session]
+verify_jwt = false
+
+[functions.validate-session]
+verify_jwt = false
+
+[functions.delete-session]
+verify_jwt = false
+
+[functions.extend-session]
+verify_jwt = false
+
+[functions.cleanup-sessions]
+verify_jwt = false
+
+# Honeytoken rotation - internal use only
+[functions.rotate-honeytokens]
+verify_jwt = false

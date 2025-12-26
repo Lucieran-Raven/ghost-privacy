@@ -1,0 +1,5 @@
+<!-- public/placeholder.svg -->
+<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100%" height="100%" fill="#1a1f36"/>
+  <text x="50%" y="50%" fill="#4a5568" font-size="12" text-anchor="middle" dy=".3em">No Preview</text>
+</svg>
