@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta 
+      name="viewport" 
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" 
+    />
+    <meta name="theme-color" content="#ff0a2a" />
+    <title>Ghost</title>
+    <meta name="description" content="Military-grade encrypted messaging that never existed. End-to-end encryption, zero server knowledge, auto-vanishing messages.">
+    <meta name="author" content="Ghost" />
+    <meta name="keywords" content="encrypted messaging, secure chat, zero knowledge, privacy, end-to-end encryption, ephemeral messaging">
+
+    <!-- Open Graph / Social -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ghostprivacy.netlify.app/" />
+    <meta property="og:image" content="https://ghostprivacy.netlify.app/og-image.png" />
+    
+    
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@ghostprivacy" />
+    <meta name="twitter:image" content="https://ghostprivacy.netlify.app/og-image.png" />
+    
+    
+
+    <!-- Canonical -->
+    <link rel="canonical" href="https://ghostprivacy.netlify.app/" />
+
+    <!-- FAVICON (LOCAL) -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+
+    <!-- Optional: Modern PNG favicons (if you add them later) -->
+    <!-- <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" /> -->
+
+    <link rel="manifest" href="/manifest.json" />
+    <meta property="og:title" content="Ghost">
+  <meta name="twitter:title" content="Ghost">
+  <meta property="og:description" content="Military-grade encrypted messaging that never existed. End-to-end encryption, zero server knowledge, auto-vanishing messages.">
+  <meta name="twitter:description" content="Military-grade encrypted messaging that never existed. End-to-end encryption, zero server knowledge, auto-vanishing messages.">
+</head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+
+    <!-- GoatCounter: Privacy-respecting analytics for public pages ONLY -->
+    <!-- SECURITY: This script is structurally blocked from loading on /session/* routes -->
+    <script>
+      (function() {
+        var analyticsEnabled = false;
+        if (!analyticsEnabled) return;
+
+        // HARD GATE: Prevent analytics in secure contexts
+        var isLocalhost = 
+          location.hostname === "localhost" ||
+          location.hostname === "127.0.0.1" ||
+          location.hostname === "::1";
+        
+        var isSecureRoute = location.pathname.startsWith("/session");
+        
+        // Silent exit - analytics must never exist in secure contexts
+        if (isLocalhost || isSecureRoute) return;
+        
+        // Only inject on public marketing pages
+        var s = document.createElement("script");
+        s.async = true;
+        s.src = "//gc.zgo.at/count.js";
+        s.dataset.goatcounter = "https://ghostprivacy.goatcounter.com/count";
+        document.body.appendChild(s);
+      })();
+    </script>
+  </body>
+</html>

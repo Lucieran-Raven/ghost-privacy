@@ -1,0 +1,172 @@
+name: Security Audit & Build Verification
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run security audit weekly
+    - cron: '0 0 * * 0'
+
+jobs:
+  security-audit:
+    name: NPM Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+      
+      - name: Check for high/critical vulnerabilities
+        run: |
+          AUDIT_REPORT=$(npm audit --json)
+          HIGH_COUNT=$(echo $AUDIT_REPORT | jq '.metadata.vulnerabilities.high // 0')
+          CRITICAL_COUNT=$(echo $AUDIT_REPORT | jq '.metadata.vulnerabilities.critical // 0')
+          
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "❌ CRITICAL vulnerabilities found: $CRITICAL_COUNT"
+            exit 1
+          fi
+          
+          if [ "$HIGH_COUNT" -gt 0 ]; then
+            echo "⚠️ HIGH vulnerabilities found: $HIGH_COUNT"
+            exit 1
+          fi
+          
+          echo "✅ No critical or high vulnerabilities"
+
+  lint:
+    name: ESLint Security Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run ESLint
+        run: npm run lint
+
+  build:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    needs: [security-audit, lint]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build production bundle
+        run: npm run build
+        env:
+          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      
+      - name: Verify build output
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "❌ Build failed: dist directory not created"
+            exit 1
+          fi
+          
+          if [ ! -f "dist/index.html" ]; then
+            echo "❌ Build failed: index.html not found"
+            exit 1
+          fi
+          
+          echo "✅ Build successful"
+
+  csp-validation:
+    name: Content Security Policy Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate CSP headers
+        run: |
+          if grep -q "unsafe-eval" public/_headers; then
+            echo "❌ SECURITY: unsafe-eval found in CSP"
+            exit 1
+          fi
+          
+          if ! grep -q "default-src 'self'" public/_headers; then
+            echo "⚠️ WARNING: default-src 'self' not found in CSP"
+          fi
+          
+          echo "✅ CSP validation passed"
+
+  env-check:
+    name: Environment Variables Security Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check for .env file in repository
+        run: |
+          if [ -f ".env" ]; then
+            echo "❌ CRITICAL: .env file found in repository!"
+            echo "This file should never be committed. Add it to .gitignore."
+            exit 1
+          fi
+          
+          if [ ! -f ".env.example" ]; then
+            echo "⚠️ WARNING: .env.example not found"
+            exit 1
+          fi
+          
+          echo "✅ No .env file in repository"
+
+  dependency-review:
+    name: Dependency License & Security Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
+
+  post-deploy-verification:
+    name: Post-Deploy Security Verification
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [security-audit, lint, build, csp-validation, env-check]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Verify deployment security
+        run: |
+          echo "✅ All security checks passed"
+          echo "📦 Build verified"
+          echo "🔒 Dependencies audited"
+          echo "🛡️ CSP validated"
+          echo "🔑 No credentials exposed"
