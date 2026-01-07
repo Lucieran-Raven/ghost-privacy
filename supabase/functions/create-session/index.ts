@@ -58,6 +58,7 @@ serve(async (req: Request) => {
     }
 
     const { sessionId, hostFingerprint } = body;
+
     let clientIpHashHex: string;
     try {
       clientIpHashHex = await getClientIpHashHex(req);

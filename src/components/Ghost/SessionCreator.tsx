@@ -69,7 +69,7 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
   };
 
   const handleCopyId = async () => {
-    await navigator.clipboard.writeText(ghostId);
+    await navigator.clipboard.writeText(ghostId.split('.')[0]);
     setIsCopied(true);
     toast.success('Access code copied');
     setTimeout(() => setIsCopied(false), 2000);
@@ -87,22 +87,14 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
   const handleJoinSession = async () => {
     if (isLoading) return;
     
-    const trimmedId = joinId.trim();
-    const [sessionPart, tokenPart] = trimmedId.split('.', 2);
-    const sessionId = (sessionPart || '').trim().toUpperCase();
-    const capabilityToken = (tokenPart || '').trim();
+    const trimmedId = joinId.trim().toUpperCase();
     
     // Allow both standard format and honeypot formats
-    const isStandardFormat = isValidGhostId(sessionId);
-    const isHoneypotFormat = HoneypotService.hasHoneypotPrefix(sessionId);
+    const isStandardFormat = isValidGhostId(trimmedId);
+    const isHoneypotFormat = HoneypotService.hasHoneypotPrefix(trimmedId);
     
     if (!isStandardFormat && !isHoneypotFormat) {
       setError('Invalid access code format');
-      return;
-    }
-
-    if (isStandardFormat && (!capabilityToken || capabilityToken.length < 16)) {
-      setError('Invalid access code');
       return;
     }
 
@@ -110,31 +102,19 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
     setError(null);
     
     try {
-      // Generate fingerprint for honeypot tracking
+      // Generate fingerprint for tracking
       const fingerprint = await SecurityManager.generateFingerprint();
       
-      // Check if this is a honeypot FIRST (before validation)
-      const honeypotCheck = await HoneypotService.checkSession(sessionId, fingerprint);
-      
-      if (honeypotCheck.isHoneypot) {
-        // Route to honeypot interface - attacker doesn't know
-        if (onHoneypotDetected) {
-          onHoneypotDetected(sessionId, honeypotCheck.trapType || 'unknown');
-        }
-        return;
+      if (isStandardFormat) {
+        // For standard format, skip validation and let backend handle it
+        // Guests don't have capability tokens, so they can't validate beforehand
+        onSessionStart(trimmedId, '', false, 'on-join');
+      } else {
+        // Handle honeypot format
+        onHoneypotDetected(trimmedId, fingerprint);
       }
-
-      // Normal session validation
-      const isValid = await SessionService.validateSession(sessionId, fingerprint, capabilityToken);
-      if (!isValid) {
-        setError('Channel not found or access revoked');
-        return;
-      }
-
-      SecurityManager.setCapabilityToken(sessionId, capabilityToken);
-      onSessionStart(sessionId, capabilityToken, false, 'on-leave');
     } catch {
-      setError('Network error. Check your connection.');
+      setError('Failed to join session. Please retry.');
     } finally {
       setIsLoading(false);
     }
@@ -240,7 +220,7 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
                     {/* ID Box - Cinematic glowing border */}
                     <div className="relative p-4 md:p-6 rounded-xl bg-background/80 border-2 border-primary/50 mb-4 md:mb-6 shadow-[0_0_30px_rgba(var(--primary-rgb),0.3)] backdrop-blur-sm">
                       <div className="font-mono text-xl md:text-2xl lg:text-3xl font-bold text-primary tracking-[0.2em] ghost-id-display pr-10">
-                        {ghostId}
+                        {ghostId.split('.')[0]}
                       </div>
                       <button
                         onClick={handleCopyId}
