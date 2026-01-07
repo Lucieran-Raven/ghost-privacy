@@ -106,18 +106,25 @@ function isValidIpFormat(ip: string): boolean {
 
 export async function getClientIpHashHex(req: Request): Promise<string> {
   const rawIp = extractClientIp(req);
-  
+
+  const env = Deno.env.get('ENVIRONMENT') || 'development';
+
+  // In production, we must have a real client IP from the platform headers.
+  // Falling back would collapse all clients into the same IP hash and weaken
+  // rate limiting + IP-binding.
+  if (env === 'production' && !rawIp) {
+    throw new Error('Client IP unavailable');
+  }
+
   // Development fallback for localhost
   const finalIp = rawIp || "127.0.0.1";
-  
+
   // For localhost development, accept the fallback
   if (finalIp === "127.0.0.1" && !rawIp) {
     // This is expected for localhost development
   } else if (!isValidIpFormat(finalIp)) {
     throw new Error('Client IP unavailable (invalid ip)');
   }
-
-  const env = Deno.env.get('ENVIRONMENT') || 'development';
   const envSalt = Deno.env.get('IP_HASH_SALT');
   const fallbackSalt = 'development-salt-32-chars-long-0000';
   const salt = envSalt || (env === 'production' ? '' : fallbackSalt);

@@ -70,6 +70,14 @@ Thumbs.db
 *.temp
 .cache/
 
+# Android (Capacitor)
+android/local.properties
+android/.gradle/
+android/**/build/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/.idea/
+
 # Sensitive files (auto-detected)
 .env.example
 
