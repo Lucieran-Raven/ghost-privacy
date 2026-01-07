@@ -206,6 +206,27 @@ fn vault_encrypt(session_id: String, plaintext_base64: String) -> Result<serde_j
 }
 
 #[tauri::command]
+fn vault_encrypt_utf8(session_id: String, plaintext: String) -> Result<serde_json::Value, String> {
+  let vault = KEY_VAULT.get_or_init(KeyVault::new);
+  let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
+
+  let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+
+  let mut nonce_bytes = [0u8; 12];
+  OsRng.fill_bytes(&mut nonce_bytes);
+  let nonce = Nonce::from_slice(&nonce_bytes);
+
+  let ciphertext = cipher
+    .encrypt(nonce, plaintext.as_bytes())
+    .map_err(|_| "encrypt failed".to_string())?;
+
+  Ok(serde_json::json!({
+    "ciphertext": encode_b64(&ciphertext),
+    "iv": encode_b64(&nonce_bytes)
+  }))
+}
+
+#[tauri::command]
 fn vault_decrypt(session_id: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
   let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
@@ -224,6 +245,27 @@ fn vault_decrypt(session_id: String, ciphertext_base64: String, iv_base64: Strin
     .map_err(|_| "decrypt failed".to_string())?;
 
   Ok(encode_b64(&plaintext))
+}
+
+#[tauri::command]
+fn vault_decrypt_utf8(session_id: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
+  let vault = KEY_VAULT.get_or_init(KeyVault::new);
+  let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
+
+  let ciphertext = decode_b64(&ciphertext_base64)?;
+  let iv = decode_b64(&iv_base64)?;
+  if iv.len() != 12 {
+    return Err("iv must be 12 bytes".to_string());
+  }
+
+  let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+  let nonce = Nonce::from_slice(&iv);
+
+  let plaintext = cipher
+    .decrypt(nonce, ciphertext.as_ref())
+    .map_err(|_| "decrypt failed".to_string())?;
+
+  String::from_utf8(plaintext).map_err(|_| "invalid utf-8".to_string())
 }
 
 #[tauri::command]
@@ -275,7 +317,9 @@ pub fn run() {
       secure_panic_wipe,
       vault_set_key,
       vault_encrypt,
+      vault_encrypt_utf8,
       vault_decrypt,
+      vault_decrypt_utf8,
       derive_realtime_channel_name
     ])
     .build(tauri::generate_context!())

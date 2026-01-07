@@ -49,17 +49,25 @@ export class EncryptionEngine {
 
   async encryptMessage(message: string): Promise<{ encrypted: string; iv: string }> {
     if (this.tauriSessionId && isTauriRuntime()) {
-      const bytes = new TextEncoder().encode(message);
-      let binary = '';
-      for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
+      try {
+        const res = await tauriInvoke<{ ciphertext: string; iv: string }>('vault_encrypt_utf8', {
+          session_id: this.tauriSessionId,
+          plaintext: message
+        });
+        return { encrypted: res.ciphertext, iv: res.iv };
+      } catch {
+        const bytes = new TextEncoder().encode(message);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const plaintextBase64 = btoa(binary);
+        const res = await tauriInvoke<{ ciphertext: string; iv: string }>('vault_encrypt', {
+          session_id: this.tauriSessionId,
+          plaintext_base64: plaintextBase64
+        });
+        return { encrypted: res.ciphertext, iv: res.iv };
       }
-      const plaintextBase64 = btoa(binary);
-      const res = await tauriInvoke<{ ciphertext: string; iv: string }>('vault_encrypt', {
-        session_id: this.tauriSessionId,
-        plaintext_base64: plaintextBase64
-      });
-      return { encrypted: res.ciphertext, iv: res.iv };
     }
 
     if (!this.key) throw new Error('Encryption key not initialized');
@@ -87,17 +95,25 @@ export class EncryptionEngine {
 
   async decryptMessage(encryptedBase64: string, ivBase64: string): Promise<string> {
     if (this.tauriSessionId && isTauriRuntime()) {
-      const plaintextBase64 = await tauriInvoke<string>('vault_decrypt', {
-        session_id: this.tauriSessionId,
-        ciphertext_base64: encryptedBase64,
-        iv_base64: ivBase64
-      });
-      const binary = atob(plaintextBase64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
+      try {
+        return await tauriInvoke<string>('vault_decrypt_utf8', {
+          session_id: this.tauriSessionId,
+          ciphertext_base64: encryptedBase64,
+          iv_base64: ivBase64
+        });
+      } catch {
+        const plaintextBase64 = await tauriInvoke<string>('vault_decrypt', {
+          session_id: this.tauriSessionId,
+          ciphertext_base64: encryptedBase64,
+          iv_base64: ivBase64
+        });
+        const binary = atob(plaintextBase64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return new TextDecoder().decode(bytes);
       }
-      return new TextDecoder().decode(bytes);
     }
 
     if (!this.key) throw new Error('Encryption key not initialized');
