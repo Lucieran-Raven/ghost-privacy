@@ -24,6 +24,9 @@ export class RealtimeManager {
   private sessionId: string;
   private capabilityToken: string;
   private participantId: string;
+  private outbox: Array<{ payload: BroadcastPayload; retries: number; enqueuedAt: number }> = [];
+  private readonly outboxMaxItems = 64;
+  private readonly outboxMaxPayloadChars = 200_000;
   private messageHandlers: Map<string, (payload: BroadcastPayload) => void> = new Map();
   private presenceHandlers: ((participants: string[]) => void)[] = [];
   private statusHandlers: ((state: ConnectionState) => void)[] = [];
@@ -46,6 +49,92 @@ export class RealtimeManager {
   private updateState(status: ConnectionStatus, progress: number, error?: string): void {
     this.connectionState = { status, progress, error };
     this.statusHandlers.forEach(handler => handler(this.connectionState));
+  }
+
+  private estimatePayloadChars(payload: BroadcastPayload): number {
+    try {
+      return JSON.stringify(payload).length;
+    } catch {
+      return Number.POSITIVE_INFINITY;
+    }
+  }
+
+  private shouldQueuePayload(payload: BroadcastPayload): boolean {
+    // Never queue termination events.
+    if (payload.type === 'session-terminated') return false;
+
+    // Avoid queueing very large payloads in memory (e.g. file/video/voice encrypted blobs).
+    const size = this.estimatePayloadChars(payload);
+    if (!Number.isFinite(size) || size > this.outboxMaxPayloadChars) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private enqueuePayload(payload: BroadcastPayload, retries: number): boolean {
+    if (this.isDestroyed) return false;
+    if (!this.shouldQueuePayload(payload)) return false;
+
+    if (this.outbox.length >= this.outboxMaxItems) {
+      // Fail-closed for user content; don't silently drop.
+      if (payload.type === 'chat-message' || payload.type === 'voice-message' || payload.type === 'video-message') {
+        return false;
+      }
+
+      // Best-effort for non-critical messages (acks/typing/etc): drop oldest.
+      this.outbox.shift();
+    }
+
+    this.outbox.push({ payload, retries, enqueuedAt: Date.now() });
+    return true;
+  }
+
+  private async sendNow(payload: BroadcastPayload, retries: number): Promise<boolean> {
+    if (!this.channel || this.connectionState.status !== 'connected') {
+      return false;
+    }
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const result = await this.channel.send({
+          type: 'broadcast',
+          event: 'ghost-message',
+          payload
+        });
+
+        if (result === 'ok') {
+          this.lastHeartbeat = Date.now();
+          return true;
+        }
+      } catch {
+        // Silent retry
+      }
+
+      if (attempt < retries) {
+        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+      }
+    }
+
+    return false;
+  }
+
+  private async flushOutbox(): Promise<void> {
+    if (!this.channel || this.connectionState.status !== 'connected') {
+      return;
+    }
+
+    // Flush oldest-first. Stop on first failure to avoid tight loops while unstable.
+    while (this.outbox.length > 0 && this.channel && this.connectionState.status === 'connected') {
+      const next = this.outbox.shift();
+      if (!next) break;
+      const ok = await this.sendNow(next.payload, next.retries);
+      if (!ok) {
+        // Put it back at the front and stop; we'll retry after reconnect.
+        this.outbox.unshift(next);
+        break;
+      }
+    }
   }
 
   async connect(): Promise<void> {
@@ -166,6 +255,7 @@ export class RealtimeManager {
           this.updateState('connected', 100);
           this.reconnectAttempts = 0;
           this.startHeartbeatMonitor();
+          await this.flushOutbox();
           
           resolve();
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
@@ -280,10 +370,6 @@ export class RealtimeManager {
   }
 
   async send(type: BroadcastPayload['type'], data: any, retries = 3): Promise<boolean> {
-    if (!this.channel || this.connectionState.status !== 'connected') {
-      return false;
-    }
-
     const payload: BroadcastPayload = {
       type,
       senderId: this.participantId,
@@ -292,28 +378,16 @@ export class RealtimeManager {
       nonce: generateNonce()
     };
 
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        const result = await this.channel.send({
-          type: 'broadcast',
-          event: 'ghost-message',
-          payload
-        });
-
-        if (result === 'ok') {
-          this.lastHeartbeat = Date.now();
-          return true;
-        }
-      } catch {
-        // Silent retry
-      }
-
-      if (attempt < retries) {
-        await new Promise(resolve => setTimeout(resolve, 500 * attempt));
-      }
+    // If we're not connected, accept the message into an in-memory outbox when safe.
+    if (!this.channel || this.connectionState.status !== 'connected') {
+      return this.enqueuePayload(payload, retries);
     }
 
-    return false;
+    const ok = await this.sendNow(payload, retries);
+    if (ok) return true;
+
+    // Connection may be unstable; best-effort queue for retry after reconnection.
+    return this.enqueuePayload(payload, retries);
   }
 
   async sendWithAck(type: BroadcastPayload['type'], data: any, ackTimeout = 5000): Promise<{ sent: boolean; messageId: string }> {
@@ -350,6 +424,7 @@ export class RealtimeManager {
   async disconnect(): Promise<void> {
     this.isDestroyed = true;
     this.stopHeartbeatMonitor();
+    this.outbox = [];
     
     if (this.channel) {
       try {
