@@ -36,8 +36,12 @@ const disableServiceWorkersAndCaches = () => {
 };
 
 // Run stale detection immediately
-detectStalePWA();
-disableServiceWorkersAndCaches();
+if (!isTauriRuntime()) {
+  setTimeout(() => {
+    detectStalePWA();
+    disableServiceWorkersAndCaches();
+  }, 0);
+}
 
 if (isTauriRuntime()) {
   try {
