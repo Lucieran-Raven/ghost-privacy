@@ -193,7 +193,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       setConnectionState({ status: 'connecting', progress: 30 });
 
       keyPairRef.current = await KeyExchange.generateKeyPair();
-      realtimeManagerRef.current = new RealtimeManager(sessionId, participantIdRef.current);
+      realtimeManagerRef.current = new RealtimeManager(sessionId, capabilityToken, participantIdRef.current);
 
       setupMessageHandlers();
 

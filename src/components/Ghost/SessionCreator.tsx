@@ -5,7 +5,7 @@ import { generateGhostId, isValidGhostId } from '@/utils/encryption';
 import { SecurityManager } from '@/utils/security';
 import { SessionService } from '@/lib/sessionService';
 import { HoneypotService } from '@/lib/honeypotService';
-import { isValidCapabilityToken } from '@/utils/algorithms/session/binding';
+import { parseAccessCode } from '@/utils/algorithms/session/accessCode';
 import { cn } from '@/lib/utils';
 import ParticleField from './ParticleField';
 
@@ -89,20 +89,19 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
     if (isLoading) return;
     
     const trimmedId = joinId.trim();
-    const [rawSessionId, rawCapabilityToken] = trimmedId.split('.', 2);
-    const sessionId = (rawSessionId || '').toUpperCase();
-    const capabilityToken = (rawCapabilityToken || '').trim();
+    const rawSessionId = (trimmedId.split('.', 1)[0] || '').trim().toUpperCase();
     
     // Allow both standard format and honeypot formats
-    const isStandardFormat = isValidGhostId(sessionId);
-    const isHoneypotFormat = HoneypotService.hasHoneypotPrefix(sessionId);
+    const isStandardFormat = isValidGhostId(rawSessionId);
+    const isHoneypotFormat = HoneypotService.hasHoneypotPrefix(rawSessionId);
     
     if (!isStandardFormat && !isHoneypotFormat) {
       setError('Invalid access code format');
       return;
     }
 
-    if (isStandardFormat && (!capabilityToken || !isValidCapabilityToken(capabilityToken))) {
+    const parsed = isStandardFormat ? parseAccessCode(trimmedId) : null;
+    if (isStandardFormat && !parsed) {
       setError('Invalid access code (missing capability token)');
       return;
     }
@@ -112,12 +111,12 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
     
     try {
       if (isStandardFormat) {
-        SecurityManager.setCapabilityToken(sessionId, capabilityToken);
-        onSessionStart(sessionId, capabilityToken, false, 'on-join');
+        SecurityManager.setCapabilityToken(parsed!.sessionId, parsed!.capabilityToken);
+        onSessionStart(parsed!.sessionId, parsed!.capabilityToken, false, 'on-join');
       } else {
         // Handle honeypot format
         const fingerprint = await SecurityManager.generateFingerprint();
-        onHoneypotDetected(sessionId, fingerprint);
+        onHoneypotDetected(rawSessionId, fingerprint);
       }
     } catch {
       setError('Failed to join session. Please retry.');

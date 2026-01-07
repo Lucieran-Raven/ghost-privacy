@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/publicClient';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { generateNonce } from '@/utils/encryption';
+import { deriveRealtimeChannelName } from '@/utils/algorithms/session/realtimeChannel';
 
 export interface BroadcastPayload {
   type: 'chat-message' | 'key-exchange' | 'presence' | 'typing' | 'file' | 'message-ack' | 'session-terminated' | 'voice-message' | 'video-message';
@@ -21,6 +22,7 @@ export interface ConnectionState {
 export class RealtimeManager {
   private channel: RealtimeChannel | null = null;
   private sessionId: string;
+  private capabilityToken: string;
   private participantId: string;
   private messageHandlers: Map<string, (payload: BroadcastPayload) => void> = new Map();
   private presenceHandlers: ((participants: string[]) => void)[] = [];
@@ -35,16 +37,10 @@ export class RealtimeManager {
   private lastPresenceState: string[] = [];
   private connectionCheckInterval: ReturnType<typeof setInterval> | null = null;
 
-  constructor(sessionId: string, participantId: string) {
+  constructor(sessionId: string, capabilityToken: string, participantId: string) {
     this.sessionId = sessionId;
+    this.capabilityToken = capabilityToken;
     this.participantId = participantId;
-  }
-
-  /**
-   * CRITICAL: Channel name MUST be exactly `ghost-session-${sessionId}` for both peers
-   */
-  private getChannelName(): string {
-    return `ghost-session-${this.sessionId}`;
   }
 
   private updateState(status: ConnectionStatus, progress: number, error?: string): void {
@@ -54,8 +50,8 @@ export class RealtimeManager {
 
   async connect(): Promise<void> {
     if (this.isDestroyed) return;
-    
-    const channelName = this.getChannelName();
+
+    const channelName = await deriveRealtimeChannelName(this.sessionId, this.capabilityToken);
     this.updateState('subscribing', 25);
 
     this.channel = supabase.channel(channelName, {
