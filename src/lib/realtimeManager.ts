@@ -52,6 +52,27 @@ export class RealtimeManager {
   }
 
   private estimatePayloadChars(payload: BroadcastPayload): number {
+    // Avoid JSON.stringify for small, frequent events.
+    if (payload.type === 'typing' || payload.type === 'presence' || payload.type === 'message-ack') {
+      return 512;
+    }
+
+    // Key exchange payloads can be moderately sized (public key), but not huge.
+    if (payload.type === 'key-exchange') {
+      const pk = (payload.data && typeof payload.data.publicKey === 'string') ? payload.data.publicKey.length : 0;
+      return 512 + pk;
+    }
+
+    // Chat messages contain ciphertext + iv; estimate based on string lengths to avoid stringify.
+    if (payload.type === 'chat-message') {
+      const enc = (payload.data && typeof payload.data.encrypted === 'string') ? payload.data.encrypted.length : 0;
+      const iv = (payload.data && typeof payload.data.iv === 'string') ? payload.data.iv.length : 0;
+      const name = (payload.data && typeof payload.data.fileName === 'string') ? payload.data.fileName.length : 0;
+      const misc = 256;
+      return misc + enc + iv + name;
+    }
+
+    // For any other payloads, fall back to stringify (rare).
     try {
       return JSON.stringify(payload).length;
     } catch {
@@ -75,6 +96,11 @@ export class RealtimeManager {
   private enqueuePayload(payload: BroadcastPayload, retries: number): boolean {
     if (this.isDestroyed) return false;
     if (!this.shouldQueuePayload(payload)) return false;
+
+    // Coalesce typing events to avoid outbox growth during unstable networks.
+    if (payload.type === 'typing') {
+      this.outbox = this.outbox.filter((item) => item.payload.type !== 'typing');
+    }
 
     if (this.outbox.length >= this.outboxMaxItems) {
       // Fail-closed for user content; don't silently drop.

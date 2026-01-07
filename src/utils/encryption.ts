@@ -22,6 +22,25 @@ import {
 } from '@/utils/algorithms/encryption/ephemeral';
 import { isTauriRuntime, tauriInvoke } from '@/utils/runtime';
 
+function bytesToBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  const chunks: string[] = [];
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const sub = bytes.subarray(i, i + chunkSize);
+    chunks.push(String.fromCharCode.apply(null, sub as unknown as number[]));
+  }
+  return btoa(chunks.join(''));
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 const deps: EphemeralCryptoDeps = {
   subtle: crypto.subtle,
   getRandomValues: crypto.getRandomValues.bind(crypto)
@@ -77,11 +96,7 @@ export class EncryptionEngine {
   async encryptBytes(plaintext: ArrayBuffer): Promise<{ encrypted: string; iv: string }> {
     if (this.tauriSessionId && isTauriRuntime()) {
       const bytes = new Uint8Array(plaintext);
-      let binary = '';
-      for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const plaintextBase64 = btoa(binary);
+      const plaintextBase64 = bytesToBase64(bytes);
       const res = await tauriInvoke<{ ciphertext: string; iv: string }>('vault_encrypt', {
         session_id: this.tauriSessionId,
         plaintext_base64: plaintextBase64
@@ -127,12 +142,8 @@ export class EncryptionEngine {
         ciphertext_base64: encryptedBase64,
         iv_base64: ivBase64
       });
-      const binary = atob(plaintextBase64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      return bytes.buffer.slice(0, bytes.byteLength);
+      const bytes = base64ToBytes(plaintextBase64);
+      return bytes.slice().buffer;
     }
 
     if (!this.key) throw new Error('Encryption key not initialized');

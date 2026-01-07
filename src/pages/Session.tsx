@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense, lazy } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import Navbar from '@/components/Ghost/Navbar';
 import SessionCreator from '@/components/Ghost/SessionCreator';
-import ChatInterface from '@/components/Ghost/ChatInterface';
-import HoneypotChat from '@/components/Ghost/HoneypotChat';
 import ClearnetWarning from '@/components/Ghost/ClearnetWarning';
-import DecoyCalculator from '@/components/Ghost/DecoyCalculator';
 import { usePlausibleDeniability } from '@/hooks/usePlausibleDeniability';
+
+const ChatInterface = lazy(() => import('@/components/Ghost/ChatInterface'));
+const HoneypotChat = lazy(() => import('@/components/Ghost/HoneypotChat'));
+const DecoyCalculator = lazy(() => import('@/components/Ghost/DecoyCalculator'));
 
 interface SessionState {
   sessionId: string;
@@ -68,28 +69,36 @@ const Session = () => {
 
   // Ghost v3.0: Show decoy calculator when panic mode activated
   if (isDecoyActive) {
-    return <DecoyCalculator onExit={deactivateDecoy} />;
+    return (
+      <Suspense fallback={<div />}>
+        <DecoyCalculator onExit={deactivateDecoy} />
+      </Suspense>
+    );
   }
 
   // Show honeypot interface if triggered
   if (honeypot) {
     return (
-      <HoneypotChat
-        sessionId={honeypot.sessionId}
-        trapType={honeypot.trapType}
-      />
+      <Suspense fallback={<div />}>
+        <HoneypotChat
+          sessionId={honeypot.sessionId}
+          trapType={honeypot.trapType}
+        />
+      </Suspense>
     );
   }
 
   if (session) {
     return (
-      <ChatInterface
-        sessionId={session.sessionId}
-        capabilityToken={session.capabilityToken}
-        isHost={session.isHost}
-        timerMode={session.timerMode}
-        onEndSession={(showToast = true) => handleEndSession(showToast)}
-      />
+      <Suspense fallback={<div />}>
+        <ChatInterface
+          sessionId={session.sessionId}
+          capabilityToken={session.capabilityToken}
+          isHost={session.isHost}
+          timerMode={session.timerMode}
+          onEndSession={(showToast = true) => handleEndSession(showToast)}
+        />
+      </Suspense>
     );
   }
 
