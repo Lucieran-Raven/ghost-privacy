@@ -265,17 +265,24 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             );
 
             const bytes = new Uint8Array(sharedSecretBytes);
-            let binary = '';
-            for (let i = 0; i < bytes.byteLength; i++) {
-              binary += String.fromCharCode(bytes[i]);
+            const chunkSize = 0x8000;
+            const chunks: string[] = [];
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+              const sub = bytes.subarray(i, i + chunkSize);
+              chunks.push(String.fromCharCode.apply(null, sub as unknown as number[]));
             }
-            const keyBase64 = btoa(binary);
+            const keyBase64 = btoa(chunks.join(''));
 
             try {
               await tauriInvoke('vault_set_key', { session_id: sessionId, key_base64: keyBase64 });
               encryptionEngineRef.current?.enableTauriVault(sessionId);
             } catch {
-              throw new Error('Failed to set Secure Runtime key');
+              const sharedSecret = await KeyExchange.deriveSharedSecret(
+                keyPairRef.current.privateKey,
+                partnerPublicKey
+              );
+              sessionKeyRef.current = sharedSecret;
+              await encryptionEngineRef.current?.setKey(sharedSecret);
             } finally {
               try {
                 bytes.fill(0);
