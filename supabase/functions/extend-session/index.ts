@@ -2,7 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors.ts";
 import {
+  getClientIpHashHex,
   jsonError,
+  parseSessionIpHash,
   verifyCapabilityHash
 } from "../_shared/security.ts";
 
@@ -72,7 +74,7 @@ serve(async (req: Request) => {
     // Verify session exists and is not expired before extending
     const { data: existingSession, error: checkError } = await supabase
       .from('ghost_sessions')
-      .select('session_id, expires_at, host_fingerprint, guest_fingerprint, capability_hash')
+      .select('session_id, expires_at, host_fingerprint, guest_fingerprint, capability_hash, ip_hash')
       .eq('session_id', sessionId)
       .gt('expires_at', new Date().toISOString())
       .maybeSingle();
@@ -94,6 +96,26 @@ serve(async (req: Request) => {
     const isGuest = existingSession.guest_fingerprint && fp === existingSession.guest_fingerprint;
 
     if (!isHost && !isGuest) {
+      return errorResponse(req, 404, 'NOT_FOUND');
+    }
+
+    let clientIpHex: string;
+    try {
+      clientIpHex = await getClientIpHashHex(req);
+    } catch {
+      return errorResponse(req, 400, 'IP_UNAVAILABLE');
+    }
+
+    const ipParts = parseSessionIpHash(existingSession.ip_hash);
+    if (!ipParts) {
+      return errorResponse(req, 500, 'SERVER_ERROR');
+    }
+
+    if (isHost && ipParts.hostHex !== clientIpHex) {
+      return errorResponse(req, 404, 'NOT_FOUND');
+    }
+
+    if (isGuest && ipParts.guestHex !== clientIpHex) {
       return errorResponse(req, 404, 'NOT_FOUND');
     }
 

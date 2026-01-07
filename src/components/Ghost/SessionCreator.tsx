@@ -5,6 +5,7 @@ import { generateGhostId, isValidGhostId } from '@/utils/encryption';
 import { SecurityManager } from '@/utils/security';
 import { SessionService } from '@/lib/sessionService';
 import { HoneypotService } from '@/lib/honeypotService';
+import { isValidCapabilityToken } from '@/utils/algorithms/session/binding';
 import { cn } from '@/lib/utils';
 import ParticleField from './ParticleField';
 
@@ -69,7 +70,7 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
   };
 
   const handleCopyId = async () => {
-    await navigator.clipboard.writeText(ghostId.split('.')[0]);
+    await navigator.clipboard.writeText(ghostId);
     setIsCopied(true);
     toast.success('Access code copied');
     setTimeout(() => setIsCopied(false), 2000);
@@ -87,14 +88,22 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
   const handleJoinSession = async () => {
     if (isLoading) return;
     
-    const trimmedId = joinId.trim().toUpperCase();
+    const trimmedId = joinId.trim();
+    const [rawSessionId, rawCapabilityToken] = trimmedId.split('.', 2);
+    const sessionId = (rawSessionId || '').toUpperCase();
+    const capabilityToken = (rawCapabilityToken || '').trim();
     
     // Allow both standard format and honeypot formats
-    const isStandardFormat = isValidGhostId(trimmedId);
-    const isHoneypotFormat = HoneypotService.hasHoneypotPrefix(trimmedId);
+    const isStandardFormat = isValidGhostId(sessionId);
+    const isHoneypotFormat = HoneypotService.hasHoneypotPrefix(sessionId);
     
     if (!isStandardFormat && !isHoneypotFormat) {
       setError('Invalid access code format');
+      return;
+    }
+
+    if (isStandardFormat && (!capabilityToken || !isValidCapabilityToken(capabilityToken))) {
+      setError('Invalid access code (missing capability token)');
       return;
     }
 
@@ -102,16 +111,13 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
     setError(null);
     
     try {
-      // Generate fingerprint for tracking
-      const fingerprint = await SecurityManager.generateFingerprint();
-      
       if (isStandardFormat) {
-        // For standard format, skip validation and let backend handle it
-        // Guests don't have capability tokens, so they can't validate beforehand
-        onSessionStart(trimmedId, '', false, 'on-join');
+        SecurityManager.setCapabilityToken(sessionId, capabilityToken);
+        onSessionStart(sessionId, capabilityToken, false, 'on-join');
       } else {
         // Handle honeypot format
-        onHoneypotDetected(trimmedId, fingerprint);
+        const fingerprint = await SecurityManager.generateFingerprint();
+        onHoneypotDetected(sessionId, fingerprint);
       }
     } catch {
       setError('Failed to join session. Please retry.');
