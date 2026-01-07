@@ -6,7 +6,9 @@ use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+use hmac::{Hmac, Mac};
 use rand::RngCore;
+use sha2::Sha256;
 use tauri::{Manager, Runtime, RunEvent};
 
 static CLEANUP_PLAN: OnceLock<CleanupPlan> = OnceLock::new();
@@ -133,6 +135,34 @@ fn encode_b64(bytes: &[u8]) -> String {
   BASE64.encode(bytes)
 }
 
+fn decode_b64url_like_browser(s: &str) -> Result<Vec<u8>, String> {
+  // Mirrors TS behavior:
+  // value.replace(/-/g, '+').replace(/_/g, '/').padEnd(..., '='); atob(padded)
+  let mut normalized = s.replace('-', "+").replace('_', "/");
+  let rem = normalized.len() % 4;
+  if rem != 0 {
+    normalized.extend(std::iter::repeat('=').take(4 - rem));
+  }
+
+  decode_b64(&normalized)
+}
+
+fn bytes_to_hex(bytes: &[u8]) -> String {
+  let mut out = String::with_capacity(bytes.len() * 2);
+  for b in bytes {
+    out.push_str(&format!("{:02x}", b));
+  }
+  out
+}
+
+fn hmac_sha256_hex(key: &[u8], message: &str) -> Result<String, String> {
+  type HmacSha256 = Hmac<Sha256>;
+  let mut mac = <HmacSha256 as Mac>::new_from_slice(key).map_err(|_| "invalid hmac key".to_string())?;
+  mac.update(message.as_bytes());
+  let digest = mac.finalize().into_bytes();
+  Ok(bytes_to_hex(&digest))
+}
+
 #[tauri::command]
 fn secure_panic_wipe() {
   purge_cleanup_plan();
@@ -196,6 +226,26 @@ fn vault_decrypt(session_id: String, ciphertext_base64: String, iv_base64: Strin
   Ok(encode_b64(&plaintext))
 }
 
+#[tauri::command]
+fn derive_realtime_channel_name(session_id: String, capability_token: String) -> Result<String, String> {
+  let mut key_bytes = match decode_b64url_like_browser(&capability_token) {
+    Ok(b) => b,
+    Err(_) => capability_token.as_bytes().to_vec(),
+  };
+
+  let mac_hex = hmac_sha256_hex(&key_bytes, &session_id)?;
+  let tag = mac_hex
+    .get(0..32)
+    .ok_or_else(|| "invalid hmac output".to_string())?;
+
+  // Best-effort memory cleanup for the key material.
+  for b in key_bytes.iter_mut() {
+    *b = 0;
+  }
+
+  Ok(format!("ghost-session-{}-{}", session_id, tag))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   std::panic::set_hook(Box::new(|_| {
@@ -225,7 +275,8 @@ pub fn run() {
       secure_panic_wipe,
       vault_set_key,
       vault_encrypt,
-      vault_decrypt
+      vault_decrypt,
+      derive_realtime_channel_name
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application");

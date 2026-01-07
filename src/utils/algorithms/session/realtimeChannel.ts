@@ -1,3 +1,5 @@
+import { isTauriRuntime, tauriInvoke } from '@/utils/runtime';
+
 function base64UrlToBytes(value: string): Uint8Array {
   const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
   const binary = atob(padded);
@@ -19,6 +21,20 @@ async function hmacSha256Hex(keyBytes: Uint8Array, message: string): Promise<str
 }
 
 export async function deriveRealtimeChannelName(sessionId: string, capabilityToken: string): Promise<string> {
+  if (isTauriRuntime()) {
+    try {
+      const name = await tauriInvoke<string>('derive_realtime_channel_name', {
+        sessionId,
+        capabilityToken,
+      });
+      if (typeof name === 'string' && name.length > 0) {
+        return name;
+      }
+    } catch {
+      // Fall back to WebCrypto implementation below.
+    }
+  }
+
   let keyBytes: Uint8Array;
   try {
     keyBytes = base64UrlToBytes(capabilityToken);
