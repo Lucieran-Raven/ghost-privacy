@@ -141,7 +141,7 @@ export async function importAesKeyRawBase64(deps: EphemeralCryptoDeps, keyBase64
 }
 
 export async function generateEcdhKeyPair(deps: EphemeralCryptoDeps): Promise<CryptoKeyPair> {
-  return deps.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey']);
+  return deps.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']);
 }
 
 export async function exportEcdhPublicKeySpkiBase64(deps: EphemeralCryptoDeps, publicKey: CryptoKey): Promise<string> {
