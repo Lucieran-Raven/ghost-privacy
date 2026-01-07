@@ -80,6 +80,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   const sessionExtendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const partnerDisconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const partnerCountRef = useRef<number>(0);
+  const fileTransfersRef = useRef<Map<string, { chunks: string[]; received: number; total: number; iv: string; fileName: string; fileType: string; timestamp: number; cleanupTimer: ReturnType<typeof setTimeout> | null }>>(new Map());
   const localFingerprintRef = useRef<string>('');
   const isTerminatingRef = useRef(false);
   const verificationShownRef = useRef(false);
@@ -244,6 +245,104 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           SessionService.extendSession(sessionId).catch(() => {
           });
         }, 10 * 60 * 1000);
+      }
+    });
+
+    manager.onMessage('file', async (payload) => {
+      try {
+        if (!encryptionEngineRef.current) return;
+
+        const data = payload.data;
+        if (!data || !data.fileId || !data.kind) return;
+
+        if (data.kind === 'init') {
+          const existing = fileTransfersRef.current.get(data.fileId);
+          if (existing?.cleanupTimer) {
+            clearTimeout(existing.cleanupTimer);
+          }
+
+          const cleanupTimer = setTimeout(() => {
+            const t = fileTransfersRef.current.get(data.fileId);
+            if (t?.cleanupTimer) {
+              clearTimeout(t.cleanupTimer);
+            }
+            fileTransfersRef.current.delete(data.fileId);
+          }, 5 * 60 * 1000);
+
+          fileTransfersRef.current.set(data.fileId, {
+            chunks: new Array(Math.max(0, Number(data.totalChunks) || 0)).fill(''),
+            received: 0,
+            total: Math.max(0, Number(data.totalChunks) || 0),
+            iv: String(data.iv || ''),
+            fileName: String(data.fileName || ''),
+            fileType: String(data.fileType || 'application/octet-stream'),
+            timestamp: Number(data.timestamp) || payload.timestamp,
+            cleanupTimer
+          });
+          return;
+        }
+
+        if (data.kind === 'chunk') {
+          let t = fileTransfersRef.current.get(data.fileId);
+          if (!t) {
+            const total = Math.max(0, Number(data.totalChunks) || 0);
+            if (!total) return;
+
+            const cleanupTimer = setTimeout(() => {
+              const existing = fileTransfersRef.current.get(data.fileId);
+              if (existing?.cleanupTimer) {
+                clearTimeout(existing.cleanupTimer);
+              }
+              fileTransfersRef.current.delete(data.fileId);
+            }, 5 * 60 * 1000);
+
+            t = {
+              chunks: new Array(total).fill(''),
+              received: 0,
+              total,
+              iv: String(data.iv || ''),
+              fileName: String(data.fileName || ''),
+              fileType: String(data.fileType || 'application/octet-stream'),
+              timestamp: Number(data.timestamp) || payload.timestamp,
+              cleanupTimer
+            };
+            fileTransfersRef.current.set(data.fileId, t);
+          }
+          const idx = Number(data.index);
+          if (!Number.isFinite(idx) || idx < 0 || idx >= t.total) return;
+          if (t.chunks[idx]) return;
+
+          t.chunks[idx] = String(data.chunk || '');
+          t.received += 1;
+
+          if (t.received >= t.total && t.total > 0) {
+            const encrypted = t.chunks.join('');
+            const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, t.iv);
+            const decryptedBytes = new Uint8Array(decrypted);
+            const blob = new Blob([decryptedBytes], { type: t.fileType || 'application/octet-stream' });
+            const objectUrl = URL.createObjectURL(blob);
+            decryptedBytes.fill(0);
+
+            if (t.cleanupTimer) {
+              clearTimeout(t.cleanupTimer);
+            }
+            fileTransfersRef.current.delete(data.fileId);
+
+            messageQueueRef.current.addMessage(sessionId, {
+              id: data.fileId,
+              content: objectUrl,
+              sender: 'partner',
+              timestamp: t.timestamp,
+              type: 'file',
+              fileName: t.fileName
+            });
+            syncMessagesFromQueue();
+          }
+
+          return;
+        }
+      } catch {
+        // Silent
       }
     });
 
@@ -705,14 +804,51 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         });
         syncMessagesFromQueue();
 
-        const sent = await realtimeManagerRef.current?.send('chat-message', {
-          encrypted,
-          iv,
-          type: 'file',
-          fileName: sanitizedName,
-          fileType: file.type,
-          messageId
-        });
+        const chunkSize = 45_000;
+        const totalChunks = Math.ceil(encrypted.length / chunkSize);
+
+        let sent = true;
+        if (totalChunks <= 1) {
+          sent = await realtimeManagerRef.current?.send('chat-message', {
+            encrypted,
+            iv,
+            type: 'file',
+            fileName: sanitizedName,
+            fileType: file.type,
+            messageId
+          }) ?? false;
+        } else {
+          sent = (await realtimeManagerRef.current?.send('file', {
+            kind: 'init',
+            fileId: messageId,
+            fileName: sanitizedName,
+            fileType: file.type,
+            iv,
+            totalChunks,
+            timestamp: displayTimestamp
+          })) ?? false;
+
+          if (sent) {
+            for (let i = 0; i < totalChunks; i++) {
+              const chunk = encrypted.slice(i * chunkSize, (i + 1) * chunkSize);
+              const ok = (await realtimeManagerRef.current?.send('file', {
+                kind: 'chunk',
+                fileId: messageId,
+                index: i,
+                chunk,
+                totalChunks,
+                iv,
+                fileName: sanitizedName,
+                fileType: file.type,
+                timestamp: displayTimestamp
+              })) ?? false;
+              if (!ok) {
+                sent = false;
+                break;
+              }
+            }
+          }
+        }
 
         if (!sent) {
           toast.error('File may not have been delivered');
@@ -763,6 +899,13 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       clearTimeout(partnerDisconnectTimeoutRef.current);
       partnerDisconnectTimeoutRef.current = null;
     }
+
+    fileTransfersRef.current.forEach((t) => {
+      if (t.cleanupTimer) {
+        clearTimeout(t.cleanupTimer);
+      }
+    });
+    fileTransfersRef.current.clear();
 
     if (encryptionEngineRef.current) {
       encryptionEngineRef.current = null;

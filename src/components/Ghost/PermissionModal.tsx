@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, Video, AlertTriangle, Settings, Upload, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
 type PermissionType = 'microphone' | 'camera';
 
@@ -100,20 +101,24 @@ const PermissionModal = ({ type, isOpen, onClose, onRetry, onFallback }: Permiss
 
   const instructions = getInstructions();
 
-  return (
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-background/95 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-background/95 backdrop-blur-sm z-[200] flex min-h-[100svh] items-center justify-center overflow-y-auto p-4"
         >
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-            className="max-w-md w-full p-6 rounded-2xl glass border border-yellow-500/30"
+            className="max-h-[calc(100svh-2rem)] max-w-md w-full overflow-y-auto p-6 rounded-2xl glass border border-yellow-500/30"
           >
             {/* Header */}
             <div className="flex items-start justify-between mb-4">
@@ -200,6 +205,7 @@ const PermissionModal = ({ type, isOpen, onClose, onRetry, onFallback }: Permiss
         </motion.div>
       )}
     </AnimatePresence>
+    , document.body
   );
 };
 
