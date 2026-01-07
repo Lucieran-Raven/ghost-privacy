@@ -36,6 +36,7 @@ npm run integrity
 - `REPRODUCIBLE_TESTS.md`
 - `ETHICS_OPTOUT.md`
 - `PERFORMANCE_FORENSICS.md`
+- `DESKTOP_RELEASE.md`
 
 ## CI
 

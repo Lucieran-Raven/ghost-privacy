@@ -23,7 +23,10 @@ function stripComments(input: string): string {
 describe('forensic artifact regression checks', () => {
   it('does not introduce disk persistence primitives in application source (non-comment)', () => {
     const root = path.resolve(process.cwd(), 'src');
-    const files = listFiles(root).filter(f => /\.(ts|tsx)$/.test(f));
+    const files = listFiles(root)
+      .filter(f => /\.(ts|tsx)$/.test(f))
+      .filter(f => !f.includes(`${path.sep}test${path.sep}`))
+      .filter(f => !/\.test\.(ts|tsx)$/.test(f));
 
     const banned = [
       'localStorage.',

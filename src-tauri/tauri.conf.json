@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Ghost Privacy",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "app.ghostprivacy.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:8080",
@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "Ghost Privacy",
+        "url": "https://ghostprivacy.netlify.app",
         "width": 800,
         "height": 600,
         "resizable": true,

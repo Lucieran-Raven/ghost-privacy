@@ -202,7 +202,7 @@ pub fn run() {
     purge_cleanup_plan();
   }));
 
-  tauri::Builder::default()
+  let app = tauri::Builder::default()
     .setup(|app| {
       build_cleanup_plan(&app.handle());
 
@@ -221,23 +221,18 @@ pub fn run() {
         purge_cleanup_plan();
       }
     })
-    .on_run_event(|_app, event| {
-      match event {
-        RunEvent::ExitRequested { .. } => {
-          purge_cleanup_plan();
-        }
-        RunEvent::Exit => {
-          purge_cleanup_plan();
-        }
-        _ => {}
-      }
-    })
     .invoke_handler(tauri::generate_handler![
       secure_panic_wipe,
       vault_set_key,
       vault_encrypt,
       vault_decrypt
     ])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application");
+
+  app.run(|_app, event| {
+    if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
+      purge_cleanup_plan();
+    }
+  });
 }

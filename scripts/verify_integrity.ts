@@ -6,6 +6,8 @@
  * Usage: npx tsx scripts/verify_integrity.ts
  */
 
+export {};
+
 // 1. SETUP ENVIRONMENT (Polyfill Web Crypto + Browser Globals for Node.js)
 if (typeof globalThis.btoa === 'undefined') {
     globalThis.btoa = (str) => Buffer.from(str, 'binary').toString('base64');
@@ -78,19 +80,19 @@ async function runTests() {
 
         // 1. Encrypt
         log("\n   Generating Hidden Volume...", COLORS.yellow);
-        const hiddenVolume = await DeniableEncryption.createHiddenVolume(
+        const packedData = await DeniableEncryption.createHiddenVolume(
             realContent,
             decoyContent,
             decoyPass, // outer
             realPass   // inner
         );
 
-        if (!hiddenVolume.outerEncrypted || !hiddenVolume.innerEncrypted) {
-            throw new Error("Encryption output missing fields");
+        if (typeof packedData !== 'string' || packedData.length < 32) {
+            throw new Error("Encryption output missing packed payload");
         }
 
         // 2. Decrypt with DECOY password
-        const decoyResult = await DeniableEncryption.decryptHiddenVolume(hiddenVolume, decoyPass);
+        const decoyResult = await DeniableEncryption.decryptHiddenVolume(packedData, decoyPass);
         if (!decoyResult || decoyResult.content !== decoyContent) {
             throw new Error(`Decoy decryption failed. Got: ${decoyResult?.content}`);
         }
@@ -99,7 +101,7 @@ async function runTests() {
         }
 
         // 3. Decrypt with REAL password
-        const realResult = await DeniableEncryption.decryptHiddenVolume(hiddenVolume, realPass);
+        const realResult = await DeniableEncryption.decryptHiddenVolume(packedData, realPass);
         if (!realResult || realResult.content !== realContent) {
             throw new Error(`Real decryption failed. Got: ${realResult?.content}`);
         }

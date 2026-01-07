@@ -33,10 +33,10 @@ We leverage 5 leading AI models as co-creators in our security engineering proce
 ## 🎯 What We Guarantee
 
 ### Core Promises
-- **Messages exist ONLY in RAM** - Never touch disk, localStorage, or server
-- **After session end: 0 forensic recovery** - Verified by $50K Challenge
+- **Messages are kept in memory (RAM) in normal operation** - The application is designed to avoid persisting message content to disk/localStorage/server
+- **Post-session recoverability is minimized** - Designed to reduce recoverable artifacts under normal conditions (see scope and limitations below)
 - **Deniable encryption**: Dual-password hidden volumes (real vs. decoy)
-- **Zero server logs**: No message storage, no metadata beyond session binding
+- **No server-side message storage by design**: Servers do not store message plaintext; only session coordination + anti-hijacking metadata is retained (infrastructure logs may still exist)
 
 ### Technical Guarantees
 | Guarantee | Implementation | Verification |
@@ -44,8 +44,31 @@ We leverage 5 leading AI models as co-creators in our security engineering proce
 | **Ephemeral Messages** | RAM-only storage, automatic cleanup | Browser devtools, memory analysis |
 | **Forward Secrecy** | ECDH key exchange per session | Cryptographic analysis |
 | **Server Blindness** | No plaintext ever transmitted | Code audit, server logs |
-| **Anti-Forensic** | Memory zeroization, no persistence | $50K forensic challenge |
+| **Anti-Forensic (best-effort)** | Memory zeroization, no intentional persistence | $50K forensic challenge (scoped) |
 | **Plausible Deniability** | Dual-layer encryption with decoys | Compromise scenario testing |
+
+---
+
+## ⚠️ Limits & Assumptions (Read Before Relying)
+
+Ghost is designed for a specific threat model. Some classes of adversary and system behavior are outside what a browser/PWA can reliably control.
+
+### Assumptions
+
+- Ghost runs in a non-compromised browser and operating system.
+- The user does not have malicious browser extensions with DOM access.
+- The device is not actively monitored by malware (keylogger/screen capture/remote admin).
+
+### Known limitations
+
+- **OS swap/pagefile/crash dumps**: Modern OSes may page memory to disk or write crash dumps; Ghost cannot prevent this.
+- **RAM forensics and cold-boot attacks**: A physical attacker with specialized access may recover residual memory.
+- **Screenshots/recording**: A malicious recipient can capture content; this is a social trust boundary.
+- **Infrastructure logs**: While Ghost does not store message content, hosting/CDN/Supabase may retain operational logs (e.g., request metadata) per their policies.
+
+### Scope language for the forensic challenge
+
+- “No forensic recovery” should be interpreted as **a scoped claim under normal operating conditions** (no OS compromise, no malicious extensions, no deliberate memory dumping). See the threat model below.
 
 ---
 

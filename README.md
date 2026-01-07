@@ -125,11 +125,11 @@ Ghost stores minimal session metadata in Supabase (zero message content, no encr
 
 ## 🏆 The $50,000 Forensic Challenge
 
-**We challenge anyone to recover message content from a Ghost session after termination.**
+**We invite independent researchers to attempt recovery of message content from a Ghost session after termination (within a clearly scoped, reproducible setup).**
 
 - **Prize:** $50,000 USD
-- **Rules:** Standard forensic tools on real Ghost session
-- **Status:** Never beaten – our nuclear purge works
+- **Rules:** Standard forensic tools on a real Ghost session, under normal operating conditions (no OS compromise)
+- **Status:** Public challenge in progress (see SECURITY.md for scope and limitations)
 
 This isn't marketing – it's our technical confidence in the anti-forensic architecture we've built with AI assistance and university expertise.
 
@@ -144,7 +144,7 @@ In an era of unprecedented surveillance, traditional messaging apps compromise u
 - **Identity requirements**
 - **Legal compulsion frameworks**
 
-Ghost Privacy represents a new paradigm: **ephemeral, zero-knowledge communication that leaves no forensic trail**. Built by the brightest academic minds and validated by leading AI models, we're creating the future of private communication.
+Ghost Privacy represents a new paradigm: **ephemeral, zero-knowledge communication designed to minimize on-device forensic artifacts under normal operation**. For threat model and limitations (e.g., OS compromise, malicious extensions, swap/pagefile behavior), see [SECURITY.md](SECURITY.md).
 
 ---
 

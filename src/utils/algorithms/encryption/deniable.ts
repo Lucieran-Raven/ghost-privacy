@@ -33,6 +33,15 @@ const INNER_REGION_BYTES = 5 * 1024 * 1024;
 const MAGIC_OUTER = 0x4f485047; // 'GPHO' little-endian
 const MAGIC_INNER = 0x49485047; // 'GPHI' little-endian
 
+function fillRandomBytesChunked(deps: Pick<DeniableCryptoDeps, 'getRandomValues'>, out: Uint8Array): Uint8Array {
+  const maxChunk = 65536;
+  for (let i = 0; i < out.byteLength; i += maxChunk) {
+    const chunk = out.subarray(i, Math.min(i + maxChunk, out.byteLength));
+    deps.getRandomValues(chunk);
+  }
+  return out;
+}
+
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
@@ -187,7 +196,7 @@ export class DeniableEncryption {
     outerPassword: string,
     innerPassword: string
   ): Promise<string> {
-    const container = deps.getRandomValues(new Uint8Array(CONTAINER_SIZE_BYTES));
+    const container = fillRandomBytesChunked(deps, new Uint8Array(CONTAINER_SIZE_BYTES));
     const salt = deps.getRandomValues(new Uint8Array(SALT_SIZE));
     container.set(salt, 0);
 
