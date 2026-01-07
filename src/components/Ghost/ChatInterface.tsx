@@ -187,6 +187,17 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     try {
       setConnectionState({ status: 'validating', progress: 10 });
 
+      verificationShownRef.current = false;
+      localFingerprintRef.current = '';
+      partnerPublicKeyRef.current = null;
+      sessionKeyRef.current = null;
+      setVerificationState({
+        show: false,
+        localFingerprint: '',
+        remoteFingerprint: '',
+        verified: false
+      });
+
       participantIdRef.current = await SecurityManager.generateFingerprint();
       encryptionEngineRef.current = new EncryptionEngine();
 
@@ -299,6 +310,13 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             await encryptionEngineRef.current?.setKey(sharedSecret);
           }
           setIsKeyExchangeComplete(true);
+
+          if (!localFingerprintRef.current && keyPairRef.current) {
+            try {
+              localFingerprintRef.current = await KeyExchange.generateFingerprint(keyPairRef.current.publicKey);
+            } catch {
+            }
+          }
 
           const remoteFingerprint = await KeyExchange.generateFingerprint(partnerPublicKey);
 
