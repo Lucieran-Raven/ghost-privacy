@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/publicClient';
+import { isResearchFeaturesEnabled } from '@/utils/researchFeatures';
 
 /**
  * GHOST MIRAGE: Honeypot Detection Service
@@ -22,6 +23,10 @@ export class HoneypotService {
     accessorFingerprint?: string
   ): Promise<HoneypotCheckResult> {
     try {
+      if (!isResearchFeaturesEnabled()) {
+        return { isHoneypot: false, trapType: null };
+      }
+
       const { data, error } = await supabase.functions.invoke('detect-honeypot', {
         body: { sessionId, accessorFingerprint }
       });

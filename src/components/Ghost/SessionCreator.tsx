@@ -6,8 +6,11 @@ import { SecurityManager } from '@/utils/security';
 import { SessionService } from '@/lib/sessionService';
 import { HoneypotService } from '@/lib/honeypotService';
 import { parseAccessCode } from '@/utils/algorithms/session/accessCode';
+import { getResearchFeaturesState, setResearchFeaturesEnabled } from '@/utils/researchFeatures';
 import { cn } from '@/lib/utils';
 import ParticleField from './ParticleField';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 interface SessionCreatorProps {
   onSessionStart: (sessionId: string, capabilityToken: string, isHost: boolean, timerMode: string) => void;
@@ -22,6 +25,7 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
   const [isCopied, setIsCopied] = useState(false);
   const [isWaiting, setIsWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [researchEnabled, setResearchEnabled] = useState(getResearchFeaturesState().enabled);
   
   // Guard against double-execution
   const isCreatingRef = useRef(false);
@@ -93,7 +97,7 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
     
     // Allow both standard format and honeypot formats
     const isStandardFormat = isValidGhostId(rawSessionId);
-    const isHoneypotFormat = HoneypotService.hasHoneypotPrefix(rawSessionId);
+    const isHoneypotFormat = researchEnabled && HoneypotService.hasHoneypotPrefix(rawSessionId);
     
     if (!isStandardFormat && !isHoneypotFormat) {
       setError('Invalid access code format');
@@ -115,8 +119,12 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
         onSessionStart(parsed!.sessionId, parsed!.capabilityToken, false, 'on-join');
       } else {
         // Handle honeypot format
+        if (!researchEnabled) {
+          setError('Invalid access code format');
+          return;
+        }
         const fingerprint = await SecurityManager.generateFingerprint();
-        onHoneypotDetected(rawSessionId, fingerprint);
+        onHoneypotDetected?.(rawSessionId, fingerprint);
       }
     } catch {
       setError('Failed to join session. Please retry.');
@@ -168,6 +176,20 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
 
         {/* Main Card */}
         <div className="p-5 md:p-8 rounded-2xl glass border border-border/50 session-creator-mobile backdrop-blur-md">
+          <div className="mb-5 md:mb-6 flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border">
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={researchEnabled}
+                onCheckedChange={(enabled) => {
+                  setResearchFeaturesEnabled(enabled);
+                  setResearchEnabled(enabled);
+                }}
+              />
+              <Label className="text-foreground cursor-pointer">
+                Enable research defenses
+              </Label>
+            </div>
+          </div>
           {mode === 'create' ? (
             <>
               {!isWaiting ? (
