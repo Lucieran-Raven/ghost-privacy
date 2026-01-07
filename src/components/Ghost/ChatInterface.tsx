@@ -77,6 +77,9 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   const messageQueueRef = useRef(getMessageQueue());
   const partnerWasPresentRef = useRef(false);
   const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionExtendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const partnerDisconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const partnerCountRef = useRef<number>(0);
   const localFingerprintRef = useRef<string>('');
   const isTerminatingRef = useRef(false);
   const verificationShownRef = useRef(false);
@@ -233,33 +236,46 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       if (newState.status === 'connected') {
         sendPublicKey();
         setupHeartbeatMonitoring();
+
+        if (sessionExtendIntervalRef.current) {
+          clearInterval(sessionExtendIntervalRef.current);
+        }
+        sessionExtendIntervalRef.current = setInterval(() => {
+          SessionService.extendSession(sessionId).catch(() => {
+          });
+        }, 10 * 60 * 1000);
       }
     });
 
     manager.onPresenceChange(async (participants) => {
       const partnerCount = participants.filter(id => id !== participantIdRef.current).length;
       const hasPartner = partnerCount > 0;
+      partnerCountRef.current = partnerCount;
       setIsPartnerConnected(hasPartner);
 
-      // CRITICAL: If partner was connected and now left, terminate the session for remaining user
-      if (partnerWasPresentRef.current && partnerCount === 0 && !isTerminatingRef.current) {
-        partnerWasPresentRef.current = false;
-        isTerminatingRef.current = true;
-        addSystemMessage('⚠️ Partner disconnected - session ending...');
-        // Small delay to let user see the message
-        setTimeout(async () => {
-          await triggerSessionTermination('partner_left');
-          await cleanup();
-          onEndSession(false); // Don't show toast - partner left message is enough
-        }, 1500);
-        return;
+      if (hasPartner) {
+        if (partnerDisconnectTimeoutRef.current) {
+          clearTimeout(partnerDisconnectTimeoutRef.current);
+          partnerDisconnectTimeoutRef.current = null;
+        }
+      } else if (partnerWasPresentRef.current && !isTerminatingRef.current) {
+        if (!partnerDisconnectTimeoutRef.current) {
+          addSystemMessage('⚠️ Partner connection unstable - waiting...');
+          partnerDisconnectTimeoutRef.current = setTimeout(async () => {
+            partnerDisconnectTimeoutRef.current = null;
+            if (isTerminatingRef.current) return;
+            if (!realtimeManagerRef.current) return;
+            if (partnerCountRef.current === 0) {
+              partnerWasPresentRef.current = false;
+              addSystemMessage('⚠️ Partner disconnected - waiting for reconnection...');
+            }
+          }, 30000);
+        }
       }
 
       if (hasPartner) {
         partnerWasPresentRef.current = true;
-        if (!isKeyExchangeComplete) {
-          sendPublicKey();
-        }
+        sendPublicKey();
       }
     });
 
@@ -738,6 +754,16 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       heartbeatIntervalRef.current = null;
     }
 
+    if (sessionExtendIntervalRef.current) {
+      clearInterval(sessionExtendIntervalRef.current);
+      sessionExtendIntervalRef.current = null;
+    }
+
+    if (partnerDisconnectTimeoutRef.current) {
+      clearTimeout(partnerDisconnectTimeoutRef.current);
+      partnerDisconnectTimeoutRef.current = null;
+    }
+
     if (encryptionEngineRef.current) {
       encryptionEngineRef.current = null;
     }
@@ -793,6 +819,16 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   const cleanup = async () => {
     if (heartbeatIntervalRef.current) {
       clearInterval(heartbeatIntervalRef.current);
+    }
+
+    if (sessionExtendIntervalRef.current) {
+      clearInterval(sessionExtendIntervalRef.current);
+      sessionExtendIntervalRef.current = null;
+    }
+
+    if (partnerDisconnectTimeoutRef.current) {
+      clearTimeout(partnerDisconnectTimeoutRef.current);
+      partnerDisconnectTimeoutRef.current = null;
     }
 
     await realtimeManagerRef.current?.disconnect();
