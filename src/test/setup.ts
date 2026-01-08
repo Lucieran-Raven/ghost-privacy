@@ -8,11 +8,9 @@ if (!globalThis.crypto) {
 
 // Basic atob/btoa polyfills for Node test runtime
 if (!globalThis.atob) {
-  // @ts-ignore - polyfill
   globalThis.atob = (b64: string) => Buffer.from(b64, 'base64').toString('binary');
 }
 
 if (!globalThis.btoa) {
-  // @ts-ignore - polyfill
   globalThis.btoa = (bin: string) => Buffer.from(bin, 'binary').toString('base64');
 }

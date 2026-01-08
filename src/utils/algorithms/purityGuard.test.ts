@@ -30,7 +30,7 @@ describe('Layer-0 purity guard (src/utils/algorithms)', () => {
       { name: 'window/document/navigator usage', re: /\b(window|document|navigator)\s*\./ },
       { name: 'storage APIs', re: /\b(localStorage|sessionStorage|indexedDB)\b/ },
       { name: 'node process/require', re: /\b(process\.|require\s*\()/ },
-      { name: 'node fs import', re: /from\s+['\"]fs['\"]|require\(['\"]fs['\"]\)/ },
+      { name: 'node fs import', re: /from\s+['"]fs['"]|require\(['"]fs['"]\)/ },
       { name: 'global crypto usage', re: /\bcrypto\.(subtle|getRandomValues)\b/ }
     ];
 
