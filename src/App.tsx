@@ -21,6 +21,7 @@ const Contribute = lazy(() => import("./pages/Contribute"));
 const Onion = lazy(() => import("./pages/Onion"));
 const Tor = lazy(() => import("./pages/Tor"));
 const Quarantine = lazy(() => import("./pages/Quarantine"));
+const Downloads = lazy(() => import("./pages/Downloads"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -46,6 +47,7 @@ const App = () => (
                   <Route path="/contact" element={<Contact />} />
                   <Route path="/limitations" element={<Limitations />} />
                   <Route path="/contribute" element={<Contribute />} />
+                  <Route path="/downloads" element={<Downloads />} />
                   <Route path="/tor" element={<Tor />} />
                   <Route path="/onion" element={<Onion />} />
                   {/* Quarantine page - escalation level 3 */}

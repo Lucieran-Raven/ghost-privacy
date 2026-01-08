@@ -1,0 +1,7 @@
+# SHA-256 hashes for official releases
+# Format:
+# <sha256>  <filename>
+#
+# Example:
+# 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  GhostPrivacy-Setup.exe
+# 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  GhostPrivacy.apk

@@ -8,6 +8,7 @@ const Navbar = () => {
 
   const navLinks = [
     { href: '/', label: 'Home' },
+    { href: '/downloads', label: 'Downloads' },
     { href: '/security', label: 'Security' },
     { href: '/tor', label: 'Tor' },
     { href: '/about', label: 'About' },
