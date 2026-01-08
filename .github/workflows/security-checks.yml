@@ -31,9 +31,9 @@ jobs:
       
       - name: Check for high/critical vulnerabilities
         run: |
-          AUDIT_REPORT=$(npm audit --json)
-          HIGH_COUNT=$(echo $AUDIT_REPORT | jq '.metadata.vulnerabilities.high // 0')
-          CRITICAL_COUNT=$(echo $AUDIT_REPORT | jq '.metadata.vulnerabilities.critical // 0')
+          AUDIT_REPORT=$(npm audit --json || true)
+          HIGH_COUNT=$(echo "$AUDIT_REPORT" | jq -r '.metadata.vulnerabilities.high // 0')
+          CRITICAL_COUNT=$(echo "$AUDIT_REPORT" | jq -r '.metadata.vulnerabilities.critical // 0')
           
           if [ "$CRITICAL_COUNT" -gt 0 ]; then
             echo "❌ CRITICAL vulnerabilities found: $CRITICAL_COUNT"
