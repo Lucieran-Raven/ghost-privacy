@@ -21,8 +21,7 @@ const FilePreviewCard = ({ fileName, content, sender }: FilePreviewCardProps) =>
       if (content.startsWith('blob:')) {
         return { objectUrl: content, shouldRevoke: false };
       }
-      const url = URL.createObjectURL(new Blob([content]));
-      return { objectUrl: url, shouldRevoke: true };
+      return { objectUrl: content, shouldRevoke: false };
     } catch {
       return { objectUrl: content, shouldRevoke: false };
     }
@@ -64,6 +63,10 @@ const FilePreviewCard = ({ fileName, content, sender }: FilePreviewCardProps) =>
   const handleDownload = (e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
+    }
+
+    if (!(objectUrl.startsWith('blob:') || objectUrl.startsWith('data:'))) {
+      return;
     }
     const link = document.createElement('a');
     link.href = objectUrl;
