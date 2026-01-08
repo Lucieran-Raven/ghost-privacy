@@ -33,6 +33,10 @@ function stripRustComments(input: string): string {
   return s;
 }
 
+function stripXmlComments(input: string): string {
+  return input.replace(/<!--[\s\S]*?-->/g, '');
+}
+
 describe('forensic artifact regression checks', () => {
   it('does not introduce disk persistence primitives in application source (non-comment)', () => {
     const root = path.resolve(process.cwd(), 'src');
@@ -115,5 +119,58 @@ describe('forensic artifact regression checks', () => {
     }
 
     expect(violations).toEqual([]);
+  });
+
+  it('does not introduce obvious Android persistence primitives in native layer (non-comment)', () => {
+    const root = path.resolve(process.cwd(), 'android', 'app', 'src', 'main', 'java');
+    const files = listFilesIfExists(root)
+      .filter(f => /\.(java)$/.test(f));
+
+    const banned = [
+      'SharedPreferences',
+      'getSharedPreferences(',
+      'PreferenceManager',
+      'SQLiteDatabase',
+      'RoomDatabase',
+      'openOrCreateDatabase(',
+      'openFileOutput(',
+      'FileOutputStream',
+      'RandomAccessFile',
+      'ObjectOutputStream',
+      'FileWriter',
+      'BufferedWriter',
+      'getExternalFilesDir',
+      'Environment.getExternalStorage',
+      'android.permission.WRITE_EXTERNAL_STORAGE',
+      'MODE_WORLD_READABLE',
+      'MODE_WORLD_WRITEABLE'
+    ];
+
+    const violations: Array<{ file: string; needle: string }> = [];
+
+    for (const file of files) {
+      const raw = fs.readFileSync(file, 'utf8');
+      const code = stripComments(raw);
+      for (const needle of banned) {
+        if (code.includes(needle)) {
+          violations.push({ file: path.relative(process.cwd(), file), needle });
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it('does not regress Android manifest security flags', () => {
+    const manifestPath = path.resolve(process.cwd(), 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
+    if (!fs.existsSync(manifestPath)) return;
+
+    const raw = fs.readFileSync(manifestPath, 'utf8');
+    const xml = stripXmlComments(raw);
+
+    expect(xml).toMatch(/android:allowBackup\s*=\s*"false"/);
+    expect(xml).toMatch(/android:fullBackupContent\s*=\s*"false"/);
+    expect(xml).toMatch(/android:usesCleartextTraffic\s*=\s*"false"/);
+    expect(xml).toMatch(/android:networkSecurityConfig\s*=\s*"@xml\/network_security_config"/);
   });
 });
