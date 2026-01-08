@@ -141,19 +141,24 @@ public class MainActivity extends BridgeActivity {
 
   private void clearWebViewData() {
     try {
-      if (getBridge() == null) {
-        return;
-      }
-      WebView webView = getBridge().getWebView();
-      if (webView == null) {
-        return;
+      WebView webView = null;
+      try {
+        if (getBridge() != null) {
+          webView = getBridge().getWebView();
+        }
+      } catch (Exception e) {
       }
 
-      clearDomStorageBestEffort();
+      if (webView != null) {
+        try {
+          clearDomStorageBestEffort();
+        } catch (Exception e) {
+        }
 
-      webView.clearCache(true);
-      webView.clearHistory();
-      webView.clearFormData();
+        webView.clearCache(true);
+        webView.clearHistory();
+        webView.clearFormData();
+      }
 
       try {
         WebStorage.getInstance().deleteAllData();
