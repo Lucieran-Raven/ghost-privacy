@@ -8,6 +8,11 @@
 
 export {};
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+
 // 1. SETUP ENVIRONMENT (Polyfill Web Crypto + Browser Globals for Node.js)
 if (typeof globalThis.btoa === 'undefined') {
     globalThis.btoa = (str) => Buffer.from(str, 'binary').toString('base64');
@@ -48,6 +53,95 @@ const COLORS = {
 
 const log = (msg: string, color: string = COLORS.reset) => process.stdout.write(`${color}${msg}${COLORS.reset}\n`);
 
+function listFilesRecursive(dir: string): string[] {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const out: string[] = [];
+    for (const e of entries) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) {
+            out.push(...listFilesRecursive(p));
+        } else {
+            out.push(p);
+        }
+    }
+    return out;
+}
+
+function normalizeText(input: string): string {
+    return input.replace(/\r\n/g, '\n');
+}
+
+function shouldIgnorePath(p: string): boolean {
+    const norm = p.replace(/\\/g, '/');
+    return (
+        norm.includes('/node_modules/') ||
+        norm.includes('/dist/') ||
+        norm.includes('/android/app/build/') ||
+        norm.includes('/android/.gradle/') ||
+        norm.includes('/src-tauri/target/')
+    );
+}
+
+function computeRepoIntegrityHash(repoRoot: string): string {
+    const includeRoots = [
+        'package.json',
+        'package-lock.json',
+        'eslint.config.js',
+        'auditor',
+        'src',
+        'src-tauri/src',
+        'src-tauri/Cargo.lock',
+        'supabase/functions',
+        'supabase/migrations',
+        'scripts'
+    ];
+
+    const files: string[] = [];
+    for (const rel of includeRoots) {
+        const abs = path.join(repoRoot, rel);
+        if (!fs.existsSync(abs)) continue;
+        const st = fs.statSync(abs);
+        if (st.isDirectory()) {
+            files.push(...listFilesRecursive(abs));
+        } else {
+            files.push(abs);
+        }
+    }
+
+    const hashed = files
+        .filter((p) => !shouldIgnorePath(p))
+        .filter((p) => {
+            const name = p.toLowerCase();
+            return (
+                name.endsWith('.ts') ||
+                name.endsWith('.tsx') ||
+                name.endsWith('.js') ||
+                name.endsWith('.json') ||
+                name.endsWith('.sql') ||
+                name.endsWith('.rs') ||
+                name.endsWith('.toml') ||
+                name.endsWith('.lock') ||
+                name.endsWith('.md')
+            );
+        })
+        .map((absPath) => {
+            const relPath = path.relative(repoRoot, absPath).replace(/\\/g, '/');
+            return { absPath, relPath };
+        })
+        .sort((a, b) => a.relPath.localeCompare(b.relPath));
+
+    const h = createHash('sha256');
+    for (const { absPath, relPath } of hashed) {
+        const raw = fs.readFileSync(absPath, 'utf8');
+        const content = normalizeText(raw);
+        h.update(relPath, 'utf8');
+        h.update('\n', 'utf8');
+        h.update(content, 'utf8');
+        h.update('\n', 'utf8');
+    }
+    return h.digest('hex');
+}
+
 async function runTests() {
     log("\n🔒 INITIATING GHOST INTEGRITY PROTOCOL...\n", COLORS.cyan);
 
@@ -63,9 +157,10 @@ async function runTests() {
         } catch (e) {
             process.stdout.write(`${COLORS.red}FAILED${COLORS.reset}\n`);
             process.stderr.write(`${String(e)}\n`);
-            // Write error to file for debugging
-            const fs = await import('fs');
-            fs.writeFileSync('verification_error.log', JSON.stringify(e, Object.getOwnPropertyNames(e)) + '\n' + String(e));
+            // Write error to file for debugging (opt-in only)
+            if (process.env.GHOST_VERIFY_WRITE_LOG === 'true') {
+                fs.writeFileSync('verification_error.log', JSON.stringify(e, Object.getOwnPropertyNames(e)) + '\n' + String(e));
+            }
             failed++;
         }
     }
@@ -147,6 +242,10 @@ async function runTests() {
     // --- SUMMARY ---
     process.stdout.write("\n-------------------------------------------\n");
     if (failed === 0) {
+        const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+        const repoRoot = path.resolve(scriptDir, '..');
+        const integrityHash = computeRepoIntegrityHash(repoRoot);
+        log(`INTEGRITY_HASH_SHA256=${integrityHash}`, COLORS.cyan);
         log(`✅ INTEGRITY VERIFIED. SYSTEM GREEN. (${passed}/${passed})`, COLORS.green);
         process.exit(0);
     } else {

@@ -23,6 +23,9 @@ jobs:
       - name: Run unit/security tests
         run: npm test
 
+      - name: Integrity suite
+        run: npm run integrity
+
       - name: Lint
         run: npm run lint
 

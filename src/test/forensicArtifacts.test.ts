@@ -20,6 +20,19 @@ function stripComments(input: string): string {
   return s;
 }
 
+function listFilesIfExists(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  return listFiles(dir);
+}
+
+function stripRustComments(input: string): string {
+  let s = input;
+  s = s.replace(/\/\*[\s\S]*?\*\//g, '');
+  s = s.replace(/(^|\n)\s*\/\/\/.*(?=\n|$)/g, '$1');
+  s = s.replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1');
+  return s;
+}
+
 describe('forensic artifact regression checks', () => {
   it('does not introduce disk persistence primitives in application source (non-comment)', () => {
     const root = path.resolve(process.cwd(), 'src');
@@ -40,6 +53,60 @@ describe('forensic artifact regression checks', () => {
     for (const file of files) {
       const raw = fs.readFileSync(file, 'utf8');
       const code = stripComments(raw);
+      for (const needle of banned) {
+        if (code.includes(needle)) {
+          violations.push({ file: path.relative(process.cwd(), file), needle });
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it('does not introduce console logs in Supabase edge functions (non-comment)', () => {
+    const root = path.resolve(process.cwd(), 'supabase', 'functions');
+    const files = listFilesIfExists(root)
+      .filter(f => /\.(ts)$/.test(f));
+
+    const banned = [
+      'console.'
+    ];
+
+    const violations: Array<{ file: string; needle: string }> = [];
+
+    for (const file of files) {
+      const raw = fs.readFileSync(file, 'utf8');
+      const code = stripComments(raw);
+      for (const needle of banned) {
+        if (code.includes(needle)) {
+          violations.push({ file: path.relative(process.cwd(), file), needle });
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it('does not introduce obvious Rust filesystem write primitives in Tauri backend source (non-comment)', () => {
+    const root = path.resolve(process.cwd(), 'src-tauri', 'src');
+    const files = listFilesIfExists(root)
+      .filter(f => /\.(rs)$/.test(f));
+
+    const banned = [
+      'std::fs::',
+      'File::create',
+      'OpenOptions',
+      'create_dir',
+      'create_dir_all',
+      'write_all',
+      'std::io::Write',
+    ];
+
+    const violations: Array<{ file: string; needle: string }> = [];
+
+    for (const file of files) {
+      const raw = fs.readFileSync(file, 'utf8');
+      const code = stripRustComments(raw);
       for (const needle of banned) {
         if (code.includes(needle)) {
           violations.push({ file: path.relative(process.cwd(), file), needle });

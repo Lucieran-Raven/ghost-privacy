@@ -49,3 +49,4 @@ Tauri desktop: RAM-only, no disk writes
 Android: ephemeral, no persistent storage
 Web: forensically clean PWA
 Backend: zero logs, strict binding, atomic rate limits
+Auditor suite: independently verifiable
