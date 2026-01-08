@@ -6,6 +6,8 @@
  * Privacy: NEVER logs, NEVER stores, NEVER makes network requests, NEVER persists beyond caller-managed memory.
  */
 
+import { base64ToBytes, bytesToBase64 } from '@/utils/algorithms/encoding/base64';
+
 export type GetRandomValues = <T extends ArrayBufferView>(array: T) => T;
 
 export interface EphemeralCryptoDeps {
@@ -19,21 +21,12 @@ export interface EncryptResult {
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
+  return bytesToBase64(new Uint8Array(buffer));
 }
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binaryString = atob(base64);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes.buffer.slice(0, bytes.byteLength);
+  const bytes = base64ToBytes(base64);
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
 export function generateNonce(deps: EphemeralCryptoDeps): string {

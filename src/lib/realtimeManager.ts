@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/publicClient';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { generateNonce } from '@/utils/encryption';
-import { deriveRealtimeChannelName } from '@/utils/algorithms/session/realtimeChannel';
+import { deriveRealtimeChannelName } from '@/utils/realtimeChannel';
 
 export interface BroadcastPayload {
   type: 'chat-message' | 'key-exchange' | 'presence' | 'typing' | 'file' | 'message-ack' | 'session-terminated' | 'voice-message' | 'video-message';

@@ -6,6 +6,8 @@
  * Privacy: NEVER logs, NEVER stores, NEVER makes network requests, NEVER persists beyond caller-managed memory.
  */
 
+import { bytesToBase64 } from '@/utils/algorithms/encoding/base64';
+
 export interface IntegrityDeps {
   subtle: SubtleCrypto;
 }
@@ -21,10 +23,5 @@ export function toHex(buffer: ArrayBuffer): string {
 }
 
 export function toBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
+  return bytesToBase64(new Uint8Array(buffer));
 }
