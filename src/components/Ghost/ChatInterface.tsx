@@ -617,9 +617,26 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             fileName: displayFileName
           });
         } else {
+          const MAX_TEXT_ENCRYPTED_CHARS = 60000;
+          const MAX_IV_CHARS = 256;
+          const encrypted = String(payload.data.encrypted || '');
+          const iv = String(payload.data.iv || '');
+
+          if (encrypted.length === 0 || encrypted.length > MAX_TEXT_ENCRYPTED_CHARS) {
+            return;
+          }
+          if (iv.length === 0 || iv.length > MAX_IV_CHARS) {
+            return;
+          }
+
+          const rawType = String(payload.data.type || 'text');
+          const safeType = (rawType === 'text' || rawType === 'system' || rawType === 'video' || rawType === 'voice')
+            ? rawType
+            : 'text';
+
           const decrypted = await encryptionEngineRef.current.decryptMessage(
-            payload.data.encrypted,
-            payload.data.iv
+            encrypted,
+            iv
           );
 
           messageQueueRef.current.addMessage(sessionId, {
@@ -627,8 +644,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             content: decrypted,
             sender: 'partner',
             timestamp: payload.timestamp,
-            type: payload.data.type || 'text',
-            fileName: payload.data.fileName
+            type: safeType,
+            fileName: undefined
           });
         }
 

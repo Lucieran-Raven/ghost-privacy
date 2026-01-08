@@ -53,6 +53,10 @@ Additionally (security workflow):
 
 Repository: https://github.com/Lucieran-Raven/ghost-privacy
 
+Layer 3 report:
+
+- `auditor/LAYER3_REPORT.md`
+
 ### Layer 0 — Core algorithms hardened
 
 - `e5a77d7` — Layer0: enforce platform-agnostic crypto/session primitives
