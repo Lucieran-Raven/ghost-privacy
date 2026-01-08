@@ -46,3 +46,4 @@ This is a code-level map of core security controls.
 
 Core algorithms verified
 Tauri desktop: RAM-only, no disk writes
+Android: ephemeral, no persistent storage
