@@ -19,14 +19,14 @@ public class MainActivity extends BridgeActivity {
 
   @Override
   public void onStop() {
-    clearWebViewData();
     super.onStop();
+    clearWebViewData();
   }
 
   @Override
   public void onDestroy() {
-    clearWebViewData();
     super.onDestroy();
+    clearWebViewData();
   }
 
   private void hardenWebView() {
@@ -150,6 +150,12 @@ public class MainActivity extends BridgeActivity {
       }
 
       if (webView != null) {
+        try {
+          webView.onPause();
+          webView.pauseTimers();
+        } catch (Exception e) {
+        }
+
         try {
           clearDomStorageBestEffort();
         } catch (Exception e) {
