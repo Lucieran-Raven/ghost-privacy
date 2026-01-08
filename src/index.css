@@ -1592,7 +1592,7 @@
 
   /* Hide banner in landscape */
   .secure-line-banner {
-    display: none;
+    display: block;
   }
 }
 
