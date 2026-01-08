@@ -5,6 +5,7 @@ import {
   getClientIpHashHex,
   jsonError,
   parseSessionIpHash,
+  timingSafeEqualString,
   verifyCapabilityHash
 } from "../_shared/security.ts";
 
@@ -88,8 +89,8 @@ serve(async (req: Request) => {
       return errorResponse(req, 404, 'NOT_FOUND');
     }
 
-    const isHost = fp === session.host_fingerprint;
-    const isGuest = session.guest_fingerprint && fp === session.guest_fingerprint;
+    const isHost = timingSafeEqualString(fp, session.host_fingerprint);
+    const isGuest = Boolean(session.guest_fingerprint && timingSafeEqualString(fp, session.guest_fingerprint));
 
     if (!isHost && !isGuest) {
       return errorResponse(req, 404, 'NOT_FOUND');
@@ -107,11 +108,11 @@ serve(async (req: Request) => {
       return errorResponse(req, 500, 'SERVER_ERROR');
     }
 
-    if (isHost && ipParts.hostHex !== clientIpHex) {
+    if (isHost && !timingSafeEqualString(ipParts.hostHex, clientIpHex)) {
       return errorResponse(req, 404, 'NOT_FOUND');
     }
 
-    if (isGuest && ipParts.guestHex !== clientIpHex) {
+    if (isGuest && !timingSafeEqualString(ipParts.guestHex, clientIpHex)) {
       return errorResponse(req, 404, 'NOT_FOUND');
     }
 

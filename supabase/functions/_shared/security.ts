@@ -68,6 +68,19 @@ function timingSafeEqualBytes(a: Uint8Array, b: Uint8Array): boolean {
   return diff === 0;
 }
 
+export function timingSafeEqualString(a: string, b: string): boolean {
+  const len = Math.max(a.length, b.length);
+  let diff = a.length ^ b.length;
+
+  for (let i = 0; i < len; i++) {
+    const av = i < a.length ? a.charCodeAt(i) : 0;
+    const bv = i < b.length ? b.charCodeAt(i) : 0;
+    diff |= av ^ bv;
+  }
+
+  return diff === 0;
+}
+
 /**
  * Extract client IP from request headers with fallback chain:
  * 1. cf-connecting-ip (Cloudflare)
@@ -189,7 +202,13 @@ export async function verifyCapabilityHash(
   const storedHex = parsePostgresByteaHex(storedBytea);
   if (!storedHex || storedHex.length !== 64) return false;
 
-  const expectedBytea = await hashCapabilityTokenToBytea(token);
+  let expectedBytea: string;
+  try {
+    expectedBytea = await hashCapabilityTokenToBytea(token);
+  } catch {
+    return false;
+  }
+
   const expectedHex = parsePostgresByteaHex(expectedBytea);
   if (!expectedHex) return false;
 
@@ -229,7 +248,7 @@ export function requireCronAuth(req: Request, headers?: Record<string, string>):
 
   const authHeader = req.headers.get('authorization');
   const expected = `Bearer ${secret}`;
-  if (authHeader !== expected) {
+  if (!authHeader || !timingSafeEqualString(authHeader, expected)) {
     return jsonError('Unauthorized', 'AUTH_REQUIRED', { status: 401, headers });
   }
 

@@ -6,6 +6,7 @@ import {
   getClientIpHashHex,
   jsonError,
   parseSessionIpHash,
+  timingSafeEqualString,
   verifyCapabilityHash
 } from "../_shared/security.ts";
 
@@ -105,8 +106,8 @@ serve(async (req: Request) => {
 
     const fp = fingerprint.trim();
 
-    if (fp === session.host_fingerprint) {
-      if (ipParts.hostHex !== clientIpHex) {
+    if (timingSafeEqualString(fp, session.host_fingerprint)) {
+      if (!timingSafeEqualString(ipParts.hostHex, clientIpHex)) {
         await new Promise(r => setTimeout(r, 50));
         return invalidResponse(req);
       }
@@ -119,8 +120,8 @@ serve(async (req: Request) => {
       );
     }
 
-    if (session.guest_fingerprint && fp === session.guest_fingerprint) {
-      if (ipParts.guestHex !== clientIpHex) {
+    if (session.guest_fingerprint && timingSafeEqualString(fp, session.guest_fingerprint)) {
+      if (!timingSafeEqualString(ipParts.guestHex, clientIpHex)) {
         await new Promise(r => setTimeout(r, 50));
         return invalidResponse(req);
       }
