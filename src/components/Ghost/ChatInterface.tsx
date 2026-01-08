@@ -1353,6 +1353,9 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                                 />
                                 <button
                                   onClick={() => {
+                                    if (!(message.content.startsWith('blob:') || message.content.startsWith('data:'))) {
+                                      return;
+                                    }
                                     const link = document.createElement('a');
                                     link.href = message.content;
                                     link.download = message.fileName || 'ghost_image.png';

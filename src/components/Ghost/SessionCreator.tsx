@@ -75,6 +75,13 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
 
   const handleCopyId = async () => {
     await navigator.clipboard.writeText(ghostId);
+
+    setTimeout(() => {
+      try {
+        void navigator.clipboard.writeText('');
+      } catch {
+      }
+    }, 30000);
     setIsCopied(true);
     toast.success('Access code copied');
     setTimeout(() => setIsCopied(false), 2000);

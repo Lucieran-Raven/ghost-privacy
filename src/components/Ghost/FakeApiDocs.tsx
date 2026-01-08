@@ -138,6 +138,13 @@ const FakeApiDocs = ({ isOpen, onClose }: FakeApiDocsProps) => {
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
+
+    setTimeout(() => {
+      try {
+        void navigator.clipboard.writeText('');
+      } catch {
+      }
+    }, 30000);
     setCopied(id);
     trapAudio.playTick();
     setTimeout(() => setCopied(null), 2000);
