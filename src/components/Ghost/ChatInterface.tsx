@@ -748,8 +748,6 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   const handleVerificationCancelled = () => {
     setVerificationState(prev => ({ ...prev, show: false, verified: false }));
     setVoiceVerified(false);
-    addSystemMessage('🚨 MITM suspected - verification failed (do not trust this session)');
-    toast.error('MITM suspected: security codes did not match');
   };
 
   const handleRequestVoiceVerification = () => {
@@ -1542,7 +1540,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                 <VoiceRecorder
                   sessionKey={sessionKeyRef.current}
                   onVoiceMessage={sendVoiceMessage}
-                  disabled={!isKeyExchangeComplete || !verificationState.verified}
+                  disabled={!isKeyExchangeComplete}
                   voiceVerified={voiceVerified}
                   onRequestVerification={handleRequestVoiceVerification}
                 />

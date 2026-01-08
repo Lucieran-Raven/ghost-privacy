@@ -3,6 +3,7 @@ import { Mic, Square, Send, X, AlertTriangle } from 'lucide-react';
 import { SecureVoiceRecorder } from '@/utils/voiceEncryption';
 import { cn } from '@/lib/utils';
 import PermissionModal from './PermissionModal';
+import { createPortal } from 'react-dom';
 
 interface VoiceRecorderProps {
   sessionKey: CryptoKey | null;
@@ -17,7 +18,6 @@ const VoiceRecorder = ({
   onVoiceMessage,
   disabled,
   voiceVerified,
-  onRequestVerification
 }: VoiceRecorderProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -172,11 +172,6 @@ const VoiceRecorder = ({
     }
   }, [isRecording, voiceVerified, startRecording, handleStopRecording]);
 
-  const handleVerificationRequest = () => {
-    setShowWarning(false);
-    onRequestVerification();
-  };
-
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -197,44 +192,38 @@ const VoiceRecorder = ({
         >
           <Mic className="h-5 w-5" />
         </button>
-        <div className="fixed inset-0 bg-background/95 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="max-w-md w-full p-6 rounded-2xl glass border border-destructive/50">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 rounded-lg bg-destructive/20">
-                <AlertTriangle className="h-6 w-6 text-destructive" />
-              </div>
-              <h3 className="font-outfit font-bold text-lg text-foreground">
-                Voice Verification Required
-              </h3>
-            </div>
-            
-            <div className="space-y-3 mb-6 text-sm text-muted-foreground">
-              <p>
-                <strong className="text-foreground">Without verification, an attacker could:</strong>
-              </p>
-              <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>Intercept and listen to your voice messages</li>
-                <li>Replace your voice with fake audio</li>
-                <li>Record messages you think vanished</li>
-              </ul>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={handleVerificationRequest}
-                className="flex-1 min-h-[48px] px-4 py-3 bg-primary text-primary-foreground rounded-lg font-medium active:scale-95 transition-transform"
-              >
-                Verify Now
-              </button>
+        {createPortal(
+          <div className="fixed inset-0 bg-background/95 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <div className="relative max-w-md w-full p-6 rounded-2xl glass border border-destructive/50">
               <button
                 onClick={() => setShowWarning(false)}
-                className="min-h-[48px] px-4 py-3 bg-muted text-muted-foreground rounded-lg font-medium active:scale-95 transition-colors"
+                className="absolute right-3 top-3 p-2 rounded-full bg-muted/50 active:scale-95 transition-transform"
+                aria-label="Close"
               >
-                Cancel
+                <X className="h-4 w-4 text-muted-foreground" />
               </button>
+
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-lg bg-destructive/20">
+                  <AlertTriangle className="h-6 w-6 text-destructive" />
+                </div>
+                <h3 className="font-outfit font-bold text-lg text-foreground">
+                  Voice Verification Required
+                </h3>
+              </div>
+
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  Voice messaging is locked until the session is verified.
+                </p>
+                <p>
+                  This usually completes after the other participant joins and verification is finished.
+                </p>
+              </div>
             </div>
-          </div>
-        </div>
+          </div>,
+          document.body
+        )}
       </>
     );
   }
