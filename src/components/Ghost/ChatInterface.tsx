@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { generatePlausibleTimestamp, isTimestampObfuscationEnabled } from '@/utils/plausibleTimestamp';
 import { useMemoryCleanup } from '@/hooks/useMemoryCleanup';
 import { isTauriRuntime, tauriInvoke } from '@/utils/runtime';
+import { base64ToBytes, bytesToBase64 } from '@/utils/algorithms/encoding/base64';
 import KeyVerificationModal from './KeyVerificationModal';
 import VoiceRecorder from './VoiceRecorder';
 import VoiceMessage from './VoiceMessage';
@@ -259,6 +260,10 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         if (!data || !data.fileId || !data.kind) return;
 
         if (data.kind === 'init') {
+          const MAX_FILE_CHUNKS = 512;
+          const total = Math.max(0, Number(data.totalChunks) || 0);
+          if (!Number.isFinite(total) || total <= 0 || total > MAX_FILE_CHUNKS) return;
+
           const existing = fileTransfersRef.current.get(data.fileId);
           if (existing?.cleanupTimer) {
             clearTimeout(existing.cleanupTimer);
@@ -273,12 +278,12 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           }, 5 * 60 * 1000);
 
           fileTransfersRef.current.set(data.fileId, {
-            chunks: new Array(Math.max(0, Number(data.totalChunks) || 0)).fill(''),
+            chunks: new Array(total).fill(''),
             received: 0,
-            total: Math.max(0, Number(data.totalChunks) || 0),
+            total,
             iv: String(data.iv || ''),
-            fileName: String(data.fileName || 'unknown_file'),
-            fileType: String(data.fileType || 'application/octet-stream'),
+            fileName: String(data.fileName || 'unknown_file').slice(0, 256),
+            fileType: String(data.fileType || 'application/octet-stream').slice(0, 128),
             timestamp: Number(data.timestamp) || payload.timestamp,
             cleanupTimer
           });
@@ -286,10 +291,13 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         }
 
         if (data.kind === 'chunk') {
+          const MAX_FILE_CHUNKS = 512;
+          const MAX_CHUNK_CHARS = 60000;
+
           let t = fileTransfersRef.current.get(data.fileId);
           if (!t) {
             const total = Math.max(0, Number(data.totalChunks) || 0);
-            if (!total) return;
+            if (!Number.isFinite(total) || total <= 0 || total > MAX_FILE_CHUNKS) return;
 
             const cleanupTimer = setTimeout(() => {
               const existing = fileTransfersRef.current.get(data.fileId);
@@ -304,8 +312,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
               received: 0,
               total,
               iv: String(data.iv || ''),
-              fileName: String(data.fileName || 'unknown_file'),
-              fileType: String(data.fileType || 'application/octet-stream'),
+              fileName: String(data.fileName || 'unknown_file').slice(0, 256),
+              fileType: String(data.fileType || 'application/octet-stream').slice(0, 128),
               timestamp: Number(data.timestamp) || payload.timestamp,
               cleanupTimer
             };
@@ -315,7 +323,16 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           if (!Number.isFinite(idx) || idx < 0 || idx >= t.total) return;
           if (t.chunks[idx]) return;
 
-          t.chunks[idx] = String(data.chunk || '');
+          const chunk = String(data.chunk || '');
+          if (chunk.length === 0 || chunk.length > MAX_CHUNK_CHARS) {
+            if (t.cleanupTimer) {
+              clearTimeout(t.cleanupTimer);
+            }
+            fileTransfersRef.current.delete(data.fileId);
+            return;
+          }
+
+          t.chunks[idx] = chunk;
           t.received += 1;
 
           if (t.received >= t.total && t.total > 0) {
@@ -430,13 +447,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             );
 
             const bytes = new Uint8Array(sharedSecretBytes);
-            const chunkSize = 0x8000;
-            const chunks: string[] = [];
-            for (let i = 0; i < bytes.length; i += chunkSize) {
-              const sub = bytes.subarray(i, i + chunkSize);
-              chunks.push(String.fromCharCode.apply(null, sub as unknown as number[]));
-            }
-            const keyBase64 = btoa(chunks.join(''));
+            const keyBase64 = bytesToBase64(bytes);
 
             try {
               await tauriInvoke('vault_set_key', { session_id: sessionId, key_base64: keyBase64 });
@@ -476,7 +487,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           try {
             const pkB64 = String(payload.data?.publicKey || '');
             if (pkB64) {
-              const pkBytes = Uint8Array.from(atob(pkB64), (c) => c.charCodeAt(0));
+              const pkBytes = base64ToBytes(pkB64);
               const hash = await crypto.subtle.digest('SHA-256', pkBytes);
               remoteFingerprint = Array.from(new Uint8Array(hash))
                 .slice(0, 16)
@@ -873,8 +884,14 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         });
         syncMessagesFromQueue();
 
+        const MAX_FILE_CHUNKS = 512;
         const chunkSize = 45_000;
         const totalChunks = Math.ceil(encrypted.length / chunkSize);
+
+        if (!Number.isFinite(totalChunks) || totalChunks <= 0 || totalChunks > MAX_FILE_CHUNKS) {
+          toast.error('File too large to send');
+          return;
+        }
 
         let sent = true;
         if (totalChunks <= 1) {

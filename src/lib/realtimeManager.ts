@@ -41,6 +41,10 @@ export class RealtimeManager {
   private connectionCheckInterval: ReturnType<typeof setInterval> | null = null;
   private consecutiveHealthCheckFailures = 0;
 
+  private seenIncoming: Map<string, number> = new Map();
+  private readonly seenIncomingTtlMs = 10 * 60 * 1000;
+  private readonly seenIncomingMaxEntries = 4096;
+
   constructor(sessionId: string, capabilityToken: string, participantId: string) {
     this.sessionId = sessionId;
     this.capabilityToken = capabilityToken;
@@ -50,6 +54,39 @@ export class RealtimeManager {
   private updateState(status: ConnectionStatus, progress: number, error?: string): void {
     this.connectionState = { status, progress, error };
     this.statusHandlers.forEach(handler => handler(this.connectionState));
+  }
+
+  private shouldAcceptIncoming(payload: any): payload is BroadcastPayload {
+    if (!payload || typeof payload !== 'object') return false;
+    if (typeof payload.senderId !== 'string' || payload.senderId.length === 0) return false;
+    if (typeof payload.nonce !== 'string' || payload.nonce.length === 0) return false;
+
+    const now = Date.now();
+    const cutoff = now - this.seenIncomingTtlMs;
+
+    if (this.seenIncoming.size > 0) {
+      for (const [k, ts] of this.seenIncoming) {
+        if (ts < cutoff) {
+          this.seenIncoming.delete(k);
+        }
+      }
+    }
+
+    const key = `${payload.senderId}:${payload.nonce}`;
+    const prev = this.seenIncoming.get(key);
+    if (prev !== undefined && prev >= cutoff) {
+      return false;
+    }
+
+    this.seenIncoming.set(key, now);
+
+    while (this.seenIncoming.size > this.seenIncomingMaxEntries) {
+      const firstKey = this.seenIncoming.keys().next().value as string | undefined;
+      if (!firstKey) break;
+      this.seenIncoming.delete(firstKey);
+    }
+
+    return true;
   }
 
   private estimatePayloadChars(payload: BroadcastPayload): number {
@@ -179,11 +216,13 @@ export class RealtimeManager {
 
     // Setup broadcast listener BEFORE subscribing
     this.channel.on('broadcast', { event: 'ghost-message' }, ({ payload }) => {
-      if (payload && payload.senderId !== this.participantId) {
-        const handler = this.messageHandlers.get(payload.type);
-        if (handler) {
-          handler(payload as BroadcastPayload);
-        }
+      if (this.isDestroyed) return;
+      if (!payload || payload.senderId === this.participantId) return;
+      if (!this.shouldAcceptIncoming(payload)) return;
+
+      const handler = this.messageHandlers.get(payload.type);
+      if (handler) {
+        handler(payload as BroadcastPayload);
       }
     });
 

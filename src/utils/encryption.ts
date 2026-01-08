@@ -20,26 +20,8 @@ import {
   isValidGhostId as isValidGhostIdAlgorithm,
   type EphemeralCryptoDeps
 } from '@/utils/algorithms/encryption/ephemeral';
+import { base64ToBytes, bytesToBase64 } from '@/utils/algorithms/encoding/base64';
 import { isTauriRuntime, tauriInvoke } from '@/utils/runtime';
-
-function bytesToBase64(bytes: Uint8Array): string {
-  const chunkSize = 0x8000;
-  const chunks: string[] = [];
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const sub = bytes.subarray(i, i + chunkSize);
-    chunks.push(String.fromCharCode.apply(null, sub as unknown as number[]));
-  }
-  return btoa(chunks.join(''));
-}
-
-function base64ToBytes(b64: string): Uint8Array {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
 
 const deps: EphemeralCryptoDeps = {
   subtle: crypto.subtle,
@@ -76,11 +58,7 @@ export class EncryptionEngine {
         return { encrypted: res.ciphertext, iv: res.iv };
       } catch {
         const bytes = new TextEncoder().encode(message);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        const plaintextBase64 = btoa(binary);
+        const plaintextBase64 = bytesToBase64(bytes);
         const res = await tauriInvoke<{ ciphertext: string; iv: string }>('vault_encrypt', {
           session_id: this.tauriSessionId,
           plaintext_base64: plaintextBase64
@@ -122,11 +100,7 @@ export class EncryptionEngine {
           ciphertext_base64: encryptedBase64,
           iv_base64: ivBase64
         });
-        const binary = atob(plaintextBase64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          bytes[i] = binary.charCodeAt(i);
-        }
+        const bytes = base64ToBytes(plaintextBase64);
         return new TextDecoder().decode(bytes);
       }
     }
