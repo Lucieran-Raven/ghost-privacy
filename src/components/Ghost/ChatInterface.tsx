@@ -1379,7 +1379,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                                 sender={message.sender}
                               />
                             )
-                          ) : message.content.startsWith('http://') || message.content.startsWith('https://') ? (
+                          ) : message.content.startsWith('https://') ? (
                             <FilePreviewCard
                               fileName={message.content}
                               content={message.content}
