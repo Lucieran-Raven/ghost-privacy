@@ -3,6 +3,8 @@ import App from "./App.tsx";
 import "./index.css";
 import { isTauriRuntime, tauriInvoke } from "@/utils/runtime";
 
+const enableServiceWorker = import.meta.env.VITE_ENABLE_SERVICE_WORKER === 'true';
+
 // PWA Update Banner - shows when new version is available (XSS-safe DOM construction)
 const showUpdateBanner = () => {
   return;
@@ -53,7 +55,8 @@ if (isTauriRuntime()) {
 }
 
 // Register service worker for PWA functionality
-if (false && 'serviceWorker' in navigator) {
+if (enableServiceWorker && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
