@@ -91,6 +91,30 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   const systemMessagesShownRef = useRef<Set<string>>(new Set());
   const lastTerminationRef = useRef<number>(0);
 
+  const purgeFileTransfer = (fileId: string): void => {
+    const t = fileTransfersRef.current.get(fileId);
+    if (!t) return;
+
+    if (t.cleanupTimer) {
+      clearTimeout(t.cleanupTimer);
+    }
+
+    try {
+      t.chunks.fill('');
+    } catch {
+    }
+
+    t.received = 0;
+    t.total = 0;
+    t.iv = '';
+    t.fileName = '';
+    t.fileType = '';
+    t.timestamp = 0;
+    t.cleanupTimer = null;
+
+    fileTransfersRef.current.delete(fileId);
+  };
+
   const syncMessagesFromQueue = useCallback(() => {
     const queuedMessages = messageQueueRef.current.getMessages(sessionId);
     setMessages([...queuedMessages]);
@@ -270,11 +294,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           }
 
           const cleanupTimer = setTimeout(() => {
-            const t = fileTransfersRef.current.get(data.fileId);
-            if (t?.cleanupTimer) {
-              clearTimeout(t.cleanupTimer);
-            }
-            fileTransfersRef.current.delete(data.fileId);
+            purgeFileTransfer(data.fileId);
           }, 5 * 60 * 1000);
 
           fileTransfersRef.current.set(data.fileId, {
@@ -300,11 +320,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             if (!Number.isFinite(total) || total <= 0 || total > MAX_FILE_CHUNKS) return;
 
             const cleanupTimer = setTimeout(() => {
-              const existing = fileTransfersRef.current.get(data.fileId);
-              if (existing?.cleanupTimer) {
-                clearTimeout(existing.cleanupTimer);
-              }
-              fileTransfersRef.current.delete(data.fileId);
+              purgeFileTransfer(data.fileId);
             }, 5 * 60 * 1000);
 
             t = {
@@ -325,10 +341,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
           const chunk = String(data.chunk || '');
           if (chunk.length === 0 || chunk.length > MAX_CHUNK_CHARS) {
-            if (t.cleanupTimer) {
-              clearTimeout(t.cleanupTimer);
-            }
-            fileTransfersRef.current.delete(data.fileId);
+            purgeFileTransfer(data.fileId);
             return;
           }
 
@@ -357,10 +370,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             const objectUrl = URL.createObjectURL(blob);
             decryptedBytes.fill(0);
 
-            if (t.cleanupTimer) {
-              clearTimeout(t.cleanupTimer);
-            }
-            fileTransfersRef.current.delete(data.fileId);
+            purgeFileTransfer(data.fileId);
 
             messageQueueRef.current.addMessage(sessionId, {
               id: data.fileId,
@@ -1002,12 +1012,9 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       focusScrollTimeoutRef.current = null;
     }
 
-    fileTransfersRef.current.forEach((t) => {
-      if (t.cleanupTimer) {
-        clearTimeout(t.cleanupTimer);
-      }
-    });
-    fileTransfersRef.current.clear();
+    for (const fileId of fileTransfersRef.current.keys()) {
+      purgeFileTransfer(fileId);
+    }
 
     if (encryptionEngineRef.current) {
       encryptionEngineRef.current = null;

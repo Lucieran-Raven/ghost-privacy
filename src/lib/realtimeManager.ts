@@ -495,6 +495,7 @@ export class RealtimeManager {
     this.isDestroyed = true;
     this.stopHeartbeatMonitor();
     this.outbox = [];
+    this.seenIncoming.clear();
     
     if (this.channel) {
       try {
