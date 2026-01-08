@@ -19,7 +19,7 @@ const Downloads = () => {
                 <div className="border border-[rgba(255,10,42,0.14)] p-4 bg-black/40">
                   <div className="font-mono text-sm tracking-[0.12em] text-white/90">GHOST PRIVACY DOWNLOADS</div>
                   <div className="mt-2 font-mono text-[12px] leading-relaxed text-white/70">
-                    VERIFY BEFORE RUNNING. COMPARE SHA-256 AGAINST <a className="underline hover:text-white" href="/releases/hashes.txt">/releases/hashes.txt</a>.
+                    VERIFY BEFORE RUNNING. COMPARE SHA-256 AGAINST <a className="underline hover:text-white" href="/releases/hashes.txt">/releases/hashes.txt</a>. DOWNLOAD LINKS REDIRECT TO THE OFFICIAL GITHUB RELEASE ASSETS.
                   </div>
                 </div>
 
@@ -42,7 +42,7 @@ const Downloads = () => {
                       <div className="font-mono text-[11px] leading-relaxed text-white/60">
                         Verify SHA-256 in PowerShell:
                         <div className="mt-2 border border-[rgba(255,10,42,0.14)] bg-black/50 p-3 text-white/80 overflow-x-auto">
-                          Get-FileHash .\\GhostPrivacy-Setup.exe -Algorithm SHA256
+                          Get-FileHash .\\Ghost.Privacy_0.1.0_x64-setup.exe -Algorithm SHA256
                         </div>
                       </div>
                     </div>
@@ -66,7 +66,7 @@ const Downloads = () => {
                       <div className="font-mono text-[11px] leading-relaxed text-white/60">
                         Verify SHA-256 on a computer:
                         <div className="mt-2 border border-[rgba(255,10,42,0.14)] bg-black/50 p-3 text-white/80 overflow-x-auto">
-                          sha256sum GhostPrivacy.apk
+                          sha256sum app-debug.apk
                         </div>
                       </div>
                     </div>
