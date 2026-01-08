@@ -15,6 +15,10 @@ public class MainActivity extends BridgeActivity {
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+    try {
+      registerPlugin(AppSettingsPlugin.class);
+    } catch (Exception e) {
+    }
     hardenWebView();
   }
 

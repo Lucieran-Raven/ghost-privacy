@@ -18,12 +18,23 @@ const PermissionModal = ({ type, isOpen, onClose, onRetry, onFallback }: Permiss
   const title = isCamera ? 'Camera Access Required' : 'Microphone Access Required';
   const fallbackText = isCamera ? 'Upload Video Instead' : 'Upload Audio Instead';
 
-  const openBrowserSettings = () => {
+  const openBrowserSettings = async () => {
     const ua = navigator.userAgent.toLowerCase();
     const isIOS = /iphone|ipad|ipod/.test(ua);
     const isAndroid = /android/.test(ua);
     const isSafari = /safari/.test(ua) && !/chrome/.test(ua);
     const isChrome = /chrome/.test(ua);
+    const isFirefox = /firefox/.test(ua);
+
+    try {
+      const mod = await import('@capacitor/core');
+      if (isAndroid && mod.Capacitor?.isNativePlatform?.()) {
+        const AppSettings = mod.registerPlugin('AppSettings') as { openAppSettings: () => Promise<void> };
+        await AppSettings.openAppSettings();
+        return;
+      }
+    } catch {
+    }
 
     if (isIOS) {
       // iOS - open Safari settings directly
@@ -51,6 +62,14 @@ const PermissionModal = ({ type, isOpen, onClose, onRetry, onFallback }: Permiss
     const isChrome = /chrome/.test(ua);
     const isFirefox = /firefox/.test(ua);
 
+    let isAndroidNative = false;
+    try {
+      const w = window as any;
+      isAndroidNative = Boolean(isAndroid && w && w.Capacitor);
+    } catch {
+      isAndroidNative = false;
+    }
+
     if (isIOS) {
       return {
         browser: 'iOS Safari',
@@ -59,6 +78,18 @@ const PermissionModal = ({ type, isOpen, onClose, onRetry, onFallback }: Permiss
           `Scroll down and tap "Safari"`,
           `Tap "${isCamera ? 'Camera' : 'Microphone'}"`,
           `Set to "Allow" for this site`,
+          'Return here and tap "Try Again"'
+        ]
+      };
+    }
+
+    if (isAndroidNative) {
+      return {
+        browser: 'Android App Settings',
+        steps: [
+          'Tap "Open Settings" below',
+          'Go to "Permissions"',
+          `Enable "${isCamera ? 'Camera' : 'Microphone'}"`,
           'Return here and tap "Try Again"'
         ]
       };
@@ -210,7 +241,9 @@ const PermissionModal = ({ type, isOpen, onClose, onRetry, onFallback }: Permiss
               </button>
               
               <button
-                onClick={openBrowserSettings}
+                onClick={() => {
+                  void openBrowserSettings();
+                }}
                 className="w-full min-h-[48px] px-4 py-3 bg-blue-500 text-white rounded-lg font-medium active:scale-95 transition-transform flex items-center justify-center gap-2"
               >
                 <Settings className="h-4 w-4" />

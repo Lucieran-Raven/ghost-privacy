@@ -248,7 +248,9 @@ const VoiceRecorder = ({
         onClose={() => setShowPermissionModal(false)}
         onRetry={() => {
           setShowPermissionModal(false);
-          startRecording();
+          setTimeout(() => {
+            void startRecording();
+          }, 250);
         }}
         onFallback={() => {
           setShowPermissionModal(false);
