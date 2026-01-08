@@ -280,9 +280,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
       await realtimeManagerRef.current.connect();
       const extended = await SessionService.extendSession(sessionId);
-      if (!extended) {
-        addSystemMessage('⚠️ Session extension failed - connection may expire soon');
-      }
+      void extended;
 
       addSystemMessage('🔐 Secure connection established');
 
@@ -1394,7 +1392,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                       )}
                     >
                       {message.type === 'system' ? (
-                        <div className="px-4 py-2 rounded-full bg-secondary/50 text-sm text-muted-foreground max-w-[90%] text-center">
+                        <div className="px-4 py-2 rounded-full border border-[rgba(255,10,42,0.14)] bg-black/35 backdrop-blur-md font-mono text-[12px] tracking-[0.12em] text-white/80 max-w-[90%] text-center">
                           {message.content}
                         </div>
                       ) : message.type === 'voice' && voiceMessage ? (
