@@ -13,6 +13,7 @@ type GetRandomValues = <T extends ArrayBufferView>(array: T) => T;
 export interface DeniableCryptoDeps {
   subtle: SubtleCrypto;
   getRandomValues: GetRandomValues;
+  pbkdf2Iterations?: number;
 }
 
 export interface DecryptHiddenVolumeResult {
@@ -74,7 +75,7 @@ async function deriveKeyFromPassword(
     {
       name: 'PBKDF2',
       salt: saltBuffer,
-      iterations: PBKDF2_ITERATIONS,
+      iterations: deps.pbkdf2Iterations ?? PBKDF2_ITERATIONS,
       hash: 'SHA-256'
     },
     keyMaterial,
@@ -263,11 +264,15 @@ export class DeniableEncryption {
     const innerHeaderOffset = innerRegionOffset;
     const realPayloadOffset = innerHeaderOffset + HEADER_TOTAL_SIZE;
 
+    const decoyMax = innerRegionOffset - decoyPayloadOffset;
+    const realMax = CONTAINER_SIZE_BYTES - realPayloadOffset;
+
     const tryDecryptAt = async (
       headerOffset: number,
       payloadOffset: number,
       expectedMagic: number,
-      isDecoy: boolean
+      isDecoy: boolean,
+      maxCipherLen: number
     ): Promise<DecryptHiddenVolumeResult | null> => {
       try {
         const headerIv = container.slice(headerOffset, headerOffset + IV_SIZE);
@@ -285,6 +290,8 @@ export class DeniableEncryption {
 
         const cipherLen = parsed.payloadCipherLen;
         if (cipherLen <= 0) return null;
+        if (cipherLen > maxCipherLen) return null;
+        if (payloadOffset + cipherLen > container.byteLength) return null;
         const payloadCipher = container.slice(payloadOffset, payloadOffset + cipherLen);
         const payloadPlain = await this.decryptPayload(deps, key, parsed.payloadIv, payloadCipher);
         const content = new TextDecoder().decode(payloadPlain);
@@ -301,8 +308,8 @@ export class DeniableEncryption {
       }
     };
 
-    const inner = await tryDecryptAt(innerHeaderOffset, realPayloadOffset, MAGIC_INNER, false);
-    const outer = await tryDecryptAt(outerHeaderOffset, decoyPayloadOffset, MAGIC_OUTER, true);
+    const inner = await tryDecryptAt(innerHeaderOffset, realPayloadOffset, MAGIC_INNER, false, realMax);
+    const outer = await tryDecryptAt(outerHeaderOffset, decoyPayloadOffset, MAGIC_OUTER, true, decoyMax);
 
     if (inner) return inner;
     if (outer) return outer;
