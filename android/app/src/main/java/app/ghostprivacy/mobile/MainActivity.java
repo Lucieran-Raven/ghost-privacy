@@ -6,6 +6,7 @@ import android.webkit.CookieManager;
 import android.webkit.WebSettings;
 import android.webkit.WebStorage;
 import android.webkit.WebView;
+import java.io.File;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -54,6 +55,51 @@ public class MainActivity extends BridgeActivity {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
         cookies.setAcceptThirdPartyCookies(webView, false);
       }
+    } catch (Exception e) {
+    }
+  }
+
+  private void deleteRecursively(File f) {
+    try {
+      if (f == null || !f.exists()) {
+        return;
+      }
+
+      if (f.isDirectory()) {
+        File[] children = f.listFiles();
+        if (children != null) {
+          for (File c : children) {
+            deleteRecursively(c);
+          }
+        }
+      }
+
+      f.delete();
+    } catch (Exception e) {
+    }
+  }
+
+  private void purgeWebViewDiskArtifactsBestEffort() {
+    try {
+      File cacheDir = getCacheDir();
+      deleteRecursively(new File(cacheDir, "WebView"));
+      deleteRecursively(new File(cacheDir, "Crash Reports"));
+    } catch (Exception e) {
+    }
+
+    try {
+      File dataDir;
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        dataDir = getDataDir();
+      } else {
+        dataDir = new File(getApplicationInfo().dataDir);
+      }
+
+      deleteRecursively(new File(dataDir, "app_webview"));
+
+      File prefsDir = new File(dataDir, "shared_prefs");
+      deleteRecursively(new File(prefsDir, "WebViewChromiumPrefs.xml"));
+      deleteRecursively(new File(prefsDir, "AwOriginVisitLoggerPrefs.xml"));
     } catch (Exception e) {
     }
   }
@@ -121,6 +167,8 @@ public class MainActivity extends BridgeActivity {
       } else {
         cookies.removeAllCookie();
       }
+
+      purgeWebViewDiskArtifactsBestEffort();
     } catch (Exception e) {
     }
   }
