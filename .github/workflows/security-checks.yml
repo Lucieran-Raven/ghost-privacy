@@ -110,16 +110,45 @@ jobs:
       
       - name: Validate CSP headers
         run: |
-          if grep -q "unsafe-eval" public/_headers; then
+          set -euo pipefail
+
+          WEB_CSP=$(grep -E '^\s*Content-Security-Policy:' public/_headers | head -n 1 | sed 's/^\s*Content-Security-Policy: //')
+          if [ -z "${WEB_CSP}" ]; then
+            echo "❌ SECURITY: Web CSP not found in public/_headers"
+            exit 1
+          fi
+
+          TAURI_CSP=$(jq -r '.app.security.csp // ""' src-tauri/tauri.conf.json)
+          if [ -z "${TAURI_CSP}" ] || [ "${TAURI_CSP}" = "null" ]; then
+            echo "❌ SECURITY: Tauri CSP not found in src-tauri/tauri.conf.json"
+            exit 1
+          fi
+
+          if echo "${WEB_CSP} ${TAURI_CSP}" | grep -q "unsafe-eval"; then
             echo "❌ SECURITY: unsafe-eval found in CSP"
             exit 1
           fi
-          
-          if ! grep -q "default-src 'self'" public/_headers; then
-            echo "⚠️ WARNING: default-src 'self' not found in CSP"
+          if echo "${WEB_CSP} ${TAURI_CSP}" | grep -q "unsafe-inline"; then
+            echo "❌ SECURITY: unsafe-inline found in CSP"
+            exit 1
           fi
-          
-          echo "✅ CSP validation passed"
+
+          WEB_CSP_NORM=$(echo "${WEB_CSP}" | tr -s ' ')
+          TAURI_CSP_NORM=$(echo "${TAURI_CSP}" | tr -s ' ')
+
+          if [ "${WEB_CSP_NORM}" != "${TAURI_CSP_NORM}" ]; then
+            echo "❌ SECURITY: CSP drift detected between Web and Tauri"
+            echo "Web CSP  : ${WEB_CSP_NORM}"
+            echo "Tauri CSP: ${TAURI_CSP_NORM}"
+            exit 1
+          fi
+
+          if ! echo "${WEB_CSP_NORM}" | grep -q "default-src 'self'"; then
+            echo "❌ SECURITY: default-src 'self' not found in CSP"
+            exit 1
+          fi
+
+          echo "✅ CSP validation passed (Web/Tauri parity enforced)"
 
   env-check:
     name: Environment Variables Security Check
