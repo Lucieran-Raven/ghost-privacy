@@ -43,3 +43,5 @@ This is a code-level map of core security controls.
 
 - Key manager:
   - `src/utils/sessionKeyManager.ts`
+
+Core algorithms verified

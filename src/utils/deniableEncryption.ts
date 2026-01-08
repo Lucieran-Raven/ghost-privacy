@@ -76,5 +76,19 @@ export class DeniableEncryption {
 
 // Generate secure decoy content based on file type
 export function generateDecoyContent(fileType: string): string {
-  return generateDecoyContentAlgorithm(fileType, (maxExclusive) => Math.floor(Math.random() * maxExclusive));
+  const randomInt = (maxExclusive: number): number => {
+    if (!Number.isFinite(maxExclusive) || maxExclusive <= 0) return 0;
+    const max = Math.floor(maxExclusive);
+    if (max <= 1) return 0;
+
+    const limit = Math.floor(0x100000000 / max) * max;
+    const buf = new Uint32Array(1);
+    while (true) {
+      crypto.getRandomValues(buf);
+      const v = buf[0];
+      if (v < limit) return v % max;
+    }
+  };
+
+  return generateDecoyContentAlgorithm(fileType, randomInt);
 }

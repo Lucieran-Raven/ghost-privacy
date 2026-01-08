@@ -88,6 +88,11 @@ async function deriveKeyFromPassword(
   const passwordBuffer = encoder.encode(password);
 
   const keyMaterial = await deps.subtle.importKey('raw', passwordBuffer, 'PBKDF2', false, ['deriveKey']);
+  try {
+    passwordBuffer.fill(0);
+  } catch {
+    // Ignore
+  }
 
   const saltBuffer = new Uint8Array(salt).buffer as ArrayBuffer;
 
@@ -285,6 +290,11 @@ export class DeniableEncryption {
         const headerCipher = container.slice(headerOffset + IV_SIZE, headerOffset + IV_SIZE + HEADER_CIPHERTEXT_SIZE);
         const headerPlain = await this.decryptHeader(deps, key, headerIv, headerCipher);
         const parsed = this.parseHeaderPlaintext(headerPlain);
+        try {
+          headerPlain.fill(0);
+        } catch {
+          // Ignore
+        }
         if (!parsed || parsed.magic !== expectedMagic) {
           return null;
         }
@@ -308,11 +318,10 @@ export class DeniableEncryption {
     };
 
     const inner = await tryDecryptAt(innerHeaderOffset, realPayloadOffset, MAGIC_INNER, false);
-    if (inner) return inner;
-
     const outer = await tryDecryptAt(outerHeaderOffset, decoyPayloadOffset, MAGIC_OUTER, true);
-    if (outer) return outer;
 
+    if (inner) return inner;
+    if (outer) return outer;
     return null;
   }
 }

@@ -61,16 +61,24 @@ export async function encryptAudioChunk(
   const iv = deps.getRandomValues(new Uint8Array(12));
   const aad = new TextEncoder().encode(`voice-chunk-${chunkIndex}-${timestamp}`);
 
-  const encrypted = await deps.subtle.encrypt(
-    { name: 'AES-GCM', iv, additionalData: aad },
-    sessionKey,
-    chunk
-  );
+  try {
+    const encrypted = await deps.subtle.encrypt(
+      { name: 'AES-GCM', iv, additionalData: aad },
+      sessionKey,
+      chunk
+    );
 
-  return {
-    encrypted: arrayBufferToBase64(encrypted),
-    iv: arrayBufferToBase64(iv.buffer)
-  };
+    return {
+      encrypted: arrayBufferToBase64(encrypted),
+      iv: arrayBufferToBase64(iv.buffer)
+    };
+  } finally {
+    try {
+      aad.fill(0);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export async function decryptAudioChunk(
@@ -85,5 +93,13 @@ export async function decryptAudioChunk(
   const iv = new Uint8Array(base64ToArrayBuffer(ivBase64));
   const aad = new TextEncoder().encode(`voice-chunk-${chunkIndex}-${timestamp}`);
 
-  return deps.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: aad }, sessionKey, encrypted);
+  try {
+    return await deps.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: aad }, sessionKey, encrypted);
+  } finally {
+    try {
+      aad.fill(0);
+    } catch {
+      // Ignore
+    }
+  }
 }

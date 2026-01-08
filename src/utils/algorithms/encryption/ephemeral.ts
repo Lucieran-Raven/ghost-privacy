@@ -80,12 +80,19 @@ export async function aesGcmEncryptString(
   const iv = deps.getRandomValues(new Uint8Array(12));
   const encoded = new TextEncoder().encode(message);
 
-  const encrypted = await deps.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
-
-  return {
-    encrypted: arrayBufferToBase64(encrypted),
-    iv: arrayBufferToBase64(iv.buffer)
-  };
+  try {
+    const encrypted = await deps.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+    return {
+      encrypted: arrayBufferToBase64(encrypted),
+      iv: arrayBufferToBase64(iv.buffer)
+    };
+  } finally {
+    try {
+      encoded.fill(0);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export async function aesGcmEncryptBytes(
@@ -111,7 +118,16 @@ export async function aesGcmDecryptString(
   const iv = new Uint8Array(base64ToArrayBuffer(ivBase64));
 
   const decrypted = await deps.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted);
-  return new TextDecoder().decode(decrypted);
+  const bytes = new Uint8Array(decrypted);
+  try {
+    return new TextDecoder().decode(bytes);
+  } finally {
+    try {
+      bytes.fill(0);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export async function aesGcmDecryptBytes(
@@ -126,22 +142,47 @@ export async function aesGcmDecryptBytes(
   return deps.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted);
 }
 
-export async function generateAesGcmKey(deps: EphemeralCryptoDeps): Promise<CryptoKey> {
-  return deps.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+export async function generateAesGcmKey(deps: EphemeralCryptoDeps, extractable: boolean = false): Promise<CryptoKey> {
+  return deps.subtle.generateKey({ name: 'AES-GCM', length: 256 }, extractable, ['encrypt', 'decrypt']);
 }
 
 export async function exportAesKeyRawBase64(deps: EphemeralCryptoDeps, key: CryptoKey): Promise<string> {
+  if (!key.extractable) {
+    throw new Error('Key is non-extractable');
+  }
   const exported = await deps.subtle.exportKey('raw', key);
   return arrayBufferToBase64(exported);
 }
 
-export async function importAesKeyRawBase64(deps: EphemeralCryptoDeps, keyBase64: string): Promise<CryptoKey> {
+export async function importAesKeyRawBase64(
+  deps: EphemeralCryptoDeps,
+  keyBase64: string,
+  extractable: boolean = false
+): Promise<CryptoKey> {
   const keyBuffer = base64ToArrayBuffer(keyBase64);
-  return deps.subtle.importKey('raw', keyBuffer, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+  return deps.subtle.importKey('raw', keyBuffer, { name: 'AES-GCM', length: 256 }, extractable, ['encrypt', 'decrypt']);
 }
 
 export async function generateEcdhKeyPair(deps: EphemeralCryptoDeps): Promise<CryptoKeyPair> {
-  return deps.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']);
+  const keyPair = await deps.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']);
+  const privateKeyPkcs8 = await deps.subtle.exportKey('pkcs8', keyPair.privateKey);
+
+  try {
+    const privateKey = await deps.subtle.importKey(
+      'pkcs8',
+      privateKeyPkcs8,
+      { name: 'ECDH', namedCurve: 'P-256' },
+      false,
+      ['deriveKey', 'deriveBits']
+    );
+    return { publicKey: keyPair.publicKey, privateKey };
+  } finally {
+    try {
+      new Uint8Array(privateKeyPkcs8).fill(0);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export async function exportEcdhPublicKeySpkiBase64(deps: EphemeralCryptoDeps, publicKey: CryptoKey): Promise<string> {
@@ -151,7 +192,7 @@ export async function exportEcdhPublicKeySpkiBase64(deps: EphemeralCryptoDeps, p
 
 export async function importEcdhPublicKeySpkiBase64(deps: EphemeralCryptoDeps, publicKeyBase64: string): Promise<CryptoKey> {
   const keyBuffer = base64ToArrayBuffer(publicKeyBase64);
-  return deps.subtle.importKey('spki', keyBuffer, { name: 'ECDH', namedCurve: 'P-256' }, true, []);
+  return deps.subtle.importKey('spki', keyBuffer, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
 }
 
 export async function deriveSharedSecretAesGcmKey(
@@ -181,7 +222,7 @@ export async function deriveSharedSecretBytes(
 }
 
 export async function generateFingerprintHex(deps: EphemeralCryptoDeps, publicKey: CryptoKey): Promise<string> {
-  const exported = await deps.subtle.exportKey('raw', publicKey);
+  const exported = await deps.subtle.exportKey('spki', publicKey);
   const hash = await deps.subtle.digest('SHA-256', exported);
   const hashArray = Array.from(new Uint8Array(hash));
   const fingerprint = hashArray

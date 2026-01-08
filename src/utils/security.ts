@@ -46,21 +46,29 @@ export class SecurityManager {
   static async signMessage(message: string, key: CryptoKey): Promise<string> {
     const encoder = new TextEncoder();
     const data = encoder.encode(message);
-    
-    const signature = await crypto.subtle.sign(
-      { name: 'HMAC' },
-      key,
-      data
-    );
-    
-    return this.arrayBufferToHex(signature);
+
+    try {
+      const signature = await crypto.subtle.sign(
+        { name: 'HMAC' },
+        key,
+        data
+      );
+
+      return this.arrayBufferToHex(signature);
+    } finally {
+      try {
+        data.fill(0);
+      } catch {
+        // Ignore
+      }
+    }
   }
 
   // Generate HMAC key for message signing
   static async generateHMACKey(): Promise<CryptoKey> {
     return crypto.subtle.generateKey(
       { name: 'HMAC', hash: 'SHA-256' },
-      true,
+      false,
       ['sign', 'verify']
     );
   }

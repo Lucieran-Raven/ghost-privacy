@@ -151,8 +151,7 @@ export class EncryptionEngine {
   }
 
   async exportKey(): Promise<string> {
-    if (!this.key) throw new Error('Encryption key not initialized');
-    return exportAesKeyRawBase64(deps, this.key);
+    throw new Error('Key export is disabled');
   }
 
   static async importKey(keyBase64: string): Promise<CryptoKey> {
