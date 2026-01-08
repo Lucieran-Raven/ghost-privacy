@@ -6,6 +6,7 @@ import {
   isValidFingerprint,
   isValidSessionId
 } from '@/utils/algorithms/session/binding';
+import { constantTimeEqualString } from '@/utils/algorithms/integrity/constantTime';
 import { createExtendSessionInvokeRequest } from '@/utils/algorithms/session/extension';
 import { createDeleteSessionInvokeRequest } from '@/utils/algorithms/session/revocation';
 
@@ -40,12 +41,12 @@ class MemoryValidationCache {
     const entry = this.cache.get(sessionId);
     if (!entry) return null;
 
-    if (entry.fingerprint !== fingerprint) {
+    if (!constantTimeEqualString(entry.fingerprint, fingerprint)) {
       this.cache.delete(sessionId);
       return null;
     }
 
-    if (entry.capabilityToken !== capabilityToken) {
+    if (!constantTimeEqualString(entry.capabilityToken, capabilityToken)) {
       this.cache.delete(sessionId);
       return null;
     }
