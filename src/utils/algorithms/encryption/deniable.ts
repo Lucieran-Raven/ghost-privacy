@@ -35,6 +35,10 @@ const INNER_REGION_BYTES = 5 * 1024 * 1024;
 const MAGIC_OUTER = 0x4f485047; // 'GPHO' little-endian
 const MAGIC_INNER = 0x49485047; // 'GPHI' little-endian
 
+function expectedBase64Len(byteLen: number): number {
+  return 4 * Math.ceil(byteLen / 3);
+}
+
 function fillRandomBytesChunked(deps: Pick<DeniableCryptoDeps, 'getRandomValues'>, out: Uint8Array): Uint8Array {
   const maxChunk = 65536;
   for (let i = 0; i < out.byteLength; i += maxChunk) {
@@ -229,9 +233,19 @@ export class DeniableEncryption {
     packedData: string,
     password: string
   ): Promise<DecryptHiddenVolumeResult | null> {
+    const expectedLen = expectedBase64Len(CONTAINER_SIZE_BYTES);
+    if (packedData.length > expectedLen + 1024) {
+      return null;
+    }
+
+    const compact = packedData.replace(/\s+/g, '');
+    if (compact.length !== expectedLen) {
+      return null;
+    }
+
     let container: Uint8Array;
     try {
-      container = base64ToBytes(packedData);
+      container = base64ToBytes(compact);
     } catch {
       return null;
     }

@@ -37,27 +37,30 @@ export function generateNonce(deps: EphemeralCryptoDeps): string {
 export function generateGhostId(deps: EphemeralCryptoDeps): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   const charCount = chars.length;
-  
-  // Generate unbiased random characters using rejection sampling
-  const getUnbiasedChar = (randomValue: number): string => {
-    const maxUnbiased = Math.floor(256 / charCount) * charCount;
-    if (randomValue >= maxUnbiased) {
-      // Reject and get new value
-      return getUnbiasedChar(deps.getRandomValues(new Uint8Array(1))[0]);
+
+  const maxUnbiased = Math.floor(256 / charCount) * charCount;
+  const getUnbiasedChar = (initial: number): string => {
+    let v = initial;
+    for (let attempts = 0; attempts < 128; attempts++) {
+      if (v < maxUnbiased) {
+        return chars[v % charCount];
+      }
+      v = deps.getRandomValues(new Uint8Array(1))[0];
     }
-    return chars[randomValue % charCount];
+    return chars[v % charCount];
   };
-  
-  // Generate 8 unbiased random bytes for 8 characters
+
   const randomBytes = deps.getRandomValues(new Uint8Array(8));
-  
-  const part1 = Array.from(randomBytes.slice(0, 4))
-    .map(byte => getUnbiasedChar(byte))
-    .join('');
-  
-  const part2 = Array.from(randomBytes.slice(4, 8))
-    .map(byte => getUnbiasedChar(byte))
-    .join('');
+
+  let part1 = '';
+  for (let i = 0; i < 4; i++) {
+    part1 += getUnbiasedChar(randomBytes[i]);
+  }
+
+  let part2 = '';
+  for (let i = 4; i < 8; i++) {
+    part2 += getUnbiasedChar(randomBytes[i]);
+  }
   return `GHOST-${part1}-${part2}`;
 }
 
