@@ -187,46 +187,43 @@ export class RealtimeManager {
       }
     });
 
-    // Setup presence tracking with grace period to prevent false disconnects
-    this.channel.on('presence', { event: 'sync' }, () => {
+    // Setup presence tracking (emit immediately; optional delayed re-check)
+    const emitPresence = () => {
       const state = this.channel?.presenceState() || {};
       const participants = Object.keys(state).filter(id => id !== this.participantId);
-      
-      // Clear any pending grace period timeout
+      this.presenceHandlers.forEach(handler => handler(participants));
+      return participants;
+    };
+
+    this.channel.on('presence', { event: 'sync' }, () => {
+      const participants = emitPresence();
+
       if (this.presenceGracePeriod) {
         clearTimeout(this.presenceGracePeriod);
         this.presenceGracePeriod = null;
       }
-      
-      // If we had participants and now we don't, wait before notifying
+
       if (this.lastPresenceState.length > 0 && participants.length === 0) {
         this.presenceGracePeriod = setTimeout(() => {
-          // Re-check presence after grace period
-          const currentState = this.channel?.presenceState() || {};
-          const currentParticipants = Object.keys(currentState).filter(id => id !== this.participantId);
-          
-          if (currentParticipants.length === 0) {
-            this.presenceHandlers.forEach(handler => handler([]));
-          }
+          const current = emitPresence();
+          void current;
           this.presenceGracePeriod = null;
         }, 8000);
-      } else {
-        this.presenceHandlers.forEach(handler => handler(participants));
       }
-      
+
       this.lastPresenceState = participants;
     });
 
     this.channel.on('presence', { event: 'join' }, () => {
-      // Cancel any pending disconnect grace period
       if (this.presenceGracePeriod) {
         clearTimeout(this.presenceGracePeriod);
         this.presenceGracePeriod = null;
       }
+      this.lastPresenceState = emitPresence();
     });
 
     this.channel.on('presence', { event: 'leave' }, () => {
-      // Silent - presence sync handles state with grace period
+      this.lastPresenceState = emitPresence();
     });
 
     // Subscribe with promise-based waiting and exponential backoff retry

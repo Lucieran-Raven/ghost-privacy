@@ -465,17 +465,39 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           }
           setIsKeyExchangeComplete(true);
 
-          if (!localFingerprintRef.current && keyPairRef.current) {
-            try {
+          try {
+            if (keyPairRef.current) {
               localFingerprintRef.current = await KeyExchange.generateFingerprint(keyPairRef.current.publicKey);
-            } catch {
             }
+          } catch {
           }
 
-          const remoteFingerprint = await KeyExchange.generateFingerprint(partnerPublicKey);
+          let remoteFingerprint = '';
+          try {
+            const pkB64 = String(payload.data?.publicKey || '');
+            if (pkB64) {
+              const pkBytes = Uint8Array.from(atob(pkB64), (c) => c.charCodeAt(0));
+              const hash = await crypto.subtle.digest('SHA-256', pkBytes);
+              remoteFingerprint = Array.from(new Uint8Array(hash))
+                .slice(0, 16)
+                .map((b) => b.toString(16).padStart(2, '0'))
+                .join('')
+                .toUpperCase();
+              pkBytes.fill(0);
+            }
+          } catch {
+          }
+
+          if (!remoteFingerprint) {
+            remoteFingerprint = await KeyExchange.generateFingerprint(partnerPublicKey);
+          }
+
+          if (!localFingerprintRef.current) {
+            localFingerprintRef.current = '...';
+          }
 
           // Only show verification modal ONCE per session
-          if (!verificationShownRef.current) {
+          if (!verificationShownRef.current && localFingerprintRef.current && remoteFingerprint) {
             verificationShownRef.current = true;
             setVerificationState(prev => ({
               ...prev,
@@ -582,9 +604,17 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     });
 
     manager.onMessage('session-terminated', async () => {
+      if (isTerminatingRef.current) return;
       isTerminatingRef.current = true;
-      await triggerSessionTermination('partner_left');
+      try {
+        SessionService.clearValidationCache(sessionId);
+      } catch {
+        // Ignore
+      }
+      destroyLocalSessionData();
+      await fullCleanup();
       await cleanup();
+      onEndSession(false);
     });
   };
 
@@ -918,8 +948,14 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
     destroyLocalSessionData();
 
+    try {
+      SessionService.clearValidationCache(sessionId);
+    } catch {
+      // Ignore
+    }
+
     if (!deleted) {
-      toast.error('Server deletion failed - session ended locally');
+      toast.error('Server deletion failed - session ended locally', { id: 'server-delete-failed' });
     }
   };
 
@@ -1099,10 +1135,10 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     await cleanup();
 
     // 5. Redirect with no trace (history.replace)
-    navigate('/', { replace: true });
+    onEndSession(false);
 
     if (!deleted) {
-      toast.error('Server deletion failed - session ended locally');
+      toast.error('Server deletion failed - session ended locally', { id: 'server-delete-failed' });
     }
   };
 
