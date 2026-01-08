@@ -41,7 +41,23 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (!event.request) return;
 
-  event.respondWith(fetch(event.request));
+  const req = event.request;
+
+  if (req.method !== 'GET') {
+    event.respondWith(fetch(req));
+    return;
+  }
+
+  const url = new URL(req.url);
+  const hasAuth = Boolean(req.headers.get('authorization'));
+  const isSupabase = url.hostname.endsWith('.supabase.co');
+
+  if (hasAuth || isSupabase || req.mode === 'navigate') {
+    event.respondWith(fetch(new Request(req, { cache: 'no-store' })));
+    return;
+  }
+
+  event.respondWith(fetch(new Request(req, { cache: 'reload' })));
 });
 
 // Handle skip waiting message
