@@ -1271,15 +1271,9 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
       <div className="chat-container-mobile h-[100dvh] flex flex-col bg-background">
 
-        {isPartnerConnected && verificationState.verified && (
-          <div className="fixed top-0 left-0 right-0 z-[60] secure-line-banner md:hidden pt-[env(safe-area-inset-top,0px)]">
-            SECURE LINE ACTIVE
-          </div>
-        )}
-
         <header className={cn(
           "mobile-header fixed left-0 right-0 z-50 glass border-b border-border/30 h-14 md:h-16",
-          isPartnerConnected && verificationState.verified ? "top-[calc(28px+env(safe-area-inset-top,0px))] md:top-9" : "top-[env(safe-area-inset-top,0px)] md:top-9"
+          "top-[env(safe-area-inset-top,0px)] md:top-9"
         )}>
           <div className="container mx-auto px-2 md:px-4 h-full flex items-center">
             <div className="flex items-center justify-between w-full gap-2">
