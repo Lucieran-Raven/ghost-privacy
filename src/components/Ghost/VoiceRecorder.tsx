@@ -90,8 +90,6 @@ const VoiceRecorder = ({
         setRecordingTime(prev => prev + 1);
       }, 1000);
     } catch (error) {
-      console.error('Microphone access error:', error);
-      
       // Show permission modal for denied access
       if (error instanceof DOMException) {
         if (error.name === 'NotAllowedError' || error.name === 'NotFoundError' || error.name === 'NotReadableError') {

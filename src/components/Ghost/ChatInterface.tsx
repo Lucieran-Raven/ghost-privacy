@@ -79,6 +79,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionExtendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const partnerDisconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoTerminateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const focusScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const partnerCountRef = useRef<number>(0);
   const fileTransfersRef = useRef<Map<string, { chunks: string[]; received: number; total: number; iv: string; fileName: string; fileType: string; timestamp: number; cleanupTimer: ReturnType<typeof setTimeout> | null }>>(new Map());
   const localFingerprintRef = useRef<string>('');
@@ -356,7 +358,6 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           return;
         }
       } catch (error) {
-        console.error('File transfer error:', error);
         // Show user-friendly error for file transfer failures
         toast.error('File transfer failed - please try again');
       }
@@ -373,6 +374,11 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           clearTimeout(partnerDisconnectTimeoutRef.current);
           partnerDisconnectTimeoutRef.current = null;
         }
+
+        if (autoTerminateTimeoutRef.current) {
+          clearTimeout(autoTerminateTimeoutRef.current);
+          autoTerminateTimeoutRef.current = null;
+        }
       } else if (partnerWasPresentRef.current && !isTerminatingRef.current) {
         if (!partnerDisconnectTimeoutRef.current) {
           addSystemMessage('⚠️ Partner connection unstable - waiting...');
@@ -385,7 +391,10 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
               addSystemMessage('⚠️ Partner disconnected - waiting for reconnection...');
               
               // Auto-terminate session after 2 minutes of no partner
-              setTimeout(async () => {
+              if (autoTerminateTimeoutRef.current) {
+                clearTimeout(autoTerminateTimeoutRef.current);
+              }
+              autoTerminateTimeoutRef.current = setTimeout(async () => {
                 if (partnerCountRef.current === 0 && !isTerminatingRef.current) {
                   addSystemMessage('🔴 Session ending - partner did not return');
                   await triggerSessionTermination('partner_left');
@@ -924,6 +933,16 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       partnerDisconnectTimeoutRef.current = null;
     }
 
+    if (autoTerminateTimeoutRef.current) {
+      clearTimeout(autoTerminateTimeoutRef.current);
+      autoTerminateTimeoutRef.current = null;
+    }
+
+    if (focusScrollTimeoutRef.current) {
+      clearTimeout(focusScrollTimeoutRef.current);
+      focusScrollTimeoutRef.current = null;
+    }
+
     fileTransfersRef.current.forEach((t) => {
       if (t.cleanupTimer) {
         clearTimeout(t.cleanupTimer);
@@ -986,6 +1005,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   const cleanup = async () => {
     if (heartbeatIntervalRef.current) {
       clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
     }
 
     if (sessionExtendIntervalRef.current) {
@@ -996,6 +1016,16 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     if (partnerDisconnectTimeoutRef.current) {
       clearTimeout(partnerDisconnectTimeoutRef.current);
       partnerDisconnectTimeoutRef.current = null;
+    }
+
+    if (autoTerminateTimeoutRef.current) {
+      clearTimeout(autoTerminateTimeoutRef.current);
+      autoTerminateTimeoutRef.current = null;
+    }
+
+    if (focusScrollTimeoutRef.current) {
+      clearTimeout(focusScrollTimeoutRef.current);
+      focusScrollTimeoutRef.current = null;
     }
 
     await realtimeManagerRef.current?.disconnect();
@@ -1310,7 +1340,10 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                   }}
                   onKeyDown={handleKeyDown}
                   onFocus={() => {
-                    setTimeout(() => {
+                    if (focusScrollTimeoutRef.current) {
+                      clearTimeout(focusScrollTimeoutRef.current);
+                    }
+                    focusScrollTimeoutRef.current = setTimeout(() => {
                       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
                     }, 300);
                   }}

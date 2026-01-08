@@ -40,7 +40,7 @@ function EscalationHandler() {
   // Or cleanup individually:
   const handlePartialCleanup = async () => {
     const metrics = await cleanupKeys();
-    console.log('Keys zeroized:', metrics.keysZeroed);
+    return metrics.keysZeroed;
   };
 
   return (
@@ -113,7 +113,7 @@ async function handleDeepTrapDetection() {
 /**
  * All fake components now include transparency labels:
  * - FakeAdminPanel.tsx
- * - FakeDebugConsole.tsx
+ * - FakeDebugConsole
  * - FakeTwoFactorModal.tsx
  * - FakeFileUpload.tsx
  * - FakeApiDocs.tsx

@@ -30,12 +30,6 @@ self.addEventListener('activate', (event) => {
     }
 
     try {
-      await self.registration.unregister();
-    } catch {
-      
-    }
-
-    try {
       await self.clients.claim();
     } catch {
       
@@ -45,7 +39,9 @@ self.addEventListener('activate', (event) => {
 
 // Fetch strategy: Network-first for API/realtime, Cache-first for assets
 self.addEventListener('fetch', (event) => {
-  return;
+  if (!event.request) return;
+
+  event.respondWith(fetch(event.request));
 });
 
 // Handle skip waiting message

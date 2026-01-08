@@ -328,7 +328,6 @@ export class RealtimeManager {
       
       // Only reconnect if no heartbeat for 60 seconds (reduced from 2 minutes for faster recovery)
       if (timeSinceHeartbeat > 60000) {
-        console.warn('Heartbeat timeout detected, attempting reconnection');
         this.attemptReconnect();
       }
     }, 10000);
