@@ -1,22 +1,17 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
+use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use hmac::{Hmac, Mac};
-use rand::RngCore;
 use sha2::Sha256;
-use tauri::{Manager, Runtime, RunEvent};
+use tauri::RunEvent;
+use tauri_plugin_log::{Target, TargetKind};
 
-static CLEANUP_PLAN: OnceLock<CleanupPlan> = OnceLock::new();
 static KEY_VAULT: OnceLock<KeyVault> = OnceLock::new();
-
-struct CleanupPlan {
-  paths: Mutex<Vec<PathBuf>>,
-}
 
 struct KeyVault {
   keys: Mutex<HashMap<String, [u8; 32]>>,
@@ -46,82 +41,7 @@ impl KeyVault {
     }
   }
 }
-
-impl CleanupPlan {
-  fn new() -> Self {
-    Self {
-      paths: Mutex::new(Vec::new()),
-    }
-  }
-
-  fn add_path(&self, path: PathBuf) {
-    if path.as_os_str().is_empty() {
-      return;
-    }
-
-    let mut paths = self.paths.lock().unwrap_or_else(|e| e.into_inner());
-    if !paths.contains(&path) {
-      paths.push(path);
-    }
-  }
-
-  fn purge_best_effort(&self) {
-    let paths = {
-      let paths = self.paths.lock().unwrap_or_else(|e| e.into_inner());
-      paths.clone()
-    };
-
-    for p in paths {
-      purge_path_best_effort(&p);
-    }
-  }
-}
-
-fn purge_path_best_effort(path: &Path) {
-  let md = std::fs::metadata(path);
-  if md.is_err() {
-    return;
-  }
-
-  let md = md.unwrap();
-  if md.is_file() {
-    let _ = std::fs::remove_file(path);
-    return;
-  }
-
-  if md.is_dir() {
-    let _ = std::fs::remove_dir_all(path);
-  }
-}
-
-fn build_cleanup_plan<R: Runtime>(app: &tauri::AppHandle<R>) {
-  let plan = CLEANUP_PLAN.get_or_init(CleanupPlan::new);
-
-  if let Ok(p) = app.path().app_cache_dir() {
-    plan.add_path(p);
-  }
-  if let Ok(p) = app.path().app_data_dir() {
-    plan.add_path(p);
-  }
-  if let Ok(p) = app.path().app_config_dir() {
-    plan.add_path(p);
-  }
-  if let Ok(p) = app.path().app_log_dir() {
-    plan.add_path(p);
-  }
-
-  let mut runtime_dir = std::env::temp_dir();
-  runtime_dir.push("ghost-privacy-runtime");
-  runtime_dir.push(uuid::Uuid::new_v4().to_string());
-  let _ = std::fs::create_dir_all(&runtime_dir);
-  plan.add_path(runtime_dir);
-}
-
 fn purge_cleanup_plan() {
-  if let Some(plan) = CLEANUP_PLAN.get() {
-    plan.purge_best_effort();
-  }
-
   if let Some(vault) = KEY_VAULT.get() {
     vault.purge();
   }
@@ -159,8 +79,12 @@ fn hmac_sha256_hex(key: &[u8], message: &str) -> Result<String, String> {
   type HmacSha256 = Hmac<Sha256>;
   let mut mac = <HmacSha256 as Mac>::new_from_slice(key).map_err(|_| "invalid hmac key".to_string())?;
   mac.update(message.as_bytes());
-  let digest = mac.finalize().into_bytes();
-  Ok(bytes_to_hex(&digest))
+  let mut digest = mac.finalize().into_bytes();
+  let out = bytes_to_hex(&digest);
+  for b in digest.iter_mut() {
+    *b = 0;
+  }
+  Ok(out)
 }
 
 #[tauri::command]
@@ -170,13 +94,14 @@ fn secure_panic_wipe() {
 
 #[tauri::command]
 fn vault_set_key(session_id: String, key_base64: String) -> Result<(), String> {
-  let raw = decode_b64(&key_base64)?;
+  let mut raw = decode_b64(&key_base64)?;
   if raw.len() != 32 {
     return Err("key must be 32 bytes".to_string());
   }
 
   let mut key = [0u8; 32];
   key.copy_from_slice(&raw);
+  raw.fill(0);
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
   vault.set_key(session_id, key);
@@ -186,9 +111,9 @@ fn vault_set_key(session_id: String, key_base64: String) -> Result<(), String> {
 #[tauri::command]
 fn vault_encrypt(session_id: String, plaintext_base64: String) -> Result<serde_json::Value, String> {
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
-  let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
+  let mut key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
 
-  let plaintext = decode_b64(&plaintext_base64)?;
+  let mut plaintext = decode_b64(&plaintext_base64)?;
   let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
 
   let mut nonce_bytes = [0u8; 12];
@@ -199,6 +124,9 @@ fn vault_encrypt(session_id: String, plaintext_base64: String) -> Result<serde_j
     .encrypt(nonce, plaintext.as_ref())
     .map_err(|_| "encrypt failed".to_string())?;
 
+  plaintext.fill(0);
+  key_bytes.fill(0);
+
   Ok(serde_json::json!({
     "ciphertext": encode_b64(&ciphertext),
     "iv": encode_b64(&nonce_bytes)
@@ -208,7 +136,7 @@ fn vault_encrypt(session_id: String, plaintext_base64: String) -> Result<serde_j
 #[tauri::command]
 fn vault_encrypt_utf8(session_id: String, plaintext: String) -> Result<serde_json::Value, String> {
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
-  let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
+  let mut key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
 
   let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
 
@@ -220,6 +148,8 @@ fn vault_encrypt_utf8(session_id: String, plaintext: String) -> Result<serde_jso
     .encrypt(nonce, plaintext.as_bytes())
     .map_err(|_| "encrypt failed".to_string())?;
 
+  key_bytes.fill(0);
+
   Ok(serde_json::json!({
     "ciphertext": encode_b64(&ciphertext),
     "iv": encode_b64(&nonce_bytes)
@@ -229,7 +159,7 @@ fn vault_encrypt_utf8(session_id: String, plaintext: String) -> Result<serde_jso
 #[tauri::command]
 fn vault_decrypt(session_id: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
-  let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
+  let mut key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
 
   let ciphertext = decode_b64(&ciphertext_base64)?;
   let iv = decode_b64(&iv_base64)?;
@@ -244,13 +174,17 @@ fn vault_decrypt(session_id: String, ciphertext_base64: String, iv_base64: Strin
     .decrypt(nonce, ciphertext.as_ref())
     .map_err(|_| "decrypt failed".to_string())?;
 
-  Ok(encode_b64(&plaintext))
+  let out = encode_b64(&plaintext);
+  let mut plaintext = plaintext;
+  plaintext.fill(0);
+  key_bytes.fill(0);
+  Ok(out)
 }
 
 #[tauri::command]
 fn vault_decrypt_utf8(session_id: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
-  let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
+  let mut key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
 
   let ciphertext = decode_b64(&ciphertext_base64)?;
   let iv = decode_b64(&iv_base64)?;
@@ -265,7 +199,13 @@ fn vault_decrypt_utf8(session_id: String, ciphertext_base64: String, iv_base64: 
     .decrypt(nonce, ciphertext.as_ref())
     .map_err(|_| "decrypt failed".to_string())?;
 
-  String::from_utf8(plaintext).map_err(|_| "invalid utf-8".to_string())
+  let mut plaintext = plaintext;
+  let out = std::str::from_utf8(&plaintext)
+    .map_err(|_| "invalid utf-8".to_string())?
+    .to_string();
+  plaintext.fill(0);
+  key_bytes.fill(0);
+  Ok(out)
 }
 
 #[tauri::command]
@@ -296,11 +236,10 @@ pub fn run() {
 
   let app = tauri::Builder::default()
     .setup(|app| {
-      build_cleanup_plan(&app.handle());
-
       if cfg!(debug_assertions) {
         app.handle().plugin(
-          tauri_plugin_log::Builder::default()
+          tauri_plugin_log::Builder::new()
+            .targets([Target::new(TargetKind::Stdout)])
             .level(log::LevelFilter::Info)
             .build(),
         )?;

@@ -26,6 +26,17 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.77.2
+          components: clippy
+
+      - name: Cargo fetch (locked)
+        run: cargo fetch --locked
+        working-directory: src-tauri
+
+      - name: Cargo clippy (locked)
+        run: cargo clippy --locked -- -D warnings
+        working-directory: src-tauri
 
       - name: Build Tauri bundle
         run: npm run tauri:build

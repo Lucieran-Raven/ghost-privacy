@@ -45,3 +45,4 @@ This is a code-level map of core security controls.
   - `src/utils/sessionKeyManager.ts`
 
 Core algorithms verified
+Tauri desktop: RAM-only, no disk writes
