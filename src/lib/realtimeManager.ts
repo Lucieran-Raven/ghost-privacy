@@ -39,6 +39,7 @@ export class RealtimeManager {
   private presenceGracePeriod: ReturnType<typeof setTimeout> | null = null;
   private lastPresenceState: string[] = [];
   private connectionCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private consecutiveHealthCheckFailures = 0;
 
   constructor(sessionId: string, capabilityToken: string, participantId: string) {
     this.sessionId = sessionId;
@@ -208,7 +209,7 @@ export class RealtimeManager {
             this.presenceHandlers.forEach(handler => handler([]));
           }
           this.presenceGracePeriod = null;
-        }, 3000); // Reduced grace period from 5s to 3s for faster response
+        }, 8000);
       } else {
         this.presenceHandlers.forEach(handler => handler(participants));
       }
@@ -280,6 +281,7 @@ export class RealtimeManager {
           
           this.updateState('connected', 100);
           this.reconnectAttempts = 0;
+          this.consecutiveHealthCheckFailures = 0;
           this.startHeartbeatMonitor();
           await this.flushOutbox();
           
@@ -288,7 +290,7 @@ export class RealtimeManager {
           clearTimeout(timeout);
           
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
-            const delay = getBackoffDelay(this.reconnectAttempts);
+            const delay = Math.max(2000, getBackoffDelay(this.reconnectAttempts));
             this.reconnectAttempts++;
             this.updateState('connecting', 25, 'Secure channel establishing…');
             
@@ -318,6 +320,7 @@ export class RealtimeManager {
 
   private startHeartbeatMonitor(): void {
     this.lastHeartbeat = Date.now();
+    this.consecutiveHealthCheckFailures = 0;
     
     // Clear any existing intervals
     this.stopHeartbeatMonitor();
@@ -339,10 +342,15 @@ export class RealtimeManager {
         this.channel.track({
           participantId: this.participantId,
           lastActive: Date.now()
+        }).then(() => {
+          this.lastHeartbeat = Date.now();
+          this.consecutiveHealthCheckFailures = 0;
         }).catch(() => {
-          // Silent - presence tracking can fail temporarily
+          this.consecutiveHealthCheckFailures += 1;
+          if (this.consecutiveHealthCheckFailures >= 3) {
+            void this.attemptReconnect();
+          }
         });
-        this.lastHeartbeat = Date.now();
       }
     }, 20000);
   }

@@ -82,6 +82,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   const autoTerminateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const partnerCountRef = useRef<number>(0);
+  const partnerUnstableShownRef = useRef(false);
   const fileTransfersRef = useRef<Map<string, { chunks: string[]; received: number; total: number; iv: string; fileName: string; fileType: string; timestamp: number; cleanupTimer: ReturnType<typeof setTimeout> | null }>>(new Map());
   const localFingerprintRef = useRef<string>('');
   const isTerminatingRef = useRef(false);
@@ -379,9 +380,14 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           clearTimeout(autoTerminateTimeoutRef.current);
           autoTerminateTimeoutRef.current = null;
         }
+
+        partnerUnstableShownRef.current = false;
       } else if (partnerWasPresentRef.current && !isTerminatingRef.current) {
         if (!partnerDisconnectTimeoutRef.current) {
-          addSystemMessage('⚠️ Partner connection unstable - waiting...');
+          if (!partnerUnstableShownRef.current) {
+            partnerUnstableShownRef.current = true;
+            addSystemMessage('⚠️ Partner connection unstable - waiting...');
+          }
           partnerDisconnectTimeoutRef.current = setTimeout(async () => {
             partnerDisconnectTimeoutRef.current = null;
             if (isTerminatingRef.current) return;
@@ -390,7 +396,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
               partnerWasPresentRef.current = false;
               addSystemMessage('⚠️ Partner disconnected - waiting for reconnection...');
               
-              // Auto-terminate session after 2 minutes of no partner
+              // Auto-terminate session after a longer grace period (avoid false exits)
               if (autoTerminateTimeoutRef.current) {
                 clearTimeout(autoTerminateTimeoutRef.current);
               }
@@ -399,9 +405,9 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                   addSystemMessage('🔴 Session ending - partner did not return');
                   await triggerSessionTermination('partner_left');
                 }
-              }, 120000); // 2 minutes
+              }, 5 * 60 * 1000);
             }
-          }, 15000); // Reduced from 30s to 15s for faster detection
+          }, 45000);
         }
       }
 
@@ -618,8 +624,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   const handleVerificationCancelled = () => {
     setVerificationState(prev => ({ ...prev, show: false, verified: false }));
     setVoiceVerified(false);
-    addSystemMessage('⚠️ Security verification failed - voice disabled');
-    toast.error('Security codes did not match');
+    addSystemMessage('🚨 MITM suspected - verification failed (do not trust this session)');
+    toast.error('MITM suspected: security codes did not match');
   };
 
   const handleRequestVoiceVerification = () => {
@@ -1069,6 +1075,16 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       return;
     }
     isTerminatingRef.current = true;
+
+    try {
+      await realtimeManagerRef.current?.send('session-terminated', {
+        reason: 'manual',
+        timestamp: Date.now(),
+        terminatedBy: participantIdRef.current
+      });
+    } catch {
+      // Ignore
+    }
 
     // 1. Server-side nuclear wipe (atomic)
     const deleted = await SessionService.deleteSession(sessionId);
