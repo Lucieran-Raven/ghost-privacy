@@ -61,6 +61,16 @@ export class ClientMessageQueue {
       return;
     }
 
+    const existingMessages = getMessagesAlgorithm(this.state, sessionId);
+    if (existingMessages.length >= this.maxMessagesPerSession) {
+      const evicted = existingMessages[0];
+      if (evicted) {
+        this.revokeObjectUrlIfNeeded(evicted);
+        evicted.content = '';
+        evicted.fileName = undefined;
+      }
+    }
+
     this.state = addMessageAlgorithm(this.state, {
       sessionId,
       message,

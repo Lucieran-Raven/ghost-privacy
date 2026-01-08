@@ -115,6 +115,42 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     fileTransfersRef.current.delete(fileId);
   };
 
+  const sniffMimeFromBytes = (bytes: Uint8Array): string | null => {
+    try {
+      const header = Array.from(bytes.slice(0, 16))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      if (header.startsWith('25504446')) return 'application/pdf';
+      if (header.startsWith('89504e47')) return 'image/png';
+      if (header.startsWith('ffd8ff')) return 'image/jpeg';
+      if (header.startsWith('47494638')) return 'image/gif';
+      if (header.startsWith('52494646')) return 'image/webp';
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const normalizeFileNameForMime = (safeFileName: string, mime: string | null): string => {
+    if (!mime) return safeFileName;
+    const extByMime: Record<string, string> = {
+      'application/pdf': 'pdf',
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/gif': 'gif',
+      'image/webp': 'webp'
+    };
+    const desiredExt = extByMime[mime];
+    if (!desiredExt) return safeFileName;
+
+    const idx = safeFileName.lastIndexOf('.');
+    const currentExt = idx >= 0 ? safeFileName.slice(idx + 1).toLowerCase() : '';
+    if (currentExt === desiredExt) return safeFileName;
+
+    const base = idx >= 0 ? safeFileName.slice(0, idx) : safeFileName;
+    return `${base}.${desiredExt}`.slice(0, 256);
+  };
+
   const syncMessagesFromQueue = useCallback(() => {
     const queuedMessages = messageQueueRef.current.getMessages(sessionId);
     setMessages([...queuedMessages]);
@@ -285,24 +321,32 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
         if (data.kind === 'init') {
           const MAX_FILE_CHUNKS = 512;
+          const MAX_FILE_ID_CHARS = 128;
+          const MAX_IV_CHARS = 256;
           const total = Math.max(0, Number(data.totalChunks) || 0);
           if (!Number.isFinite(total) || total <= 0 || total > MAX_FILE_CHUNKS) return;
 
-          const existing = fileTransfersRef.current.get(data.fileId);
+          const fileId = String(data.fileId || '');
+          if (fileId.length === 0 || fileId.length > MAX_FILE_ID_CHARS) return;
+
+          const iv = String(data.iv || '');
+          if (iv.length === 0 || iv.length > MAX_IV_CHARS) return;
+
+          const existing = fileTransfersRef.current.get(fileId);
           if (existing?.cleanupTimer) {
             clearTimeout(existing.cleanupTimer);
           }
 
           const cleanupTimer = setTimeout(() => {
-            purgeFileTransfer(data.fileId);
+            purgeFileTransfer(fileId);
           }, 5 * 60 * 1000);
 
-          fileTransfersRef.current.set(data.fileId, {
+          fileTransfersRef.current.set(fileId, {
             chunks: new Array(total).fill(''),
             received: 0,
             total,
-            iv: String(data.iv || ''),
-            fileName: String(data.fileName || 'unknown_file').slice(0, 256),
+            iv,
+            fileName: sanitizeFileName(String(data.fileName || 'unknown_file')).slice(0, 256),
             fileType: String(data.fileType || 'application/octet-stream').slice(0, 128),
             timestamp: Number(data.timestamp) || payload.timestamp,
             cleanupTimer
@@ -313,27 +357,35 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         if (data.kind === 'chunk') {
           const MAX_FILE_CHUNKS = 512;
           const MAX_CHUNK_CHARS = 60000;
+          const MAX_FILE_ID_CHARS = 128;
+          const MAX_IV_CHARS = 256;
 
-          let t = fileTransfersRef.current.get(data.fileId);
+          const fileId = String(data.fileId || '');
+          if (fileId.length === 0 || fileId.length > MAX_FILE_ID_CHARS) return;
+
+          let t = fileTransfersRef.current.get(fileId);
           if (!t) {
             const total = Math.max(0, Number(data.totalChunks) || 0);
             if (!Number.isFinite(total) || total <= 0 || total > MAX_FILE_CHUNKS) return;
 
+            const iv = String(data.iv || '');
+            if (iv.length === 0 || iv.length > MAX_IV_CHARS) return;
+
             const cleanupTimer = setTimeout(() => {
-              purgeFileTransfer(data.fileId);
+              purgeFileTransfer(fileId);
             }, 5 * 60 * 1000);
 
             t = {
               chunks: new Array(total).fill(''),
               received: 0,
               total,
-              iv: String(data.iv || ''),
-              fileName: String(data.fileName || 'unknown_file').slice(0, 256),
+              iv,
+              fileName: sanitizeFileName(String(data.fileName || 'unknown_file')).slice(0, 256),
               fileType: String(data.fileType || 'application/octet-stream').slice(0, 128),
               timestamp: Number(data.timestamp) || payload.timestamp,
               cleanupTimer
             };
-            fileTransfersRef.current.set(data.fileId, t);
+            fileTransfersRef.current.set(fileId, t);
           }
           const idx = Number(data.index);
           if (!Number.isFinite(idx) || idx < 0 || idx >= t.total) return;
@@ -341,7 +393,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
           const chunk = String(data.chunk || '');
           if (chunk.length === 0 || chunk.length > MAX_CHUNK_CHARS) {
-            purgeFileTransfer(data.fileId);
+            purgeFileTransfer(fileId);
             return;
           }
 
@@ -352,33 +404,24 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             const encrypted = t.chunks.join('');
             const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, t.iv);
             const decryptedBytes = new Uint8Array(decrypted);
-            
-            // Enhanced file type detection for images
-            let fileType = t.fileType;
-            if (fileType === 'application/octet-stream' || !fileType) {
-              // Try to detect image type from magic bytes
-              if (decryptedBytes.length > 4) {
-                const header = Array.from(decryptedBytes.slice(0, 4)).map(b => b.toString(16).padStart(2, '0')).join('');
-                if (header.startsWith('89504e47')) fileType = 'image/png';
-                else if (header.startsWith('ffd8ff')) fileType = 'image/jpeg';
-                else if (header.startsWith('47494638')) fileType = 'image/gif';
-                else if (header.startsWith('52494646')) fileType = 'image/webp';
-              }
-            }
+
+            const fileType = sniffMimeFromBytes(decryptedBytes) || 'application/octet-stream';
+            const displayFileName = normalizeFileNameForMime(t.fileName, fileType);
+            const displayTimestamp = t.timestamp;
             
             const blob = new Blob([decryptedBytes], { type: fileType || 'application/octet-stream' });
             const objectUrl = URL.createObjectURL(blob);
             decryptedBytes.fill(0);
 
-            purgeFileTransfer(data.fileId);
+            purgeFileTransfer(fileId);
 
             messageQueueRef.current.addMessage(sessionId, {
-              id: data.fileId,
+              id: fileId,
               content: objectUrl,
               sender: 'partner',
-              timestamp: t.timestamp,
+              timestamp: displayTimestamp,
               type: 'file',
-              fileName: t.fileName
+              fileName: displayFileName
             });
             syncMessagesFromQueue();
           }
@@ -540,12 +583,27 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         if (!encryptionEngineRef.current) return;
 
         if (payload.data.type === 'file') {
+          const MAX_SINGLE_FILE_ENCRYPTED_CHARS = 60000;
+          const encrypted = String(payload.data.encrypted || '');
+          const iv = String(payload.data.iv || '');
+          const rawFileName = String(payload.data.fileName || 'unknown_file');
+          const safeFileName = sanitizeFileName(rawFileName).slice(0, 256);
+
+          if (encrypted.length === 0 || encrypted.length > MAX_SINGLE_FILE_ENCRYPTED_CHARS) {
+            return;
+          }
+          if (iv.length === 0 || iv.length > 256) {
+            return;
+          }
+
           const decrypted = await encryptionEngineRef.current.decryptBytes(
-            payload.data.encrypted,
-            payload.data.iv
+            encrypted,
+            iv
           );
           const decryptedBytes = new Uint8Array(decrypted);
-          const blob = new Blob([decryptedBytes], { type: payload.data.fileType || 'application/octet-stream' });
+          const sniffedMime = sniffMimeFromBytes(decryptedBytes);
+          const displayFileName = normalizeFileNameForMime(safeFileName, sniffedMime);
+          const blob = new Blob([decryptedBytes], { type: sniffedMime || 'application/octet-stream' });
           const objectUrl = URL.createObjectURL(blob);
 
           decryptedBytes.fill(0);
@@ -556,7 +614,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             sender: 'partner',
             timestamp: payload.timestamp,
             type: 'file',
-            fileName: payload.data.fileName
+            fileName: displayFileName
           });
         } else {
           const decrypted = await encryptionEngineRef.current.decryptMessage(
