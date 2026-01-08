@@ -1,5 +1,6 @@
 package app.ghostprivacy.mobile;
 
+import android.content.pm.ApplicationInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.webkit.CookieManager;
@@ -31,6 +32,23 @@ public class MainActivity extends BridgeActivity {
 
   private void hardenWebView() {
     try {
+      try {
+        boolean isDebuggable = false;
+        try {
+          ApplicationInfo ai = getApplicationInfo();
+          isDebuggable = (ai != null) && ((ai.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0);
+        } catch (Exception e) {
+        }
+
+        if (!isDebuggable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+          try {
+            WebView.setWebContentsDebuggingEnabled(false);
+          } catch (Exception e) {
+          }
+        }
+      } catch (Exception e) {
+      }
+
       if (getBridge() == null) {
         return;
       }
@@ -44,6 +62,19 @@ public class MainActivity extends BridgeActivity {
       settings.setAllowFileAccess(false);
       settings.setAllowContentAccess(false);
       settings.setSaveFormData(false);
+      settings.setJavaScriptCanOpenWindowsAutomatically(false);
+      settings.setSupportMultipleWindows(false);
+
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+      }
+
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        try {
+          settings.setSafeBrowsingEnabled(true);
+        } catch (Exception e) {
+        }
+      }
 
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
         settings.setAllowFileAccessFromFileURLs(false);
@@ -51,7 +82,7 @@ public class MainActivity extends BridgeActivity {
       }
 
       CookieManager cookies = CookieManager.getInstance();
-      cookies.setAcceptCookie(true);
+      cookies.setAcceptCookie(false);
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
         cookies.setAcceptThirdPartyCookies(webView, false);
       }
