@@ -27,3 +27,5 @@ aes-gcm = "0.10"
 base64 = "0.22"
 hmac = "0.12"
 sha2 = "0.10"
+
+zeroize = "1.8"

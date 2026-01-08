@@ -10,11 +10,12 @@ use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use tauri::RunEvent;
 use tauri_plugin_log::{Target, TargetKind};
+use zeroize::{Zeroize, Zeroizing};
 
 static KEY_VAULT: OnceLock<KeyVault> = OnceLock::new();
 
 struct KeyVault {
-  keys: Mutex<HashMap<String, [u8; 32]>>,
+  keys: Mutex<HashMap<String, Zeroizing<[u8; 32]>>>,
 }
 
 impl KeyVault {
@@ -26,19 +27,17 @@ impl KeyVault {
 
   fn set_key(&self, session_id: String, key: [u8; 32]) {
     let mut keys = self.keys.lock().unwrap_or_else(|e| e.into_inner());
-    keys.insert(session_id, key);
+    keys.insert(session_id, Zeroizing::new(key));
   }
 
-  fn get_key(&self, session_id: &str) -> Option<[u8; 32]> {
+  fn get_key(&self, session_id: &str) -> Option<Zeroizing<[u8; 32]>> {
     let keys = self.keys.lock().unwrap_or_else(|e| e.into_inner());
-    keys.get(session_id).copied()
+    keys.get(session_id).cloned()
   }
 
   fn purge(&self) {
     let mut keys = self.keys.lock().unwrap_or_else(|e| e.into_inner());
-    for (_, mut k) in keys.drain() {
-      k.fill(0);
-    }
+    keys.clear();
   }
 }
 fn purge_cleanup_plan() {
@@ -81,9 +80,7 @@ fn hmac_sha256_hex(key: &[u8], message: &str) -> Result<String, String> {
   mac.update(message.as_bytes());
   let mut digest = mac.finalize().into_bytes();
   let out = bytes_to_hex(&digest);
-  for b in digest.iter_mut() {
-    *b = 0;
-  }
+  digest.zeroize();
   Ok(out)
 }
 
@@ -94,14 +91,13 @@ fn secure_panic_wipe() {
 
 #[tauri::command]
 fn vault_set_key(session_id: String, key_base64: String) -> Result<(), String> {
-  let mut raw = decode_b64(&key_base64)?;
+  let raw = Zeroizing::new(decode_b64(&key_base64)?);
   if raw.len() != 32 {
     return Err("key must be 32 bytes".to_string());
   }
 
   let mut key = [0u8; 32];
-  key.copy_from_slice(&raw);
-  raw.fill(0);
+  key.copy_from_slice(raw.as_slice());
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
   vault.set_key(session_id, key);
@@ -111,10 +107,10 @@ fn vault_set_key(session_id: String, key_base64: String) -> Result<(), String> {
 #[tauri::command]
 fn vault_encrypt(session_id: String, plaintext_base64: String) -> Result<serde_json::Value, String> {
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
-  let mut key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
+  let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
 
-  let mut plaintext = decode_b64(&plaintext_base64)?;
-  let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+  let plaintext = Zeroizing::new(decode_b64(&plaintext_base64)?);
+  let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes.as_ref()));
 
   let mut nonce_bytes = [0u8; 12];
   OsRng.fill_bytes(&mut nonce_bytes);
@@ -123,9 +119,6 @@ fn vault_encrypt(session_id: String, plaintext_base64: String) -> Result<serde_j
   let ciphertext = cipher
     .encrypt(nonce, plaintext.as_ref())
     .map_err(|_| "encrypt failed".to_string())?;
-
-  plaintext.fill(0);
-  key_bytes.fill(0);
 
   Ok(serde_json::json!({
     "ciphertext": encode_b64(&ciphertext),
@@ -136,9 +129,11 @@ fn vault_encrypt(session_id: String, plaintext_base64: String) -> Result<serde_j
 #[tauri::command]
 fn vault_encrypt_utf8(session_id: String, plaintext: String) -> Result<serde_json::Value, String> {
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
-  let mut key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
+  let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
 
-  let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+  let plaintext = Zeroizing::new(plaintext);
+
+  let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes.as_ref()));
 
   let mut nonce_bytes = [0u8; 12];
   OsRng.fill_bytes(&mut nonce_bytes);
@@ -147,8 +142,6 @@ fn vault_encrypt_utf8(session_id: String, plaintext: String) -> Result<serde_jso
   let ciphertext = cipher
     .encrypt(nonce, plaintext.as_bytes())
     .map_err(|_| "encrypt failed".to_string())?;
-
-  key_bytes.fill(0);
 
   Ok(serde_json::json!({
     "ciphertext": encode_b64(&ciphertext),
@@ -159,7 +152,7 @@ fn vault_encrypt_utf8(session_id: String, plaintext: String) -> Result<serde_jso
 #[tauri::command]
 fn vault_decrypt(session_id: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
-  let mut key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
+  let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
 
   let ciphertext = decode_b64(&ciphertext_base64)?;
   let iv = decode_b64(&iv_base64)?;
@@ -167,24 +160,23 @@ fn vault_decrypt(session_id: String, ciphertext_base64: String, iv_base64: Strin
     return Err("iv must be 12 bytes".to_string());
   }
 
-  let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+  let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes.as_ref()));
   let nonce = Nonce::from_slice(&iv);
 
-  let plaintext = cipher
+  let plaintext = Zeroizing::new(
+    cipher
     .decrypt(nonce, ciphertext.as_ref())
-    .map_err(|_| "decrypt failed".to_string())?;
+    .map_err(|_| "decrypt failed".to_string())?
+  );
 
-  let out = encode_b64(&plaintext);
-  let mut plaintext = plaintext;
-  plaintext.fill(0);
-  key_bytes.fill(0);
+  let out = encode_b64(plaintext.as_ref());
   Ok(out)
 }
 
 #[tauri::command]
 fn vault_decrypt_utf8(session_id: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
-  let mut key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
+  let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
 
   let ciphertext = decode_b64(&ciphertext_base64)?;
   let iv = decode_b64(&iv_base64)?;
@@ -192,38 +184,32 @@ fn vault_decrypt_utf8(session_id: String, ciphertext_base64: String, iv_base64: 
     return Err("iv must be 12 bytes".to_string());
   }
 
-  let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+  let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes.as_ref()));
   let nonce = Nonce::from_slice(&iv);
 
-  let plaintext = cipher
-    .decrypt(nonce, ciphertext.as_ref())
-    .map_err(|_| "decrypt failed".to_string())?;
+  let plaintext = Zeroizing::new(
+    cipher
+      .decrypt(nonce, ciphertext.as_ref())
+      .map_err(|_| "decrypt failed".to_string())?,
+  );
 
-  let mut plaintext = plaintext;
-  let out = std::str::from_utf8(&plaintext)
+  let out = std::str::from_utf8(plaintext.as_ref())
     .map_err(|_| "invalid utf-8".to_string())?
     .to_string();
-  plaintext.fill(0);
-  key_bytes.fill(0);
   Ok(out)
 }
 
 #[tauri::command]
 fn derive_realtime_channel_name(session_id: String, capability_token: String) -> Result<String, String> {
-  let mut key_bytes = match decode_b64url_like_browser(&capability_token) {
+  let key_bytes = Zeroizing::new(match decode_b64url_like_browser(&capability_token) {
     Ok(b) => b,
     Err(_) => capability_token.as_bytes().to_vec(),
-  };
+  });
 
-  let mac_hex = hmac_sha256_hex(&key_bytes, &session_id)?;
+  let mac_hex = hmac_sha256_hex(key_bytes.as_slice(), &session_id)?;
   let tag = mac_hex
     .get(0..32)
     .ok_or_else(|| "invalid hmac output".to_string())?;
-
-  // Best-effort memory cleanup for the key material.
-  for b in key_bytes.iter_mut() {
-    *b = 0;
-  }
 
   Ok(format!("ghost-session-{}-{}", session_id, tag))
 }
