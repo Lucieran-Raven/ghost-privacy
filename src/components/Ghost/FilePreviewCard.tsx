@@ -42,7 +42,7 @@ const FilePreviewCard = ({ fileName, content, sender }: FilePreviewCardProps) =>
   // Check if content is an image or video
   const isImage = iconType === 'image' || safeName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
   const isVideo = safeName.match(/\.(mp4|webm|mov)$/i);
-  const isLink = content.startsWith('http://') || content.startsWith('https://');
+  const isLink = content.startsWith('https://');
 
   
   // Estimate file size from base64 content
