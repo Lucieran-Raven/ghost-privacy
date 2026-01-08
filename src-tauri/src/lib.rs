@@ -14,8 +14,41 @@ use zeroize::{Zeroize, Zeroizing};
 
 static KEY_VAULT: OnceLock<KeyVault> = OnceLock::new();
 
+const MAX_SESSION_ID_LEN: usize = 32;
+const MAX_CAPABILITY_TOKEN_LEN: usize = 256;
+const MAX_B64_INPUT_LEN: usize = 24 * 1024 * 1024;
+const MAX_VAULT_PLAINTEXT_BYTES: usize = 12 * 1024 * 1024;
+const MAX_VAULT_UTF8_BYTES: usize = 256 * 1024;
+
 struct KeyVault {
   keys: Mutex<HashMap<String, Zeroizing<[u8; 32]>>>,
+}
+
+fn validate_session_id(session_id: &str) -> Result<(), String> {
+  if session_id.is_empty() {
+    return Err("empty session id".to_string());
+  }
+  if session_id.len() > MAX_SESSION_ID_LEN {
+    return Err("session id too large".to_string());
+  }
+
+  let bytes = session_id.as_bytes();
+  if bytes.len() != 15 {
+    return Err("invalid session id".to_string());
+  }
+  if &bytes[0..6] != b"GHOST-" {
+    return Err("invalid session id".to_string());
+  }
+  if bytes[10] != b'-' {
+    return Err("invalid session id".to_string());
+  }
+  for &b in bytes[6..10].iter().chain(bytes[11..15].iter()) {
+    let ok = matches!(b, b'A'..=b'Z' | b'0'..=b'9');
+    if !ok {
+      return Err("invalid session id".to_string());
+    }
+  }
+  Ok(())
 }
 
 impl KeyVault {
@@ -50,11 +83,31 @@ fn decode_b64(s: &str) -> Result<Vec<u8>, String> {
   BASE64.decode(s.as_bytes()).map_err(|_| "invalid base64".to_string())
 }
 
+fn decode_b64_limited(s: &str, max_input_len: usize, max_decoded_len: usize) -> Result<Vec<u8>, String> {
+  if s.is_empty() {
+    return Err("empty base64".to_string());
+  }
+  if s.len() > max_input_len {
+    return Err("base64 input too large".to_string());
+  }
+  let decoded = decode_b64(s)?;
+  if decoded.len() > max_decoded_len {
+    return Err("decoded payload too large".to_string());
+  }
+  Ok(decoded)
+}
+
 fn encode_b64(bytes: &[u8]) -> String {
   BASE64.encode(bytes)
 }
 
 fn decode_b64url_like_browser(s: &str) -> Result<Vec<u8>, String> {
+  if s.is_empty() {
+    return Err("empty token".to_string());
+  }
+  if s.len() > MAX_CAPABILITY_TOKEN_LEN {
+    return Err("token too large".to_string());
+  }
   // Mirrors TS behavior:
   // value.replace(/-/g, '+').replace(/_/g, '/').padEnd(..., '='); atob(padded)
   let mut normalized = s.replace('-', "+").replace('_', "/");
@@ -91,7 +144,13 @@ fn secure_panic_wipe() {
 
 #[tauri::command]
 fn vault_set_key(session_id: String, key_base64: String) -> Result<(), String> {
-  let raw = Zeroizing::new(decode_b64(&key_base64)?);
+  validate_session_id(&session_id)?;
+
+  if key_base64.len() > 128 {
+    return Err("key payload too large".to_string());
+  }
+
+  let raw = Zeroizing::new(decode_b64_limited(&key_base64, 128, 64)?);
   if raw.len() != 32 {
     return Err("key must be 32 bytes".to_string());
   }
@@ -106,10 +165,12 @@ fn vault_set_key(session_id: String, key_base64: String) -> Result<(), String> {
 
 #[tauri::command]
 fn vault_encrypt(session_id: String, plaintext_base64: String) -> Result<serde_json::Value, String> {
+  validate_session_id(&session_id)?;
+
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
   let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
 
-  let plaintext = Zeroizing::new(decode_b64(&plaintext_base64)?);
+  let plaintext = Zeroizing::new(decode_b64_limited(&plaintext_base64, MAX_B64_INPUT_LEN, MAX_VAULT_PLAINTEXT_BYTES)?);
   let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes.as_ref()));
 
   let mut nonce_bytes = [0u8; 12];
@@ -128,8 +189,14 @@ fn vault_encrypt(session_id: String, plaintext_base64: String) -> Result<serde_j
 
 #[tauri::command]
 fn vault_encrypt_utf8(session_id: String, plaintext: String) -> Result<serde_json::Value, String> {
+  validate_session_id(&session_id)?;
+
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
   let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
+
+  if plaintext.len() > MAX_VAULT_UTF8_BYTES {
+    return Err("plaintext too large".to_string());
+  }
 
   let plaintext = Zeroizing::new(plaintext);
 
@@ -151,11 +218,16 @@ fn vault_encrypt_utf8(session_id: String, plaintext: String) -> Result<serde_jso
 
 #[tauri::command]
 fn vault_decrypt(session_id: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
+  validate_session_id(&session_id)?;
+
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
   let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
 
-  let ciphertext = decode_b64(&ciphertext_base64)?;
-  let iv = decode_b64(&iv_base64)?;
+  if iv_base64.len() > 64 {
+    return Err("iv payload too large".to_string());
+  }
+  let ciphertext = decode_b64_limited(&ciphertext_base64, MAX_B64_INPUT_LEN, MAX_VAULT_PLAINTEXT_BYTES + 32)?;
+  let iv = decode_b64_limited(&iv_base64, 64, 64)?;
   if iv.len() != 12 {
     return Err("iv must be 12 bytes".to_string());
   }
@@ -175,11 +247,16 @@ fn vault_decrypt(session_id: String, ciphertext_base64: String, iv_base64: Strin
 
 #[tauri::command]
 fn vault_decrypt_utf8(session_id: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
+  validate_session_id(&session_id)?;
+
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
   let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
 
-  let ciphertext = decode_b64(&ciphertext_base64)?;
-  let iv = decode_b64(&iv_base64)?;
+  if iv_base64.len() > 64 {
+    return Err("iv payload too large".to_string());
+  }
+  let ciphertext = decode_b64_limited(&ciphertext_base64, MAX_B64_INPUT_LEN, MAX_VAULT_PLAINTEXT_BYTES + 32)?;
+  let iv = decode_b64_limited(&iv_base64, 64, 64)?;
   if iv.len() != 12 {
     return Err("iv must be 12 bytes".to_string());
   }
@@ -201,6 +278,14 @@ fn vault_decrypt_utf8(session_id: String, ciphertext_base64: String, iv_base64: 
 
 #[tauri::command]
 fn derive_realtime_channel_name(session_id: String, capability_token: String) -> Result<String, String> {
+  validate_session_id(&session_id)?;
+  if capability_token.is_empty() {
+    return Err("empty token".to_string());
+  }
+  if capability_token.len() > MAX_CAPABILITY_TOKEN_LEN {
+    return Err("token too large".to_string());
+  }
+
   let key_bytes = Zeroizing::new(match decode_b64url_like_browser(&capability_token) {
     Ok(b) => b,
     Err(_) => capability_token.as_bytes().to_vec(),
@@ -212,6 +297,24 @@ fn derive_realtime_channel_name(session_id: String, capability_token: String) ->
     .ok_or_else(|| "invalid hmac output".to_string())?;
 
   Ok(format!("ghost-session-{}-{}", session_id, tag))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn session_id_validation_accepts_canonical() {
+    assert!(validate_session_id("GHOST-ABCD-1234").is_ok());
+  }
+
+  #[test]
+  fn session_id_validation_rejects_invalid() {
+    assert!(validate_session_id("ghost-ABCD-1234").is_err());
+    assert!(validate_session_id("GHOST-ABCD-123").is_err());
+    assert!(validate_session_id("GHOST-ABCD-12345").is_err());
+    assert!(validate_session_id("GHOST-ABcD-1234").is_err());
+  }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
