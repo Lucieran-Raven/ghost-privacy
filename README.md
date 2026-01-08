@@ -117,9 +117,9 @@ Ghost stores minimal session metadata in Supabase (zero message content, no encr
 
 - [**SECURITY.md**](SECURITY.md) – **Authoritative security model, threat analysis, and bug bounty program**
 - [**CONTRIBUTING.md**](CONTRIBUTING.md) – Technical and ethical contribution guidelines
-- [**CHANGELOG.md**](CHANGELOG.md) – Version history and AI-driven improvements
-- [**COMMUNITY.md**](COMMUNITY.md) – Alliance of minds community engagement
-- [**COMMERCIAL_USE_POLICY.md**](COMMERCIAL_USE_POLICY.md) – Business model and enterprise usage
+- [**CODE_OF_CONDUCT.md**](CODE_OF_CONDUCT.md) – Community standards
+- [**docs/COMMUNITY.md**](docs/COMMUNITY.md) – Alliance of minds community engagement
+- [**docs/COMMERCIAL_USE_POLICY.md**](docs/COMMERCIAL_USE_POLICY.md) – Business model and enterprise usage
 - [**src/ANTI_FORENSIC_GUIDE_CODE.md**](src/ANTI_FORENSIC_GUIDE_CODE.md) – Technical implementation guide
 - [**audits/**](audits/) – Historical security audit reports and assessments
 
@@ -156,8 +156,8 @@ Ghost Privacy represents a new paradigm: **ephemeral, zero-knowledge communicati
 
 **Status:** Production-ready privacy tool built by elite academic-AI alliance  
 **Security Issues:** See [SECURITY.md](SECURITY.md) for private disclosure instructions  
-**Community:** Join our [Alliance of Minds](COMMUNITY.md)  
+**Community:** Join our [Alliance of Minds](docs/COMMUNITY.md)  
 
 ---
 
-**© 2026 Ghost Privacy Alliance. Built by top university talent and leading AI models for real-world privacy protection.**
+** 2026 Ghost Privacy Alliance. Built by top university talent and leading AI models for real-world privacy protection.**

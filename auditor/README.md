@@ -31,7 +31,7 @@ npm run integrity
 
 ## What to read
 
-- `../THREAT_MODEL_MAPPING.md`
+- `../SECURITY.md`
 - `SECURITY_CONTROLS.md`
 - `REPRODUCIBLE_TESTS.md`
 - `ETHICS_OPTOUT.md`

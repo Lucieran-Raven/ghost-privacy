@@ -1,6 +1,6 @@
-# Contributing to Ghost Privacy
+# 🤝 Contributing to Ghost Privacy
 
-Thank you for your interest in# 🤝 Contributing to Ghost Privacy
+Thank you for your interest in contributing.
 
 **Join the Alliance of Minds - Where Academic Excellence Meets AI Innovation**
 
@@ -12,8 +12,14 @@ Ghost Privacy is built through unprecedented collaboration between Malaysia's to
 
 ### **"Break Myths, Face Reality"**
 We don't build academic exercises - we solve real-world privacy problems. Our AI partners help us understand what's actually possible in modern security engineering, not what sounds good in theory.
-5. **Fail-Closed Design**: All validation must default to `false` on errors.
-6. **Submit a Pull Request**: Provide a clear description of the problem your PR solves and the technical details of your implementation.
+
+## Core contribution rules
+
+1. **No persistence**: Do not introduce disk persistence for messages/session secrets.
+2. **No telemetry/logging**: Do not add analytics or logs that could expose user data.
+3. **Layer 0 purity**: Keep `src/utils/algorithms/**` platform-agnostic.
+4. **Fail-closed design**: All validation must default to `false` on errors.
+5. **Submit a pull request**: Provide a clear description of the problem your PR solves and the technical details of your implementation.
 
 ### Documentation & Translation
 Helping us make Ghost more accessible to global audiences is highly encouraged. Please ensure translations maintain the precise technical meaning of security terms.
