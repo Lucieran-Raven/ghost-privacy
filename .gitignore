@@ -79,5 +79,4 @@ android/app/src/main/assets/capacitor.config.json
 android/.idea/
 
 # Sensitive files (auto-detected)
-.env.example
 
