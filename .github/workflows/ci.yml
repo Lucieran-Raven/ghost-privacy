@@ -31,3 +31,53 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  tauri-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.77.2
+
+      - name: Cargo test (locked)
+        working-directory: src-tauri
+        run: cargo test --locked
+
+  android-assemble-release:
+    runs-on: ubuntu-latest
+    env:
+      CAPACITOR_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies (reproducible)
+        run: npm ci
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Sync Capacitor (Android)
+        run: npx cap sync android
+
+      - name: Build release APK (smoke test)
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
