@@ -70,6 +70,11 @@ const VoiceRecorder = ({
         }
       });
       
+      // Check if we actually got permission and have tracks
+      if (testStream.getAudioTracks().length === 0) {
+        throw new DOMException('No audio tracks found', 'NotFoundError');
+      }
+      
       // Stop the test stream immediately - we just needed to trigger permission
       testStream.getTracks().forEach(track => track.stop());
       
@@ -85,9 +90,11 @@ const VoiceRecorder = ({
         setRecordingTime(prev => prev + 1);
       }, 1000);
     } catch (error) {
+      console.error('Microphone access error:', error);
+      
       // Show permission modal for denied access
       if (error instanceof DOMException) {
-        if (error.name === 'NotAllowedError' || error.name === 'NotFoundError') {
+        if (error.name === 'NotAllowedError' || error.name === 'NotFoundError' || error.name === 'NotReadableError') {
           setShowPermissionModal(true);
         }
       }

@@ -18,6 +18,31 @@ const PermissionModal = ({ type, isOpen, onClose, onRetry, onFallback }: Permiss
   const title = isCamera ? 'Camera Access Required' : 'Microphone Access Required';
   const fallbackText = isCamera ? 'Upload Video Instead' : 'Upload Audio Instead';
 
+  const openBrowserSettings = () => {
+    const ua = navigator.userAgent.toLowerCase();
+    const isIOS = /iphone|ipad|ipod/.test(ua);
+    const isAndroid = /android/.test(ua);
+    const isSafari = /safari/.test(ua) && !/chrome/.test(ua);
+    const isChrome = /chrome/.test(ua);
+
+    if (isIOS) {
+      // iOS - open Safari settings directly
+      window.location.href = 'App-Prefs:Preferences&path=Safari';
+    } else if (isAndroid && isChrome) {
+      // Android Chrome - open content settings
+      window.open('chrome://settings/content');
+    } else if (isChrome) {
+      // Desktop Chrome - open site settings
+      window.open('chrome://settings/content/siteDetails?site=' + window.location.origin);
+    } else if (isFirefox) {
+      // Firefox - open page info
+      window.open('about:permissions#' + window.location.origin);
+    } else {
+      // Fallback - open browser settings
+      window.open('about:preferences');
+    }
+  };
+
   const getInstructions = () => {
     const ua = navigator.userAgent.toLowerCase();
     const isIOS = /iphone|ipad|ipod/.test(ua);
@@ -182,6 +207,14 @@ const PermissionModal = ({ type, isOpen, onClose, onRetry, onFallback }: Permiss
               >
                 <Icon className="h-4 w-4" />
                 Try Again
+              </button>
+              
+              <button
+                onClick={openBrowserSettings}
+                className="w-full min-h-[48px] px-4 py-3 bg-blue-500 text-white rounded-lg font-medium active:scale-95 transition-transform flex items-center justify-center gap-2"
+              >
+                <Settings className="h-4 w-4" />
+                Open Settings
               </button>
               
               {onFallback && (

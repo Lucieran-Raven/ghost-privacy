@@ -208,7 +208,7 @@ export class RealtimeManager {
             this.presenceHandlers.forEach(handler => handler([]));
           }
           this.presenceGracePeriod = null;
-        }, 5000); // 5 second grace period before reporting disconnect
+        }, 3000); // Reduced grace period from 5s to 3s for faster response
       } else {
         this.presenceHandlers.forEach(handler => handler(participants));
       }
@@ -322,17 +322,18 @@ export class RealtimeManager {
     // Clear any existing intervals
     this.stopHeartbeatMonitor();
     
-    // Heartbeat check every 15 seconds
+    // Heartbeat check every 10 seconds (reduced from 15s for faster response)
     this.heartbeatInterval = setInterval(() => {
       const timeSinceHeartbeat = Date.now() - this.lastHeartbeat;
       
-      // Only reconnect if no heartbeat for 2 minutes (increased from 30s)
-      if (timeSinceHeartbeat > 120000) {
+      // Only reconnect if no heartbeat for 60 seconds (reduced from 2 minutes for faster recovery)
+      if (timeSinceHeartbeat > 60000) {
+        console.warn('Heartbeat timeout detected, attempting reconnection');
         this.attemptReconnect();
       }
-    }, 15000);
+    }, 10000);
 
-    // Periodic connection health check every 30 seconds
+    // Periodic connection health check every 20 seconds (reduced from 30s)
     this.connectionCheckInterval = setInterval(() => {
       if (this.channel && this.connectionState.status === 'connected') {
         // Send a presence heartbeat to keep connection alive
@@ -344,7 +345,7 @@ export class RealtimeManager {
         });
         this.lastHeartbeat = Date.now();
       }
-    }, 30000);
+    }, 20000);
   }
 
   private stopHeartbeatMonitor(): void {

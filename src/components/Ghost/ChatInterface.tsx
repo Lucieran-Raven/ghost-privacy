@@ -274,7 +274,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             received: 0,
             total: Math.max(0, Number(data.totalChunks) || 0),
             iv: String(data.iv || ''),
-            fileName: String(data.fileName || ''),
+            fileName: String(data.fileName || 'unknown_file'),
             fileType: String(data.fileType || 'application/octet-stream'),
             timestamp: Number(data.timestamp) || payload.timestamp,
             cleanupTimer
@@ -301,7 +301,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
               received: 0,
               total,
               iv: String(data.iv || ''),
-              fileName: String(data.fileName || ''),
+              fileName: String(data.fileName || 'unknown_file'),
               fileType: String(data.fileType || 'application/octet-stream'),
               timestamp: Number(data.timestamp) || payload.timestamp,
               cleanupTimer
@@ -319,7 +319,21 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             const encrypted = t.chunks.join('');
             const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, t.iv);
             const decryptedBytes = new Uint8Array(decrypted);
-            const blob = new Blob([decryptedBytes], { type: t.fileType || 'application/octet-stream' });
+            
+            // Enhanced file type detection for images
+            let fileType = t.fileType;
+            if (fileType === 'application/octet-stream' || !fileType) {
+              // Try to detect image type from magic bytes
+              if (decryptedBytes.length > 4) {
+                const header = Array.from(decryptedBytes.slice(0, 4)).map(b => b.toString(16).padStart(2, '0')).join('');
+                if (header.startsWith('89504e47')) fileType = 'image/png';
+                else if (header.startsWith('ffd8ff')) fileType = 'image/jpeg';
+                else if (header.startsWith('47494638')) fileType = 'image/gif';
+                else if (header.startsWith('52494646')) fileType = 'image/webp';
+              }
+            }
+            
+            const blob = new Blob([decryptedBytes], { type: fileType || 'application/octet-stream' });
             const objectUrl = URL.createObjectURL(blob);
             decryptedBytes.fill(0);
 
@@ -341,8 +355,10 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
           return;
         }
-      } catch {
-        // Silent
+      } catch (error) {
+        console.error('File transfer error:', error);
+        // Show user-friendly error for file transfer failures
+        toast.error('File transfer failed - please try again');
       }
     });
 
@@ -367,8 +383,16 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             if (partnerCountRef.current === 0) {
               partnerWasPresentRef.current = false;
               addSystemMessage('⚠️ Partner disconnected - waiting for reconnection...');
+              
+              // Auto-terminate session after 2 minutes of no partner
+              setTimeout(async () => {
+                if (partnerCountRef.current === 0 && !isTerminatingRef.current) {
+                  addSystemMessage('🔴 Session ending - partner did not return');
+                  await triggerSessionTermination('partner_left');
+                }
+              }, 120000); // 2 minutes
             }
-          }, 30000);
+          }, 15000); // Reduced from 30s to 15s for faster detection
         }
       }
 
