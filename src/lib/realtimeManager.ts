@@ -270,6 +270,11 @@ export class RealtimeManager {
           clearTimeout(timeout);
           this.updateState('handshaking', 75);
 
+          try {
+            await this.channel!.track({ online_at: new Date().toISOString() });
+          } catch {
+          }
+
           // Wait for channel stability
           await this.waitForStability();
           

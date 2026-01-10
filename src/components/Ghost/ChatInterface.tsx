@@ -91,6 +91,11 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   const systemMessagesShownRef = useRef<Set<string>>(new Set());
   const lastTerminationRef = useRef<number>(0);
 
+  const lastPublicKeySendRef = useRef<number>(0);
+  const publicKeyResendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const publicKeyResendAttemptsRef = useRef<number>(0);
+  const isKeyExchangeCompleteRef = useRef<boolean>(false);
+
   const markActivity = () => {
     lastActivityRef.current = Date.now();
   };
@@ -238,6 +243,42 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   }, [sessionId]);
 
   useEffect(() => {
+    isKeyExchangeCompleteRef.current = isKeyExchangeComplete;
+  }, [isKeyExchangeComplete]);
+
+  const stopPublicKeyResend = () => {
+    if (publicKeyResendIntervalRef.current) {
+      clearInterval(publicKeyResendIntervalRef.current);
+      publicKeyResendIntervalRef.current = null;
+    }
+    publicKeyResendAttemptsRef.current = 0;
+  };
+
+  const startPublicKeyResend = () => {
+    stopPublicKeyResend();
+
+    publicKeyResendAttemptsRef.current = 0;
+    publicKeyResendIntervalRef.current = setInterval(() => {
+      if (isTerminatingRef.current) {
+        stopPublicKeyResend();
+        return;
+      }
+
+      if (partnerPublicKeyRef.current || isKeyExchangeCompleteRef.current) {
+        stopPublicKeyResend();
+        return;
+      }
+
+      publicKeyResendAttemptsRef.current += 1;
+      void sendPublicKey();
+
+      if (publicKeyResendAttemptsRef.current >= 6) {
+        stopPublicKeyResend();
+      }
+    }, 2000);
+  };
+
+  useEffect(() => {
     const handlePageHide = () => {
       try {
         destroyLocalSessionData();
@@ -277,6 +318,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       localFingerprintRef.current = '';
       partnerPublicKeyRef.current = null;
       sessionKeyRef.current = null;
+      stopPublicKeyResend();
       setVerificationState({
         show: false,
         localFingerprint: '',
@@ -297,6 +339,10 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       setConnectionState({ status: 'subscribing', progress: 60 });
 
       await realtimeManagerRef.current.connect();
+
+      // Realtime broadcasts are not queued. If the peer sent their public key before we subscribed,
+      // we will miss it. Re-announce our public key for a short window to make the handshake reliable.
+      startPublicKeyResend();
 
       markActivity();
 
@@ -326,6 +372,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       setConnectionState(newState);
       if (newState.status === 'connected') {
         sendPublicKey();
+        startPublicKeyResend();
       }
     });
 
@@ -468,6 +515,12 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         setIsPartnerConnected(true);
         partnerWasPresentRef.current = true;
 
+        // Ensure the peer gets our public key even if they missed our initial broadcast.
+        // Throttle to avoid ping-pong.
+        if (!isKeyExchangeCompleteRef.current) {
+          void sendPublicKey();
+        }
+
         if (keyPairRef.current) {
           if (isTauriRuntime()) {
             const sharedSecretBytes = await KeyExchange.deriveSharedSecretBytes(
@@ -504,6 +557,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             await encryptionEngineRef.current?.setKey(sharedSecret);
           }
           setIsKeyExchangeComplete(true);
+          stopPublicKeyResend();
 
           try {
             if (keyPairRef.current) {
@@ -703,6 +757,10 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
   const sendPublicKey = async () => {
     if (!realtimeManagerRef.current || !keyPairRef.current) return;
+
+    const now = Date.now();
+    if (now - lastPublicKeySendRef.current < 1000) return;
+    lastPublicKeySendRef.current = now;
 
     localFingerprintRef.current = await KeyExchange.generateFingerprint(keyPairRef.current.publicKey);
     const publicKeyExport = await KeyExchange.exportPublicKey(keyPairRef.current.publicKey);
@@ -1113,6 +1171,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       await realtimeManagerRef.current.disconnect();
       realtimeManagerRef.current = null;
     }
+
+    stopPublicKeyResend();
 
     if (partnerDisconnectTimeoutRef.current) {
       clearTimeout(partnerDisconnectTimeoutRef.current);
