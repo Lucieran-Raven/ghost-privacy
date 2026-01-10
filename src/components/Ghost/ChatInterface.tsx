@@ -329,6 +329,16 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       }
     });
 
+    // Handle partner join/leave via presence
+    manager.onPresenceChange((participants) => {
+      const partnerCount = Math.max(0, participants.length - 1); // Exclude self
+      setIsPartnerConnected(partnerCount > 0);
+      
+      if (partnerCount === 0 && partnerWasPresentRef.current) {
+        addSystemMessage('👋 Partner left the session');
+      }
+    });
+
     manager.onMessage('file', async (payload) => {
       try {
         if (!encryptionEngineRef.current) return;

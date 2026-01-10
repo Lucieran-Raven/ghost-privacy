@@ -34,6 +34,7 @@ export class RealtimeManager {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10; // Increased from 2 to 10 for resilience
   private isDestroyed = false;
+  private partnerCount = 0;
 
   private seenIncoming: Map<string, number> = new Map();
   private readonly seenIncomingTtlMs = 10 * 60 * 1000;
@@ -204,6 +205,19 @@ export class RealtimeManager {
     this.channel = supabase.channel(channelName, {
       config: {
         broadcast: { self: false, ack: true },
+        presence: { key: this.participantId }
+      }
+    });
+
+    // Track presence changes (partner join/leave)
+    this.channel.on('presence', { event: 'sync' }, () => {
+      const state = this.channel!.presenceState();
+      const participants = Object.keys(state);
+      const newPartnerCount = Math.max(0, participants.length - 1); // Exclude self
+      
+      if (newPartnerCount !== this.partnerCount) {
+        this.partnerCount = newPartnerCount;
+        this.presenceHandlers.forEach(handler => handler(participants));
       }
     });
 
@@ -383,6 +397,7 @@ export class RealtimeManager {
     this.isDestroyed = true;
     this.outbox = [];
     this.seenIncoming.clear();
+    this.partnerCount = 0;
     
     if (this.channel) {
       await supabase.removeChannel(this.channel);
