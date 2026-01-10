@@ -77,19 +77,23 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageQueueRef = useRef(getMessageQueue());
   const partnerWasPresentRef = useRef(false);
-  const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const sessionExtendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const partnerDisconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoTerminateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const partnerCountRef = useRef<number>(0);
   const partnerUnstableShownRef = useRef(false);
+  const inactivityIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
   const fileTransfersRef = useRef<Map<string, { chunks: string[]; received: number; total: number; iv: string; fileName: string; fileType: string; timestamp: number; cleanupTimer: ReturnType<typeof setTimeout> | null }>>(new Map());
   const localFingerprintRef = useRef<string>('');
   const isTerminatingRef = useRef(false);
   const verificationShownRef = useRef(false);
   const systemMessagesShownRef = useRef<Set<string>>(new Set());
   const lastTerminationRef = useRef<number>(0);
+
+  const markActivity = () => {
+    lastActivityRef.current = Date.now();
+  };
 
   const purgeFileTransfer = (fileId: string): void => {
     const t = fileTransfersRef.current.get(fileId);
@@ -167,6 +171,11 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     initializeSession();
 
     return () => {
+      try {
+        void SessionService.deleteSession(sessionId, capabilityToken);
+      } catch {
+        // Ignore
+      }
       cleanup();
     };
   }, [sessionId, capabilityToken]);
@@ -255,6 +264,15 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     try {
       setConnectionState({ status: 'validating', progress: 10 });
 
+      if (isHost) {
+        const valid = await SessionService.validateSession(sessionId, capabilityToken, 'host');
+        if (!valid) {
+          setConnectionState({ status: 'error', progress: 0, error: 'Invalid or expired session' });
+          toast.error('Invalid or expired session');
+          return;
+        }
+      }
+
       verificationShownRef.current = false;
       localFingerprintRef.current = '';
       partnerPublicKeyRef.current = null;
@@ -279,8 +297,18 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       setConnectionState({ status: 'subscribing', progress: 60 });
 
       await realtimeManagerRef.current.connect();
-      const extended = await SessionService.extendSession(sessionId);
-      void extended;
+
+      markActivity();
+
+      if (inactivityIntervalRef.current) {
+        clearInterval(inactivityIntervalRef.current);
+      }
+      inactivityIntervalRef.current = setInterval(() => {
+        const now = Date.now();
+        if (now - lastActivityRef.current >= 10 * 60 * 1000 && !isTerminatingRef.current) {
+          void triggerSessionTermination('channel_dead');
+        }
+      }, 60 * 1000);
 
       addSystemMessage('🔐 Secure connection established');
 
@@ -298,15 +326,6 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       setConnectionState(newState);
       if (newState.status === 'connected') {
         sendPublicKey();
-        setupHeartbeatMonitoring();
-
-        if (sessionExtendIntervalRef.current) {
-          clearInterval(sessionExtendIntervalRef.current);
-        }
-        sessionExtendIntervalRef.current = setInterval(() => {
-          SessionService.extendSession(sessionId).catch(() => {
-          });
-        }, 10 * 60 * 1000);
       }
     });
 
@@ -432,63 +451,12 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       }
     });
 
-    manager.onPresenceChange(async (participants) => {
-      const partnerCount = participants.filter(id => id !== participantIdRef.current).length;
-      const hasPartner = partnerCount > 0;
-      partnerCountRef.current = partnerCount;
-      setIsPartnerConnected(hasPartner);
-
-      if (hasPartner) {
-        if (partnerDisconnectTimeoutRef.current) {
-          clearTimeout(partnerDisconnectTimeoutRef.current);
-          partnerDisconnectTimeoutRef.current = null;
-        }
-
-        if (autoTerminateTimeoutRef.current) {
-          clearTimeout(autoTerminateTimeoutRef.current);
-          autoTerminateTimeoutRef.current = null;
-        }
-
-        partnerUnstableShownRef.current = false;
-      } else if (partnerWasPresentRef.current && !isTerminatingRef.current) {
-        if (!partnerDisconnectTimeoutRef.current) {
-          if (!partnerUnstableShownRef.current) {
-            partnerUnstableShownRef.current = true;
-            addSystemMessage('⚠️ Partner connection unstable - waiting...');
-          }
-          partnerDisconnectTimeoutRef.current = setTimeout(async () => {
-            partnerDisconnectTimeoutRef.current = null;
-            if (isTerminatingRef.current) return;
-            if (!realtimeManagerRef.current) return;
-            if (partnerCountRef.current === 0) {
-              partnerWasPresentRef.current = false;
-              addSystemMessage('⚠️ Partner disconnected - waiting for reconnection...');
-              
-              // Auto-terminate session after a longer grace period (avoid false exits)
-              if (autoTerminateTimeoutRef.current) {
-                clearTimeout(autoTerminateTimeoutRef.current);
-              }
-              autoTerminateTimeoutRef.current = setTimeout(async () => {
-                if (partnerCountRef.current === 0 && !isTerminatingRef.current) {
-                  addSystemMessage('🔴 Session ending - partner did not return');
-                  await triggerSessionTermination('partner_left');
-                }
-              }, 5 * 60 * 1000);
-            }
-          }, 45000);
-        }
-      }
-
-      if (hasPartner) {
-        partnerWasPresentRef.current = true;
-        sendPublicKey();
-      }
-    });
-
     manager.onMessage('key-exchange', async (payload) => {
       try {
         const partnerPublicKey = await KeyExchange.importPublicKey(payload.data.publicKey);
         partnerPublicKeyRef.current = partnerPublicKey;
+        setIsPartnerConnected(true);
+        partnerWasPresentRef.current = true;
 
         if (keyPairRef.current) {
           if (isTauriRuntime()) {
@@ -578,6 +546,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
     manager.onMessage('chat-message', async (payload) => {
       try {
+        markActivity();
         if (!encryptionEngineRef.current) return;
 
         if (payload.data.type === 'file') {
@@ -657,6 +626,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
     manager.onMessage('voice-message', async (payload) => {
       try {
+        markActivity();
         if (!encryptionEngineRef.current) return;
 
         const decrypted = await encryptionEngineRef.current.decryptBytes(
@@ -694,6 +664,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     });
 
     manager.onMessage('message-ack', (payload) => {
+      markActivity();
       messageQueueRef.current.acknowledgeMessage(sessionId, payload.data.messageId);
     });
 
@@ -705,29 +676,19 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       } catch {
         // Ignore
       }
+      try {
+        if (inactivityIntervalRef.current) {
+          clearInterval(inactivityIntervalRef.current);
+          inactivityIntervalRef.current = null;
+        }
+      } catch {
+        // Ignore
+      }
       destroyLocalSessionData();
       await fullCleanup();
       await cleanup();
       onEndSession(false);
     });
-  };
-
-  const setupHeartbeatMonitoring = () => {
-    if (heartbeatIntervalRef.current) {
-      clearInterval(heartbeatIntervalRef.current);
-    }
-
-    heartbeatIntervalRef.current = setInterval(() => {
-      if (!realtimeManagerRef.current) return;
-
-      const channel = (realtimeManagerRef.current as any).channel;
-      if (channel && channel.state !== 'joined') {
-        if (heartbeatIntervalRef.current) {
-          clearInterval(heartbeatIntervalRef.current);
-          heartbeatIntervalRef.current = null;
-        }
-      }
-    }, 10000);
   };
 
   const sendPublicKey = async () => {
@@ -771,6 +732,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     }
 
     try {
+      markActivity();
       const messageId = generateNonce();
 
       const arrayBuffer = await blob.arrayBuffer();
@@ -932,6 +894,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
     void (async () => {
       try {
+        markActivity();
         const sanitizedName = sanitizeFileName(file.name);
         const messageId = generateNonce();
 
@@ -1058,16 +1021,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   };
 
   const destroyLocalSessionData = () => {
-    if (heartbeatIntervalRef.current) {
-      clearInterval(heartbeatIntervalRef.current);
-      heartbeatIntervalRef.current = null;
-    }
-
-    if (sessionExtendIntervalRef.current) {
-      clearInterval(sessionExtendIntervalRef.current);
-      sessionExtendIntervalRef.current = null;
-    }
-
+    // Clear timeouts
     if (partnerDisconnectTimeoutRef.current) {
       clearTimeout(partnerDisconnectTimeoutRef.current);
       partnerDisconnectTimeoutRef.current = null;
@@ -1081,6 +1035,11 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     if (focusScrollTimeoutRef.current) {
       clearTimeout(focusScrollTimeoutRef.current);
       focusScrollTimeoutRef.current = null;
+    }
+
+    if (inactivityIntervalRef.current) {
+      clearInterval(inactivityIntervalRef.current);
+      inactivityIntervalRef.current = null;
     }
 
     for (const fileId of fileTransfersRef.current.keys()) {
@@ -1140,14 +1099,9 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   };
 
   const cleanup = async () => {
-    if (heartbeatIntervalRef.current) {
-      clearInterval(heartbeatIntervalRef.current);
-      heartbeatIntervalRef.current = null;
-    }
-
-    if (sessionExtendIntervalRef.current) {
-      clearInterval(sessionExtendIntervalRef.current);
-      sessionExtendIntervalRef.current = null;
+    if (realtimeManagerRef.current) {
+      await realtimeManagerRef.current.disconnect();
+      realtimeManagerRef.current = null;
     }
 
     if (partnerDisconnectTimeoutRef.current) {
@@ -1206,6 +1160,15 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       return;
     }
     isTerminatingRef.current = true;
+
+    try {
+      if (inactivityIntervalRef.current) {
+        clearInterval(inactivityIntervalRef.current);
+        inactivityIntervalRef.current = null;
+      }
+    } catch {
+      // Ignore
+    }
 
     try {
       await realtimeManagerRef.current?.send('session-terminated', {
@@ -1280,18 +1243,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-[10px] md:text-xs text-primary truncate">{sessionId}</span>
-                    <div className="md:hidden flex-shrink-0">
-                      <div className={cn(
-                        "mobile-connection-badge text-[9px] px-1.5 py-0.5",
-                        isPartnerConnected ? "bg-accent/20 text-accent" : "bg-yellow-500/20 text-yellow-500"
-                      )}>
-                        <div className={cn(
-                          "w-1.5 h-1.5 rounded-full",
-                          isPartnerConnected ? "bg-accent animate-pulse" : "bg-yellow-500"
-                        )} />
-                        {isPartnerConnected ? "Live" : "Wait"}
-                      </div>
-                    </div>
+                    <div className="md:hidden flex-shrink-0" />
                   </div>
                   <div className="flex items-center gap-1 md:gap-2 text-[9px] md:text-xs text-muted-foreground">
                     <Shield className="h-2.5 w-2.5 md:h-3 md:w-3 flex-shrink-0" />
@@ -1301,17 +1253,10 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
               </div>
 
               <div className="hidden md:flex items-center gap-2">
-                <ConnectionStatusIndicator state={connectionState} isPartnerConnected={isPartnerConnected} />
+                <ConnectionStatusIndicator state={connectionState} />
               </div>
 
               <div className="flex items-center gap-0.5 md:gap-2 flex-shrink-0">
-                <div className="hidden lg:flex items-center gap-1 px-2 py-1 rounded bg-secondary/50 text-xs text-muted-foreground">
-                  <HardDrive className="h-3 w-3" />
-                  <span>{memoryStats.messageCount} msgs</span>
-                  <span className="text-muted-foreground/50">|</span>
-                  <span>{formatBytes(memoryStats.estimatedBytes)}</span>
-                </div>
-
                 <button
                   onClick={handleNuclearPurge}
                   className="touch-target flex items-center justify-center p-1.5 md:p-2 md:px-3 rounded-lg border border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/10 transition-colors"
@@ -1561,19 +1506,17 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       />
     </>
   );
+
 };
 
 // Connection Status Component
-const ConnectionStatusIndicator = ({ state, isPartnerConnected }: { state: ConnectionState; isPartnerConnected: boolean }) => {
+const ConnectionStatusIndicator = ({ state }: { state: ConnectionState }) => {
   const getStatusInfo = () => {
-    if (state.status === 'connected' && isPartnerConnected) {
-      return { text: 'Partner Connected', color: 'text-accent', dot: 'bg-accent' };
-    }
     if (state.status === 'connected') {
-      return { text: 'Waiting for Partner', color: 'text-yellow-500', dot: 'bg-yellow-500' };
+      return { text: 'Connected', color: 'text-accent', dot: 'bg-accent' };
     }
-    if (state.status === 'error') {
-      return { text: state.error || 'Connection Error', color: 'text-destructive', dot: 'bg-destructive' };
+    if (state.status === 'reconnecting') {
+      return { text: 'Reconnecting...', color: 'text-yellow-500', dot: 'bg-yellow-500' };
     }
     return { text: 'Connecting...', color: 'text-muted-foreground', dot: 'bg-muted-foreground' };
   };

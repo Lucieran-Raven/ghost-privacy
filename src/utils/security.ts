@@ -1,18 +1,12 @@
 // Security Manager - Fingerprinting and MITM Protection
 
 export class SecurityManager {
-  private static cachedFingerprint: string | null = null;
   private static sessionCapabilityTokens: Map<string, string> = new Map();
 
   static async generateFingerprint(): Promise<string> {
-    if (this.cachedFingerprint) {
-      return this.cachedFingerprint;
-    }
-
     const bytes = new Uint8Array(16);
     crypto.getRandomValues(bytes);
-    this.cachedFingerprint = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-    return this.cachedFingerprint;
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
   static setCapabilityToken(sessionId: string, capabilityToken: string): void {

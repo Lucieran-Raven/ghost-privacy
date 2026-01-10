@@ -2,7 +2,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors.ts";
 import {
-  buildSessionIpHashBytea,
   generateCapabilityToken,
   getClientIpHashHex,
   hashCapabilityTokenToBytea,
@@ -50,14 +49,14 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    let body: { sessionId?: string; hostFingerprint?: string };
+    let body: { sessionId?: string };
     try {
       body = await req.json();
     } catch {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 
-    const { sessionId, hostFingerprint } = body;
+    const { sessionId } = body;
 
     let clientIpHashHex: string;
     try {
@@ -68,10 +67,6 @@ serve(async (req: Request) => {
 
     // Strict input validation - no details leaked
     if (!sessionId || typeof sessionId !== 'string' || !/^GHOST-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(sessionId)) {
-      return errorResponse(req, 400, 'INVALID_REQUEST');
-    }
-
-    if (!hostFingerprint || typeof hostFingerprint !== 'string' || hostFingerprint.length < 8 || hostFingerprint.length > 128) {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 
@@ -95,9 +90,8 @@ serve(async (req: Request) => {
       return errorResponse(req, 429, 'RATE_LIMITED');
     }
 
-    // Create session with strict 5-minute TTL (extendable via extend-session)
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-    const ipHashBytea = buildSessionIpHashBytea({ hostHex: clientIpHashHex });
+    // Create session with strict 10-minute TTL
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
     const capabilityToken = generateCapabilityToken();
     const capabilityHashBytea = await hashCapabilityTokenToBytea(capabilityToken);
@@ -106,9 +100,8 @@ serve(async (req: Request) => {
       .from('ghost_sessions')
       .insert({
         session_id: sessionId,
-        host_fingerprint: hostFingerprint,
-        ip_hash: ipHashBytea,
         capability_hash: capabilityHashBytea,
+        used: false,
         expires_at: expiresAt
       })
       .select('session_id, expires_at')

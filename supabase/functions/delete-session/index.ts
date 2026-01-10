@@ -2,10 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors.ts";
 import {
-  getClientIpHashHex,
   jsonError,
-  parseSessionIpHash,
-  timingSafeEqualString,
   verifyCapabilityHash
 } from "../_shared/security.ts";
 
@@ -50,14 +47,14 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    let body: { sessionId?: string; fingerprint?: string; capabilityToken?: string };
+    let body: { sessionId?: string; capabilityToken?: string };
     try {
       body = await req.json();
     } catch {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 
-    const { sessionId, fingerprint, capabilityToken } = body;
+    const { sessionId, capabilityToken } = body;
 
     // Validate session ID format (GHOST-XXXX-XXXX)
     const sessionIdPattern = /^GHOST-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
@@ -65,18 +62,13 @@ serve(async (req: Request) => {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 
-    if (!fingerprint || typeof fingerprint !== 'string' || fingerprint.length < 8 || fingerprint.length > 128) {
-      return errorResponse(req, 400, 'INVALID_REQUEST');
-    }
-
     if (!capabilityToken || typeof capabilityToken !== 'string' || capabilityToken.length < 16 || capabilityToken.length > 64) {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
-    const fp = fingerprint.trim();
 
     const { data: session, error: readError } = await supabase
       .from('ghost_sessions')
-      .select('session_id, host_fingerprint, guest_fingerprint, capability_hash, ip_hash')
+      .select('session_id, capability_hash')
       .eq('session_id', sessionId)
       .maybeSingle();
 
@@ -89,44 +81,10 @@ serve(async (req: Request) => {
       return errorResponse(req, 404, 'NOT_FOUND');
     }
 
-    const isHost = timingSafeEqualString(fp, session.host_fingerprint);
-    const isGuest = Boolean(session.guest_fingerprint && timingSafeEqualString(fp, session.guest_fingerprint));
-
-    if (!isHost && !isGuest) {
-      return errorResponse(req, 404, 'NOT_FOUND');
-    }
-
-    let clientIpHex: string;
-    try {
-      clientIpHex = await getClientIpHashHex(req);
-    } catch {
-      return errorResponse(req, 400, 'IP_UNAVAILABLE');
-    }
-
-    const ipParts = parseSessionIpHash(session.ip_hash);
-    if (!ipParts) {
-      return errorResponse(req, 500, 'SERVER_ERROR');
-    }
-
-    if (isHost && !timingSafeEqualString(ipParts.hostHex, clientIpHex)) {
-      return errorResponse(req, 404, 'NOT_FOUND');
-    }
-
-    if (isGuest && !timingSafeEqualString(ipParts.guestHex, clientIpHex)) {
-      return errorResponse(req, 404, 'NOT_FOUND');
-    }
-
-    // Build delete query with appropriate fingerprint filter
-    const baseQuery = supabase
+    const { data: deleted, error: deleteError } = await supabase
       .from('ghost_sessions')
       .delete()
-      .eq('session_id', sessionId);
-    
-    const filteredQuery = isHost
-      ? baseQuery.eq('host_fingerprint', fp)
-      : baseQuery.eq('guest_fingerprint', fp);
-
-    const { data: deleted, error: deleteError } = await filteredQuery
+      .eq('session_id', sessionId)
       .select('session_id')
       .maybeSingle();
 

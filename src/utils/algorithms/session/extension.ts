@@ -17,11 +17,10 @@ export interface ExtendSessionInvokeRequest {
 
 export function createExtendSessionInvokeRequest(
   sessionId: string,
-  fingerprint: string,
   capabilityToken: string
 ): ExtendSessionInvokeRequest {
   return {
     functionName: EXTEND_SESSION_FUNCTION_NAME,
-    body: createSessionCapabilityBindingBody(sessionId, fingerprint, capabilityToken)
+    body: createSessionCapabilityBindingBody(sessionId, capabilityToken)
   };
 }

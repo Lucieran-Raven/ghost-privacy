@@ -16,28 +16,28 @@ export type Database = {
     Tables: {
       ghost_sessions: {
         Row: {
+          capability_hash: string
           created_at: string
           expires_at: string
-          guest_fingerprint: string | null
-          host_fingerprint: string
           id: string
           session_id: string
+          used: boolean
         }
         Insert: {
+          capability_hash: string
           created_at?: string
           expires_at: string
-          guest_fingerprint?: string | null
-          host_fingerprint: string
           id?: string
           session_id: string
+          used?: boolean
         }
         Update: {
+          capability_hash?: string
           created_at?: string
           expires_at?: string
-          guest_fingerprint?: string | null
-          host_fingerprint?: string
           id?: string
           session_id?: string
+          used?: boolean
         }
         Relationships: []
       }

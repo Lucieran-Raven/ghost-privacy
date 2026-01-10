@@ -40,9 +40,7 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
     
     try {
       const newId = generateGhostId();
-      const fingerprint = await SecurityManager.generateFingerprint();
-      
-      const result = await SessionService.reserveSession(newId, fingerprint);
+      const result = await SessionService.reserveSession(newId);
       
       if (!result.success) {
         // Distinguish error types for user
@@ -123,6 +121,12 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
     try {
       if (isStandardFormat) {
         SecurityManager.setCapabilityToken(parsed!.sessionId, parsed!.capabilityToken);
+        const ok = await SessionService.validateSession(parsed!.sessionId, parsed!.capabilityToken, 'guest');
+        if (!ok) {
+          setError('Invalid or expired access code');
+          SecurityManager.clearCapabilityToken(parsed!.sessionId);
+          return;
+        }
         onSessionStart(parsed!.sessionId, parsed!.capabilityToken, false, 'on-join');
       } else {
         // Handle honeypot format

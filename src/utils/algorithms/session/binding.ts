@@ -12,39 +12,32 @@ export function isValidSessionId(sessionId: string): boolean {
   return SESSION_ID_PATTERN.test(sessionId);
 }
 
-export function isValidFingerprint(fingerprint: string): boolean {
-  return fingerprint.length >= 8 && fingerprint.length <= 128;
-}
-
 export function isValidCapabilityToken(token: string): boolean {
   return token.length >= 16 && token.length <= 64;
 }
 
 export interface SessionBindingBody {
   sessionId: string;
-  fingerprint: string;
 }
 
 export interface SessionCapabilityBindingBody extends SessionBindingBody {
   capabilityToken: string;
 }
 
-export function createSessionBindingBody(sessionId: string, fingerprint: string): SessionBindingBody {
-  return { sessionId, fingerprint };
+export function createSessionBindingBody(sessionId: string): SessionBindingBody {
+  return { sessionId };
 }
 
 export function createSessionCapabilityBindingBody(
   sessionId: string,
-  fingerprint: string,
   capabilityToken: string
 ): SessionCapabilityBindingBody {
-  return { sessionId, fingerprint, capabilityToken };
+  return { sessionId, capabilityToken };
 }
 
 export interface ValidationCacheEntry {
   expiresAt: string;
   cachedAt: number;
-  fingerprint: string;
 }
 
 export function isCacheEntryValid(now: number, entry: ValidationCacheEntry): boolean {

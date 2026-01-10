@@ -2,11 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors.ts";
 import {
-  buildSessionIpHashBytea,
-  getClientIpHashHex,
   jsonError,
-  parseSessionIpHash,
-  timingSafeEqualString,
   verifyCapabilityHash
 } from "../_shared/security.ts";
 
@@ -45,22 +41,17 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    let body: { sessionId?: string; fingerprint?: string; capabilityToken?: string };
+    let body: { sessionId?: string; capabilityToken?: string; role?: string };
     try {
       body = await req.json();
     } catch {
       return invalidResponse(req);
     }
 
-    const { sessionId, fingerprint, capabilityToken } = body;
+    const { sessionId, capabilityToken, role } = body;
     // Strict input validation - constant-time response for all failures
     if (!sessionId || typeof sessionId !== 'string' || !/^GHOST-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(sessionId)) {
       // Delay to match successful query timing
-      await new Promise(r => setTimeout(r, 50));
-      return invalidResponse(req);
-    }
-
-    if (!fingerprint || typeof fingerprint !== 'string' || fingerprint.length < 8 || fingerprint.length > 128) {
       await new Promise(r => setTimeout(r, 50));
       return invalidResponse(req);
     }
@@ -70,9 +61,15 @@ serve(async (req: Request) => {
       return invalidResponse(req);
     }
 
+    const normalizedRole = role === 'host' || role === 'guest' ? role : null;
+    if (!normalizedRole) {
+      await new Promise(r => setTimeout(r, 50));
+      return invalidResponse(req);
+    }
+
     const { data: session, error } = await supabase
       .from('ghost_sessions')
-      .select('session_id, expires_at, host_fingerprint, guest_fingerprint, capability_hash, ip_hash')
+      .select('session_id, expires_at, capability_hash, used')
       .eq('session_id', sessionId)
       .gt('expires_at', new Date().toISOString())
       .maybeSingle();
@@ -90,58 +87,17 @@ serve(async (req: Request) => {
       return invalidResponse(req);
     }
 
-    let clientIpHex: string;
-    try {
-      clientIpHex = await getClientIpHashHex(req);
-    } catch {
-      await new Promise(r => setTimeout(r, 50));
-      return invalidResponse(req);
-    }
-
-    const ipParts = parseSessionIpHash(session.ip_hash);
-    if (!ipParts) {
-      await new Promise(r => setTimeout(r, 50));
-      return invalidResponse(req);
-    }
-
-    const fp = fingerprint.trim();
-
-    if (timingSafeEqualString(fp, session.host_fingerprint)) {
-      if (!timingSafeEqualString(ipParts.hostHex, clientIpHex)) {
+    if (normalizedRole === 'guest') {
+      if (session.used === true) {
         await new Promise(r => setTimeout(r, 50));
         return invalidResponse(req);
       }
-      return new Response(
-        JSON.stringify({
-          valid: true,
-          expiresAt: session.expires_at
-        }),
-        { headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' } }
-      );
-    }
 
-    if (session.guest_fingerprint && timingSafeEqualString(fp, session.guest_fingerprint)) {
-      if (!timingSafeEqualString(ipParts.guestHex, clientIpHex)) {
-        await new Promise(r => setTimeout(r, 50));
-        return invalidResponse(req);
-      }
-      return new Response(
-        JSON.stringify({
-          valid: true,
-          expiresAt: session.expires_at
-        }),
-        { headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // First guest join: atomically bind guest fingerprint (fail-closed on race)
-    if (!session.guest_fingerprint) {
-      const nextIpHash = buildSessionIpHashBytea({ hostHex: ipParts.hostHex, guestHex: clientIpHex });
       const { data: updated, error: updateError } = await supabase
         .from('ghost_sessions')
-        .update({ guest_fingerprint: fp, ip_hash: nextIpHash })
+        .update({ used: true })
         .eq('session_id', sessionId)
-        .is('guest_fingerprint', null)
+        .is('used', false)
         .gt('expires_at', new Date().toISOString())
         .select('expires_at')
         .maybeSingle();
@@ -152,16 +108,20 @@ serve(async (req: Request) => {
 
       if (updated?.expires_at) {
         return new Response(
-          JSON.stringify({
-            valid: true,
-            expiresAt: updated.expires_at
-          }),
+          JSON.stringify({ valid: true, expiresAt: updated.expires_at }),
           { headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' } }
         );
       }
+
+      await new Promise(r => setTimeout(r, 50));
+      return invalidResponse(req);
     }
 
-    return invalidResponse(req);
+    // Host validation (no fingerprint binding)
+    return new Response(
+      JSON.stringify({ valid: true, expiresAt: session.expires_at }),
+      { headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' } }
+    );
     
   } catch (error: unknown) {
     return errorResponse(req);

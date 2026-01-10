@@ -3,11 +3,9 @@ import { SecurityManager } from '@/utils/security';
 import {
   isCacheEntryValid,
   isValidCapabilityToken,
-  isValidFingerprint,
   isValidSessionId
 } from '@/utils/algorithms/session/binding';
 import { constantTimeEqualString } from '@/utils/algorithms/integrity/constantTime';
-import { createExtendSessionInvokeRequest } from '@/utils/algorithms/session/extension';
 import { createDeleteSessionInvokeRequest } from '@/utils/algorithms/session/revocation';
 
 /**
@@ -25,7 +23,7 @@ import { createDeleteSessionInvokeRequest } from '@/utils/algorithms/session/rev
 
 // In-memory validation cache (NO persistence)
 class MemoryValidationCache {
-  private cache = new Map<string, { expiresAt: string; cachedAt: number; fingerprint: string; capabilityToken: string }>();
+  private cache = new Map<string, { expiresAt: string; cachedAt: number; capabilityToken: string }>();
   private cleanupInterval: number;
 
   constructor() {
@@ -37,14 +35,9 @@ class MemoryValidationCache {
     window.addEventListener('unload', () => this.nuclearPurge());
   }
 
-  get(sessionId: string, fingerprint: string, capabilityToken: string): { expiresAt: string; cachedAt: number } | null {
+  get(sessionId: string, capabilityToken: string): { expiresAt: string; cachedAt: number } | null {
     const entry = this.cache.get(sessionId);
     if (!entry) return null;
-
-    if (!constantTimeEqualString(entry.fingerprint, fingerprint)) {
-      this.cache.delete(sessionId);
-      return null;
-    }
 
     if (!constantTimeEqualString(entry.capabilityToken, capabilityToken)) {
       this.cache.delete(sessionId);
@@ -61,11 +54,10 @@ class MemoryValidationCache {
     return null;
   }
 
-  set(sessionId: string, fingerprint: string, capabilityToken: string, expiresAt: string): void {
+  set(sessionId: string, capabilityToken: string, expiresAt: string): void {
     this.cache.set(sessionId, {
       expiresAt,
       cachedAt: Date.now(),
-      fingerprint,
       capabilityToken
     });
   }
@@ -107,21 +99,16 @@ export class SessionService {
    * Server-side: validates format, enforces rate limiting, inserts with TTL
    */
   static async reserveSession(
-    sessionId: string,
-    hostFingerprint: string
+    sessionId: string
   ): Promise<SessionResult> {
     // Client-side validation first
     if (!isValidSessionId(sessionId)) {
       return { success: false, error: 'Invalid session ID format', errorType: 'INVALID_SESSION' };
     }
 
-    if (!hostFingerprint || !isValidFingerprint(hostFingerprint)) {
-      return { success: false, error: 'Invalid host fingerprint', errorType: 'INVALID_SESSION' };
-    }
-
     try {
       const { data, error } = await supabase.functions.invoke('create-session', {
-        body: { sessionId, hostFingerprint }
+        body: { sessionId }
       });
 
       if (error) {
@@ -156,13 +143,9 @@ export class SessionService {
    * - Network errors return FALSE (fail-closed, zero-trust)
    * - Offline detection shows user-friendly message
    */
-  static async validateSession(sessionId: string, fingerprint: string, capabilityToken: string): Promise<boolean> {
+  static async validateSession(sessionId: string, capabilityToken: string, role: 'host' | 'guest'): Promise<boolean> {
     // Client-side validation first
     if (!isValidSessionId(sessionId)) {
-      return false;
-    }
-
-    if (!fingerprint || !isValidFingerprint(fingerprint)) {
       return false;
     }
 
@@ -176,11 +159,11 @@ export class SessionService {
 
     try {
       // Check memory-only cache first
-      const cached = validationCache.get(sessionId, fingerprint, capabilityToken);
+      const cached = validationCache.get(sessionId, capabilityToken);
 
       if (cached) {
         const now = Date.now();
-        if (isCacheEntryValid(now, { ...cached, fingerprint })) {
+        if (isCacheEntryValid(now, cached)) {
           return true;
         }
       }
@@ -189,7 +172,7 @@ export class SessionService {
       networkAttempted = true;
       
       const { data, error } = await supabase.functions.invoke('validate-session', {
-        body: { sessionId, fingerprint, capabilityToken }
+        body: { sessionId, capabilityToken, role }
       });
 
       // CRITICAL SECURITY FIX: ANY network anomaly = FAIL CLOSED
@@ -206,7 +189,7 @@ export class SessionService {
 
       // Cache successful validation WITH expiration timestamp
       if (isValid && data?.expiresAt) {
-        validationCache.set(sessionId, fingerprint, capabilityToken, data.expiresAt);
+        validationCache.set(sessionId, capabilityToken, data.expiresAt);
       } else {
         // Invalid session - clear any stale cache
         validationCache.clear(sessionId);
@@ -234,52 +217,18 @@ export class SessionService {
   }
 
   /**
-   * Extend session TTL via secure Edge Function
-   * Server-side: extends expires_at by 30 minutes
-   */
-  static async extendSession(sessionId: string): Promise<boolean> {
-    if (!isValidSessionId(sessionId)) {
-      return false;
-    }
-
-    const capabilityToken = SecurityManager.getCapabilityToken(sessionId);
-    if (!capabilityToken || !isValidCapabilityToken(capabilityToken)) {
-      return false;
-    }
-
-    const fingerprint = await SecurityManager.generateFingerprint();
-
-    if (!fingerprint || !isValidFingerprint(fingerprint)) {
-      return false;
-    }
-
-    try {
-      const request = createExtendSessionInvokeRequest(sessionId, fingerprint, capabilityToken);
-      const { data, error } = await supabase.functions.invoke(request.functionName, { body: request.body });
-
-      if (error) {
-        return false;
-      }
-
-      return data?.success === true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
    * Delete session via secure Edge Function (NUCLEAR OPTION)
    * Server-side: immediate deletion, no recovery
    * Called ONLY on explicit user "End Session" action
    * 
    * ATOMIC: This operation must complete regardless of network state
    */
-  static async deleteSession(sessionId: string): Promise<boolean> {
+  static async deleteSession(sessionId: string, capabilityTokenOverride?: string): Promise<boolean> {
     if (!isValidSessionId(sessionId)) {
       return false;
     }
 
-    const capabilityToken = SecurityManager.getCapabilityToken(sessionId);
+    const capabilityToken = capabilityTokenOverride || SecurityManager.getCapabilityToken(sessionId);
     if (!capabilityToken || !isValidCapabilityToken(capabilityToken)) {
       return false;
     }
@@ -287,14 +236,8 @@ export class SessionService {
     // Clear validation cache immediately (before network call)
     this.clearValidationCache(sessionId);
 
-    const fingerprint = await SecurityManager.generateFingerprint();
-
-    if (!fingerprint || !isValidFingerprint(fingerprint)) {
-      return false;
-    }
-
     try {
-      const request = createDeleteSessionInvokeRequest(sessionId, fingerprint, capabilityToken);
+      const request = createDeleteSessionInvokeRequest(sessionId, capabilityToken);
       const { data, error } = await supabase.functions.invoke(request.functionName, { body: request.body });
 
       if (error) {

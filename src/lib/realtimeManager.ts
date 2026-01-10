@@ -33,13 +33,7 @@ export class RealtimeManager {
   private connectionState: ConnectionState = { status: 'connecting', progress: 0 };
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10; // Increased from 2 to 10 for resilience
-  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
-  private lastHeartbeat = Date.now();
   private isDestroyed = false;
-  private presenceGracePeriod: ReturnType<typeof setTimeout> | null = null;
-  private lastPresenceState: string[] = [];
-  private connectionCheckInterval: ReturnType<typeof setInterval> | null = null;
-  private consecutiveHealthCheckFailures = 0;
 
   private seenIncoming: Map<string, number> = new Map();
   private readonly seenIncomingTtlMs = 10 * 60 * 1000;
@@ -210,7 +204,6 @@ export class RealtimeManager {
     this.channel = supabase.channel(channelName, {
       config: {
         broadcast: { self: false, ack: true },
-        presence: { key: this.participantId }
       }
     });
 
@@ -224,45 +217,6 @@ export class RealtimeManager {
       if (handler) {
         handler(payload as BroadcastPayload);
       }
-    });
-
-    // Setup presence tracking (emit immediately; optional delayed re-check)
-    const emitPresence = () => {
-      const state = this.channel?.presenceState() || {};
-      const participants = Object.keys(state).filter(id => id !== this.participantId);
-      this.presenceHandlers.forEach(handler => handler(participants));
-      return participants;
-    };
-
-    this.channel.on('presence', { event: 'sync' }, () => {
-      const participants = emitPresence();
-
-      if (this.presenceGracePeriod) {
-        clearTimeout(this.presenceGracePeriod);
-        this.presenceGracePeriod = null;
-      }
-
-      if (this.lastPresenceState.length > 0 && participants.length === 0) {
-        this.presenceGracePeriod = setTimeout(() => {
-          const current = emitPresence();
-          void current;
-          this.presenceGracePeriod = null;
-        }, 8000);
-      }
-
-      this.lastPresenceState = participants;
-    });
-
-    this.channel.on('presence', { event: 'join' }, () => {
-      if (this.presenceGracePeriod) {
-        clearTimeout(this.presenceGracePeriod);
-        this.presenceGracePeriod = null;
-      }
-      this.lastPresenceState = emitPresence();
-    });
-
-    this.channel.on('presence', { event: 'leave' }, () => {
-      this.lastPresenceState = emitPresence();
     });
 
     // Subscribe with promise-based waiting and exponential backoff retry
@@ -301,24 +255,12 @@ export class RealtimeManager {
         if (status === 'SUBSCRIBED') {
           clearTimeout(timeout);
           this.updateState('handshaking', 75);
-          
-          // Track presence
-          try {
-            await this.channel?.track({
-              participantId: this.participantId,
-              joinedAt: Date.now()
-            });
-          } catch (e) {
-            void e;
-          }
 
           // Wait for channel stability
           await this.waitForStability();
           
           this.updateState('connected', 100);
           this.reconnectAttempts = 0;
-          this.consecutiveHealthCheckFailures = 0;
-          this.startHeartbeatMonitor();
           await this.flushOutbox();
           
           resolve();
@@ -354,61 +296,7 @@ export class RealtimeManager {
     return new Promise(resolve => setTimeout(resolve, 500));
   }
 
-  private startHeartbeatMonitor(): void {
-    this.lastHeartbeat = Date.now();
-    this.consecutiveHealthCheckFailures = 0;
-    
-    // Clear any existing intervals
-    this.stopHeartbeatMonitor();
-    
-    // Heartbeat check every 10 seconds (reduced from 15s for faster response)
-    this.heartbeatInterval = setInterval(() => {
-      const timeSinceHeartbeat = Date.now() - this.lastHeartbeat;
-      
-      // Only reconnect if no heartbeat for 60 seconds (reduced from 2 minutes for faster recovery)
-      if (timeSinceHeartbeat > 60000) {
-        this.attemptReconnect();
-      }
-    }, 10000);
-
-    // Periodic connection health check every 20 seconds (reduced from 30s)
-    this.connectionCheckInterval = setInterval(() => {
-      if (this.channel && this.connectionState.status === 'connected') {
-        // Send a presence heartbeat to keep connection alive
-        this.channel.track({
-          participantId: this.participantId,
-          lastActive: Date.now()
-        }).then(() => {
-          this.lastHeartbeat = Date.now();
-          this.consecutiveHealthCheckFailures = 0;
-        }).catch(() => {
-          this.consecutiveHealthCheckFailures += 1;
-          if (this.consecutiveHealthCheckFailures >= 3) {
-            void this.attemptReconnect();
-          }
-        });
-      }
-    }, 20000);
-  }
-
-  private stopHeartbeatMonitor(): void {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-    }
-    if (this.connectionCheckInterval) {
-      clearInterval(this.connectionCheckInterval);
-      this.connectionCheckInterval = null;
-    }
-    if (this.presenceGracePeriod) {
-      clearTimeout(this.presenceGracePeriod);
-      this.presenceGracePeriod = null;
-    }
-  }
-
   private async handleDisconnect(): Promise<void> {
-    this.stopHeartbeatMonitor();
-    
     if (this.connectionState.status !== 'disconnected') {
       await this.attemptReconnect();
     }
@@ -493,17 +381,10 @@ export class RealtimeManager {
 
   async disconnect(): Promise<void> {
     this.isDestroyed = true;
-    this.stopHeartbeatMonitor();
     this.outbox = [];
     this.seenIncoming.clear();
     
     if (this.channel) {
-      try {
-        await this.channel.untrack();
-      } catch {
-        // Silent - best effort
-      }
-      
       await supabase.removeChannel(this.channel);
       this.channel = null;
     }

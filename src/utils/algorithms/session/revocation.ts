@@ -17,11 +17,10 @@ export interface DeleteSessionInvokeRequest {
 
 export function createDeleteSessionInvokeRequest(
   sessionId: string,
-  fingerprint: string,
   capabilityToken: string
 ): DeleteSessionInvokeRequest {
   return {
     functionName: DELETE_SESSION_FUNCTION_NAME,
-    body: createSessionCapabilityBindingBody(sessionId, fingerprint, capabilityToken)
+    body: createSessionCapabilityBindingBody(sessionId, capabilityToken)
   };
 }
