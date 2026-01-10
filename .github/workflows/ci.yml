@@ -78,6 +78,9 @@ jobs:
       - name: Sync Capacitor (Android)
         run: npx cap sync android
 
+      - name: Ensure gradlew is executable
+        run: chmod +x android/gradlew
+
       - name: Build release APK (smoke test)
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon
