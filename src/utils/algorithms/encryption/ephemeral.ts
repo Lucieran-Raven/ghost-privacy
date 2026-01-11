@@ -26,7 +26,16 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const bytes = base64ToBytes(base64);
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  try {
+    // slice() copies into a new ArrayBuffer, allowing us to wipe the decode buffer.
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  } finally {
+    try {
+      bytes.fill(0);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export function generateNonce(deps: EphemeralCryptoDeps): string {
@@ -113,13 +122,26 @@ export async function aesGcmDecryptString(
   const encrypted = base64ToArrayBuffer(encryptedBase64);
   const iv = new Uint8Array(base64ToArrayBuffer(ivBase64));
 
-  const decrypted = await deps.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted);
-  const bytes = new Uint8Array(decrypted);
   try {
-    return new TextDecoder().decode(bytes);
+    const decrypted = await deps.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted);
+    const bytes = new Uint8Array(decrypted);
+    try {
+      return new TextDecoder().decode(bytes);
+    } finally {
+      try {
+        bytes.fill(0);
+      } catch {
+        // Ignore
+      }
+    }
   } finally {
     try {
-      bytes.fill(0);
+      iv.fill(0);
+    } catch {
+      // Ignore
+    }
+    try {
+      new Uint8Array(encrypted).fill(0);
     } catch {
       // Ignore
     }
@@ -135,7 +157,20 @@ export async function aesGcmDecryptBytes(
   const encrypted = base64ToArrayBuffer(encryptedBase64);
   const iv = new Uint8Array(base64ToArrayBuffer(ivBase64));
 
-  return deps.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted);
+  try {
+    return await deps.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted);
+  } finally {
+    try {
+      iv.fill(0);
+    } catch {
+      // Ignore
+    }
+    try {
+      new Uint8Array(encrypted).fill(0);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export async function generateAesGcmKey(deps: EphemeralCryptoDeps, extractable: boolean = false): Promise<CryptoKey> {
@@ -156,7 +191,15 @@ export async function importAesKeyRawBase64(
   extractable: boolean = false
 ): Promise<CryptoKey> {
   const keyBuffer = base64ToArrayBuffer(keyBase64);
-  return deps.subtle.importKey('raw', keyBuffer, { name: 'AES-GCM', length: 256 }, extractable, ['encrypt', 'decrypt']);
+  try {
+    return await deps.subtle.importKey('raw', keyBuffer, { name: 'AES-GCM', length: 256 }, extractable, ['encrypt', 'decrypt']);
+  } finally {
+    try {
+      new Uint8Array(keyBuffer).fill(0);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export async function generateEcdhKeyPair(deps: EphemeralCryptoDeps): Promise<CryptoKeyPair> {

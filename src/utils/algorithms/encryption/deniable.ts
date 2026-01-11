@@ -51,7 +51,15 @@ function fillRandomBytesChunked(deps: Pick<DeniableCryptoDeps, 'getRandomValues'
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const bytes = base64ToBytes(base64);
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  try {
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  } finally {
+    try {
+      bytes.fill(0);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 async function deriveKeyFromPassword(
@@ -198,35 +206,64 @@ export class DeniableEncryption {
     const { payloadIv: decoyIv, payloadCipher: decoyCipher } = await this.encryptPayload(deps, outerKey, decoyPlain);
     const { payloadIv: realIv, payloadCipher: realCipher } = await this.encryptPayload(deps, innerKey, realPlain);
 
-    if (decoyCipher.byteLength > decoyMax) {
-      throw new Error('Decoy content too large for fixed container');
-    }
-    if (realCipher.byteLength > realMax) {
-      throw new Error('Real content too large for fixed container');
-    }
-
-    const outerHeaderPlain = this.buildHeaderPlaintext({ magic: MAGIC_OUTER, payloadCipherLen: decoyCipher.byteLength, payloadIv: decoyIv });
-    const innerHeaderPlain = this.buildHeaderPlaintext({ magic: MAGIC_INNER, payloadCipherLen: realCipher.byteLength, payloadIv: realIv });
-
-    const { headerIv: outerHeaderIv, headerCipher: outerHeaderCipher } = await this.encryptHeader(deps, outerKey, outerHeaderPlain);
-    const { headerIv: innerHeaderIv, headerCipher: innerHeaderCipher } = await this.encryptHeader(deps, innerKey, innerHeaderPlain);
-
-    container.set(outerHeaderIv, outerHeaderOffset);
-    container.set(outerHeaderCipher, outerHeaderOffset + IV_SIZE);
-    container.set(decoyCipher, decoyPayloadOffset);
-
-    container.set(innerHeaderIv, innerHeaderOffset);
-    container.set(innerHeaderCipher, innerHeaderOffset + IV_SIZE);
-    container.set(realCipher, realPayloadOffset);
-
     try {
-      decoyPlain.fill(0);
-      realPlain.fill(0);
-    } catch {
-      // Ignore
-    }
+      if (decoyCipher.byteLength > decoyMax) {
+        throw new Error('Decoy content too large for fixed container');
+      }
+      if (realCipher.byteLength > realMax) {
+        throw new Error('Real content too large for fixed container');
+      }
 
-    return bytesToBase64(container);
+      const outerHeaderPlain = this.buildHeaderPlaintext({ magic: MAGIC_OUTER, payloadCipherLen: decoyCipher.byteLength, payloadIv: decoyIv });
+      const innerHeaderPlain = this.buildHeaderPlaintext({ magic: MAGIC_INNER, payloadCipherLen: realCipher.byteLength, payloadIv: realIv });
+
+      const { headerIv: outerHeaderIv, headerCipher: outerHeaderCipher } = await this.encryptHeader(deps, outerKey, outerHeaderPlain);
+      const { headerIv: innerHeaderIv, headerCipher: innerHeaderCipher } = await this.encryptHeader(deps, innerKey, innerHeaderPlain);
+
+      container.set(outerHeaderIv, outerHeaderOffset);
+      container.set(outerHeaderCipher, outerHeaderOffset + IV_SIZE);
+      container.set(decoyCipher, decoyPayloadOffset);
+
+      container.set(innerHeaderIv, innerHeaderOffset);
+      container.set(innerHeaderCipher, innerHeaderOffset + IV_SIZE);
+      container.set(realCipher, realPayloadOffset);
+
+      const encoded = bytesToBase64(container);
+
+      try {
+        outerHeaderIv.fill(0);
+        outerHeaderCipher.fill(0);
+        innerHeaderIv.fill(0);
+        innerHeaderCipher.fill(0);
+        decoyIv.fill(0);
+        decoyCipher.fill(0);
+        realIv.fill(0);
+        realCipher.fill(0);
+      } catch {
+        // Ignore
+      }
+
+      return encoded;
+    } finally {
+      try {
+        decoyPlain.fill(0);
+        realPlain.fill(0);
+      } catch {
+        // Ignore
+      }
+
+      try {
+        container.fill(0);
+      } catch {
+        // Ignore
+      }
+
+      try {
+        salt.fill(0);
+      } catch {
+        // Ignore
+      }
+    }
   }
 
   static async decryptHiddenFile(
@@ -251,12 +288,13 @@ export class DeniableEncryption {
       return null;
     }
 
-    if (container.byteLength !== CONTAINER_SIZE_BYTES) {
-      return null;
-    }
+    try {
+      if (container.byteLength !== CONTAINER_SIZE_BYTES) {
+        return null;
+      }
 
-    const salt = container.slice(0, SALT_SIZE);
-    const key = await deriveKeyFromPassword(deps, password, salt);
+      const salt = container.slice(0, SALT_SIZE);
+      const key = await deriveKeyFromPassword(deps, password, salt);
 
     const innerRegionOffset = CONTAINER_SIZE_BYTES - INNER_REGION_BYTES;
     const outerHeaderOffset = SALT_SIZE;
@@ -308,12 +346,19 @@ export class DeniableEncryption {
       }
     };
 
-    const inner = await tryDecryptAt(innerHeaderOffset, realPayloadOffset, MAGIC_INNER, false, realMax);
-    const outer = await tryDecryptAt(outerHeaderOffset, decoyPayloadOffset, MAGIC_OUTER, true, decoyMax);
+      const inner = await tryDecryptAt(innerHeaderOffset, realPayloadOffset, MAGIC_INNER, false, realMax);
+      const outer = await tryDecryptAt(outerHeaderOffset, decoyPayloadOffset, MAGIC_OUTER, true, decoyMax);
 
-    if (inner) return inner;
-    if (outer) return outer;
-    return null;
+      if (inner) return inner;
+      if (outer) return outer;
+      return null;
+    } finally {
+      try {
+        container.fill(0);
+      } catch {
+        // Ignore
+      }
+    }
   }
 }
 
