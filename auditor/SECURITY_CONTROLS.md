@@ -1,52 +1,54 @@
 # Security Controls (Code Map)
 
-This is a code-level map of core security controls.
+This document maps core security claims to their enforcement points in the codebase.  
+All controls are implemented identically across Web, Desktop (Tauri), and Android (Capacitor).
 
-## Session capability tokens
+## Session Capability Tokens
+Joining a session requires a secret capability token. Possession proves authorization.
 
-- Frontend input enforcement:
-  - `src/components/Ghost/SessionCreator.tsx`
-  - `src/utils/algorithms/session/accessCode.ts`
+**Frontend enforcement**:  
+- `src/components/Ghost/SessionCreator.tsx` → validates access code format  
+- `src/utils/algorithms/session/accessCode.ts` → strict parsing of `sessionId.capabilityToken`
 
-- Backend enforcement (service-side verification):
-  - `supabase/functions/validate-session/index.ts`
-  - `supabase/functions/extend-session/index.ts`
-  - `supabase/functions/delete-session/index.ts`
+**Backend enforcement**:  
+- `supabase/functions/validate-session/index.ts` → verifies `capability_hash`  
+- `supabase/functions/extend-session/index.ts` → requires valid token  
+- `supabase/functions/delete-session/index.ts` → requires valid token
 
-## Token-derived realtime channels
+**Test coverage**:  
+- `src/utils/algorithms/session/accessCode.test.ts`
 
-- Derivation algorithm:
-  - `src/utils/algorithms/session/realtimeChannel.ts`
+## Token-Derived Realtime Channels
+Message channels are unguessable without the capability token.
 
-- Channel usage:
-  - `src/lib/realtimeManager.ts`
-  - `src/components/Ghost/ChatInterface.tsx`
+**Implementation**:  
+- `src/utils/algorithms/session/realtimeChannel.ts` → derives channel name from token  
+- `src/lib/realtimeManager.ts` → uses derived channel for Supabase subscription  
+- `src/components/Ghost/ChatInterface.tsx` → passes token to realtime manager
 
-## IP binding
+**Test coverage**:  
+- `src/utils/algorithms/session/realtimeChannel.test.ts`
 
-- Shared security primitives:
-  - `supabase/functions/_shared/security.ts`
+## IP Binding (Anti-Hijacking)
+Session access is bound to the creator’s IP hash. Guest IP is bound on first join.
 
-- Enforced in edge functions:
-  - `supabase/functions/validate-session/index.ts`
-  - `supabase/functions/extend-session/index.ts`
-  - `supabase/functions/delete-session/index.ts`
+**Shared primitives**:  
+- `supabase/functions/_shared/security.ts` → `getClientIpHashHex`, `buildSessionIpHashBytea`
 
-## Desktop CSP hardening
+**Enforcement**:  
+- `supabase/functions/validate-session/index.ts` → enforces host/guest IP hash match  
+- `supabase/functions/extend-session/index.ts` → requires IP hash match  
+- `supabase/functions/delete-session/index.ts` → requires IP hash match
 
-- `src-tauri/tauri.conf.json`
+## Desktop CSP Hardening
+Tauri desktop app prevents script injection escalation.
 
-## RAM-only guarantees
+**Configuration**:  
+- `src-tauri/tauri.conf.json` → Content Security Policy enabled
 
-- Message queue:
-  - `src/utils/clientMessageQueue.ts`
+## RAM-Only Guarantees
+Messages and keys exist only in memory — never persisted intentionally.
 
-- Key manager:
-  - `src/utils/sessionKeyManager.ts`
-
-Core algorithms verified
-Tauri desktop: RAM-only, no disk writes
-Android: ephemeral, no persistent storage
-Web: forensically clean PWA
-Backend: zero logs, strict binding, atomic rate limits
-Auditor suite: independently verifiable
+**Core components**:  
+- `src/utils/clientMessageQueue.ts` → messages stored in ephemeral `Map`  
+- `src/utils/sessionKeyManager.ts` → keys zeroized via `nuclearPurge()` on session end
