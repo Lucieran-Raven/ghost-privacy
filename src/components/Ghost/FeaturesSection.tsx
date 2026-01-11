@@ -7,7 +7,7 @@ const features = [
     icon: Lock,
     title: 'END-TO-END ENCRYPTION',
     tagline: '🔐 ZERO-KNOWLEDGE ARCHITECTURE',
-    description: 'All encryption happens in your browser. Keys never touch our servers. If we\'re subpoenaed, we have nothing to give—by design.',
+    description: 'All encryption happens in your browser. Keys never touch our servers. We do not store message plaintext, but infrastructure/network metadata may exist outside the app\'s control.',
     color: 'primary',
     stamp: 'VERIFIED'
   },

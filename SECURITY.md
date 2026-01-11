@@ -66,6 +66,12 @@ Ghost is designed for a specific threat model. Some classes of adversary and sys
 - **Screenshots/recording**: A malicious recipient can capture content; this is a social trust boundary.
 - **Infrastructure logs**: While Ghost does not store message content, hosting/CDN/Supabase may retain operational logs (e.g., request metadata) per their policies.
 
+### Safety notice
+
+- Ghost is **not designed for active conflict zones** or targeted/state-level adversaries.
+- Tor Browser reduces IP exposure but is **not** a guarantee against targeted compromise.
+- If you are in a life-or-death situation, use dedicated high-risk tooling and safety planning; treat Ghost as insufficient on its own.
+
 ### Scope language for the forensic challenge
 
 - “No forensic recovery” should be interpreted as **a scoped claim under normal operating conditions** (no OS compromise, no malicious extensions, no deliberate memory dumping). See the threat model below.
@@ -342,6 +348,8 @@ If any research telemetry is introduced in the future, it must be:
 3. **Disable JavaScript extensions** (reduce attack surface)
 4. **Verify key fingerprints** out-of-band
 5. **Assume physical compromise is possible** (use Tails OS if needed)
+
+If you are operating in an **active conflict zone** or expect targeted/state-level attacks, this threat model is **out of scope**.
 
 ### For Maximum Security
 - Air-gapped device with Tails OS

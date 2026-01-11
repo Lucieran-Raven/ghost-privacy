@@ -9,17 +9,6 @@ const Tor = () => {
 
   useEffect(() => {
     document.title = 'Tor Access — Coming Soon | Ghost Private Messaging';
-    
-    // Simple Tor detection (not foolproof, but indicative)
-    // Tor Browser has specific characteristics
-    const checkTor = () => {
-      const screenWidth = window.screen.width;
-      const screenHeight = window.screen.height;
-      // Tor Browser often reports specific window sizes
-      const isTorLikely = screenWidth === 1000 && screenHeight === 1000;
-      setIsTorBrowser(isTorLikely);
-    };
-    checkTor();
   }, []);
 
   return (
@@ -46,18 +35,18 @@ const Tor = () => {
                         }
                       />
                       {isTorBrowser ? (
-                        <span className="text-white/90">[●] ANONYMITY: TOR</span>
+                        <span className="text-white/90">[●] USER CONFIRMED: TOR BROWSER</span>
                       ) : (
-                        <span className="text-[#ff0a2a] opsec-pulse">[●] ANONYMITY: CLEARNET</span>
+                        <span className="text-[#ff0a2a] opsec-pulse">[●] UNVERIFIED: ASSUME CLEARNET</span>
                       )}
                     </div>
                     <div className="font-mono text-xs tracking-[0.12em] text-white/60">TOR HIDDEN SERVICE: NOT DEPLOYED</div>
                   </div>
                   <div className="mt-3 font-mono text-[12px] leading-relaxed text-white/70">
                     {isTorBrowser ? (
-                      <div>TOR BROWSER SIGNALS DETECTED. THIS CHECK IS INDICATIVE ONLY.</div>
+                      <div>TOR BROWSER SELECTED. THIS APP CANNOT RELIABLY DETECT TOR — VERIFY YOUR CONNECTION OUT-OF-BAND.</div>
                     ) : (
-                      <div>NETWORK METADATA EXISTS. IF YOUR THREAT MODEL REQUIRES ANONYMITY, USE TOR.</div>
+                      <div>NETWORK METADATA EXISTS. IF YOUR THREAT MODEL REQUIRES ANONYMITY, USE TOR BROWSER AND VERIFY IT.</div>
                     )}
                   </div>
                 </div>
@@ -71,6 +60,7 @@ const Tor = () => {
                       <div>[✓] MESSAGE CONTENT: ENCRYPTED</div>
                       <div>[!] NETWORK METADATA: EXISTS (IP, TIMING)</div>
                       <div>[→] RECOMMENDATION: TOR BROWSER FOR HIGH-RISK OPERATIONS</div>
+                      <div className="text-[#ff0a2a]">[!] NOT A GUARANTEE AGAINST TARGETED OR STATE-LEVEL ADVERSARIES</div>
                     </div>
                   </div>
 
@@ -91,6 +81,15 @@ const Tor = () => {
                       <div className="font-mono text-[12px] leading-relaxed text-white/65">
                         ONLY USE OFFICIAL DISTRIBUTIONS. DO NOT TRUST THIRD-PARTY INSTALLERS.
                       </div>
+                      <a
+                        href="https://check.torproject.org/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex w-full justify-between items-center px-4 py-3 border border-[rgba(255,10,42,0.24)] bg-black/40 font-mono text-xs tracking-[0.16em] uppercase text-white/85 transition-all active:translate-y-[1px] hover:border-[rgba(255,10,42,0.55)] hover:text-white hover:shadow-[0_0_12px_rgba(255,10,42,0.35)]"
+                      >
+                        VERIFY TOR CONNECTION
+                        <span className="text-white/50">EXTERNAL</span>
+                      </a>
                     </div>
                   </div>
                 </div>
@@ -112,6 +111,22 @@ const Tor = () => {
                     </div>
                   </div>
                 ) : null}
+
+                <div className="border border-[rgba(255,10,42,0.14)] p-4 bg-black/40">
+                  <div className="font-mono text-sm text-white/90">TOR BROWSER CONFIRMATION</div>
+                  <div className="mt-2 font-mono text-[12px] leading-relaxed text-white/70">
+                    THIS APP DOES NOT DETECT TOR RELIABLY. IF YOU ARE USING TOR BROWSER, YOU MUST CONFIRM IT.
+                  </div>
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsTorBrowser(v => !v)}
+                      className="px-4 py-2 border border-[rgba(255,10,42,0.24)] bg-black/40 font-mono text-xs tracking-[0.16em] uppercase text-white/85 transition-all active:translate-y-[1px] hover:border-[rgba(255,10,42,0.55)] hover:text-white hover:shadow-[0_0_12px_rgba(255,10,42,0.35)]"
+                    >
+                      {isTorBrowser ? 'SET AS CLEARNET' : 'I AM USING TOR BROWSER'}
+                    </button>
+                  </div>
+                </div>
 
                 <div className="border border-[rgba(255,10,42,0.14)] bg-black/35">
                   <div className="px-4 py-3 border-b border-[rgba(255,10,42,0.14)]">

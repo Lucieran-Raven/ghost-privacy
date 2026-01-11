@@ -48,6 +48,7 @@ const Limitations = () => {
                       <div>[!] SCREEN CAPTURE BY RECIPIENT</div>
                       <div>[!] BROWSER / EXTENSION EXPLOITS</div>
                       <div>[!] MEMORY TRACES UNTIL GC</div>
+                      <div className="text-[#ff0a2a]">[!] TARGETED / STATE-LEVEL ADVERSARIES (NOT IN SCOPE)</div>
                     </div>
                   </div>
                 </div>

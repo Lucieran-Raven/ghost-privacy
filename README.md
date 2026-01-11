@@ -1,6 +1,6 @@
 # Ghost Privacy
 
-Acess Link : https://ghostprivacy.netlify.app/
+Access Link : https://ghostprivacy.netlify.app/
 
 **Elite Alliance of Minds. Real-World Privacy Solutions.**
 
@@ -8,6 +8,8 @@ Ghost Privacy is born from an unprecedented collaboration between Malaysia's top
 
 > [!IMPORTANT]
 > **Network Anonymity:** Ghost does not hide your IP address by default. For full network anonymity, access this application via **Tor Browser**.
+>
+> **Safety Notice:** Ghost is **not designed for active conflict zones** or targeted/state-level adversaries. Read the full threat model in **SECURITY.md**.
 
 ---
 
@@ -38,9 +40,9 @@ We leverage 5 leading AI models as co-creators in our development process:
 ## 🛡️ Core Security Pillars
 
 - **Zero-Knowledge Architecture:** Messages encrypted/decrypted only on client. Server never sees plaintext or private keys.
-- **Pure Ephemeral Memory:** All session data, messages, and cryptographic keys exist strictly in JavaScript heap memory. No disk, localStorage, or IndexedDB persistence.
+- **Ephemeral-by-Design Memory:** Session data, messages, and keys are designed to remain in memory and avoid intentional persistence (no localStorage/IndexedDB for message content). OS/browser behavior (swap/pagefile/crash dumps/GC) can still create artifacts.
 - **Deniable Encryption:** Dual-password hidden volumes (real vs. decoy) provide plausible deniability under coercion.
-- **Anti-Forensic Controls:** Automatic memory zeroization (`nuclearPurge`) triggers on tab closure, window blur, or session end.
+- **Anti-Forensic Controls (best-effort):** Automatic memory cleanup (`nuclearPurge`) triggers on tab closure, window blur, or session end where possible.
 - **Zero Identity Correlation:** No accounts, emails, or phone numbers. Sessions bound to browser fingerprints and IP hashes only.
 
 ---
@@ -73,7 +75,7 @@ We leverage 5 leading AI models as co-creators in our development process:
 | **Server Storage** | Indefinite | 30 minutes max |
 | **Metadata** | Headers, timestamps | Minimal session binding only |
 | **Legal Compulsion** | Subpoena possible | No data to disclose |
-| **Forensic Recovery** | Easy | Designed to be impossible |
+| **Forensic Recovery** | Easy | Designed to be difficult under normal conditions (not guaranteed) |
 
 ---
 
@@ -104,6 +106,8 @@ Ghost stores minimal session metadata in Supabase (zero message content, no encr
 2. **Dedicated Hardware** – Clean device with no personal data
 3. **Verify Fingerprints** – Out-of-band verification of 16-character public key fingerprint
 4. **Session Hygiene** – Always use "End Session" button for immediate memory zeroization
+
+If you are operating in an **active conflict zone** or expect targeted/state-level attacks, treat Ghost as **insufficient on its own** and follow comprehensive safety planning.
 
 ### For Maximum Security
 - Air-gapped device with Tails OS

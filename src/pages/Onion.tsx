@@ -30,7 +30,7 @@ const Onion = () => {
             Ghost for High-Risk Users
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Access via Tor for maximum anonymity
+            Access via Tor to reduce network metadata exposure
           </p>
         </motion.div>
 
@@ -52,7 +52,10 @@ const Onion = () => {
                 <li>Ghost's infrastructure providers (Netlify, Supabase)</li>
               </ul>
               <p className="mt-3 font-medium">
-                For journalists, activists, and whistleblowers: <strong>Use Tor Browser.</strong>
+                For higher-risk situations: <strong>Use Tor Browser</strong> and read the limitations.
+              </p>
+              <p className="mt-3 text-sm">
+                Tor reduces IP exposure, but it is not a guarantee against targeted adversaries or device compromise.
               </p>
             </AlertDescription>
           </Alert>
@@ -134,7 +137,7 @@ const Onion = () => {
               </li>
             </ul>
             <p className="mt-4 text-xs text-muted-foreground">
-              Suitable for: High-risk users, state-level adversaries
+              Suitable for: Higher-risk users who understand limitations (not a guarantee against targeted adversaries)
             </p>
           </div>
         </motion.div>

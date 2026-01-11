@@ -62,7 +62,7 @@ const TransparencySection = () => {
                   <div>
                     <h3 className="font-outfit font-bold text-lg text-yellow-500 mb-2">What We Can't Prevent</h3>
                     <ul className="space-y-2 text-sm text-muted-foreground">
-                      <li>• Your IP address and session timing are visible to our relay server</li>
+                      <li>• Your IP address and session timing can be visible at the network and hosting/infrastructure level</li>
                       <li>• Without manual key verification, an active network attacker could impersonate your contact</li>
                       <li>• Browsers may retain traces in memory until garbage collection runs</li>
                     </ul>
