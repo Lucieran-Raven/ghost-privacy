@@ -1,5 +1,8 @@
 # Ghost Privacy
 
+**Private by design. Ephemeral by default.**  
+Available on **Web (PWA)**, **Windows/macOS/Linux (Tauri Desktop)**, and **Android (APK)** — same core, same guarantees.
+
 Access Link : https://ghostprivacy.netlify.app/
 
 **Elite Alliance of Minds. Real-World Privacy Solutions.**
