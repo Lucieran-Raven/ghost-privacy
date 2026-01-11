@@ -181,7 +181,12 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       } catch {
         // Ignore
       }
-      cleanup();
+      try {
+        void fullCleanup();
+      } catch {
+        // Ignore
+      }
+      void cleanup();
     };
   }, [sessionId, capabilityToken]);
 

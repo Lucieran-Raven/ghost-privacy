@@ -52,7 +52,10 @@ self.addEventListener('fetch', (event) => {
   const hasAuth = Boolean(req.headers.get('authorization'));
   const isSupabase = url.hostname.endsWith('.supabase.co');
 
-  if (hasAuth || isSupabase || req.mode === 'navigate') {
+  const isSessionRoute = url.origin === self.location.origin && url.pathname.startsWith('/session');
+  const isBundleAsset = url.origin === self.location.origin && url.pathname.startsWith('/assets/') && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname.endsWith('.map'));
+
+  if (hasAuth || isSupabase || req.mode === 'navigate' || isSessionRoute || isBundleAsset) {
     event.respondWith(fetch(new Request(req, { cache: 'no-store' })));
     return;
   }

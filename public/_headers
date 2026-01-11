@@ -8,6 +8,39 @@
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://muirdvibzicpedfmqdrf.supabase.co wss://muirdvibzicpedfmqdrf.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; object-src 'none'
 
 /assets/*
+  Cache-Control: no-store
+
+/assets/*.js
+  Cache-Control: no-store
+
+/assets/*.css
+  Cache-Control: no-store
+
+/assets/*.map
+  Cache-Control: no-store
+
+/assets/*.woff2
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*.woff
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*.png
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*.jpg
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*.jpeg
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*.webp
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*.svg
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*.ico
   Cache-Control: public, max-age=31536000, immutable
 
 /sw.js
@@ -17,6 +50,9 @@
   Cache-Control: no-store
 
 /index.html
+  Cache-Control: no-store
+
+/session/*
   Cache-Control: no-store
 
 /manifest.json
