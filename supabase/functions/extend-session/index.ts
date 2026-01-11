@@ -42,6 +42,10 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders(req, ALLOWED_ORIGINS) });
   }
 
+  if (req.method !== 'POST') {
+    return new Response(null, { status: 405, headers: corsHeaders(req, ALLOWED_ORIGINS) });
+  }
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -65,7 +69,7 @@ serve(async (req: Request) => {
 
     const { data: session, error: readError } = await supabase
       .from('ghost_sessions')
-      .select('capability_hash')
+      .select('capability_hash, expires_at')
       .eq('session_id', sessionId)
       .maybeSingle();
 
@@ -78,7 +82,41 @@ serve(async (req: Request) => {
       return errorResponse(req, 404, 'NOT_FOUND');
     }
 
-    return errorResponse(req, 404, 'NOT_FOUND');
+    const now = Date.now();
+    const currentExpiryMs = Date.parse(session.expires_at);
+    if (Number.isNaN(currentExpiryMs) || currentExpiryMs <= now) {
+      return errorResponse(req, 404, 'NOT_FOUND');
+    }
+
+    const extendThresholdMs = 5 * 60 * 1000;
+    const shouldExtend = currentExpiryMs - now <= extendThresholdMs;
+    const nextExpiryIso = shouldExtend
+      ? new Date(now + 10 * 60 * 1000).toISOString()
+      : session.expires_at;
+
+    if (!shouldExtend) {
+      return new Response(
+        JSON.stringify({ success: true, expiresAt: nextExpiryIso }),
+        { headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from('ghost_sessions')
+      .update({ expires_at: nextExpiryIso })
+      .eq('session_id', sessionId)
+      .gt('expires_at', new Date().toISOString())
+      .select('expires_at')
+      .maybeSingle();
+
+    if (updateError || !updated?.expires_at) {
+      return errorResponse(req, 404, 'NOT_FOUND');
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, expiresAt: updated.expires_at }),
+      { headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' } }
+    );
 
   } catch (error: unknown) {
     return errorResponse(req, 500, 'SERVER_ERROR');

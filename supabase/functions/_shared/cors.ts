@@ -49,13 +49,7 @@ export function isAllowedOrigin(origin: string, allowedOrigins?: Set<string>): b
   const env = Deno.env.get('ENVIRONMENT') || 'development';
   if (env === 'production') return false;
 
-  const host = safeHostname(origin);
-  if (!host) return false;
-
-  // Lovable preview domains
-  if (host.endsWith('.lovableproject.com')) return true;
-  if (host.endsWith('.lovable.app')) return true;
-
+  void safeHostname;
   return false;
 }
 

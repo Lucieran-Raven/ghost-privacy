@@ -70,9 +70,10 @@ serve(async (req: Request) => {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 
-    // SECURITY FIX: Atomic rate limiting with sliding window
-    // Uses PostgreSQL UPSERT to prevent TOCTOU race conditions
-    const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MINUTES * 60 * 1000);
+    // SECURITY FIX: Atomic rate limiting with fixed windows
+    // IMPORTANT: window_start must be stable within the window, otherwise the UPSERT never conflicts.
+    const windowMs = RATE_LIMIT_WINDOW_MINUTES * 60 * 1000;
+    const windowStart = new Date(Math.floor(Date.now() / windowMs) * windowMs);
 
     // Atomic increment using PostgreSQL ON CONFLICT
     const { data: rateResult, error: rateError } = await supabase.rpc('increment_rate_limit', {
