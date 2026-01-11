@@ -120,24 +120,14 @@ If you are operating in an **active conflict zone** or expect targeted/state-lev
 ## 📋 Documentation Hierarchy
 
 - [**SECURITY.md**](SECURITY.md) – **Authoritative security model, threat analysis, and bug bounty program**
+- [Architecture](docs/ARCHITECTURE.md)
+- [$50K Challenge Rules](docs/FORENSIC_CHALLENGE.md)
 - [**CONTRIBUTING.md**](CONTRIBUTING.md) – Technical and ethical contribution guidelines
 - [**CODE_OF_CONDUCT.md**](CODE_OF_CONDUCT.md) – Community standards
 - [**docs/COMMUNITY.md**](docs/COMMUNITY.md) – Alliance of minds community engagement
 - [**docs/COMMERCIAL_USE_POLICY.md**](docs/COMMERCIAL_USE_POLICY.md) – Business model and enterprise usage
 - [**src/ANTI_FORENSIC_GUIDE_CODE.md**](src/ANTI_FORENSIC_GUIDE_CODE.md) – Technical implementation guide
 - [**audits/**](audits/) – Historical security audit reports and assessments
-
----
-
-## 🏆 The $50,000 Forensic Challenge
-
-**We invite independent researchers to attempt recovery of message content from a Ghost session after termination (within a clearly scoped, reproducible setup).**
-
-- **Prize:** $50,000 USD
-- **Rules:** Standard forensic tools on a real Ghost session, under normal operating conditions (no OS compromise)
-- **Status:** Public challenge in progress (see SECURITY.md for scope and limitations)
-
-This isn't marketing – it's our technical confidence in the anti-forensic architecture we've built with AI assistance and university expertise.
 
 ---
 

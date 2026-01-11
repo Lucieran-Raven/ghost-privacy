@@ -17,7 +17,7 @@ Last updated: 2026-01-11 | Version: 2.1
 | Ephemeral Messages | RAM-only `Map`, `nuclearPurge()` on close | DevTools memory inspection |
 | Forward Secrecy | Per-session ECDH key exchange | Cryptographic analysis |
 | Server Blindness | Ciphertext-only delivery | Code audit, server logs |
-| Anti-Forensic | Zeroization of keys/buffers | $50K Forensic Challenge |
+| Anti-Forensic | Zeroization of keys/buffers | See `docs/FORENSIC_CHALLENGE.md` |
 | Plausible Deniability | Decoy content + fake UI | Coercion scenario testing |
 
 ## ⚠️ Limits & Assumptions
