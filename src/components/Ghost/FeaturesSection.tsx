@@ -149,12 +149,13 @@ const FeaturesSection = () => {
                 Transparency Note
               </h4>
               <p className="text-muted-foreground text-sm leading-relaxed mb-4">
-                Ghost minimizes specific risks—it's not magic. Network metadata (IP addresses, timing) is visible at the relay level. 
-                Without manual key verification, active network attackers could intercept. JavaScript memory cannot be securely wiped.
+                Ghost minimizes specific risks with end-to-end encryption and in-memory handling. Network metadata (IP address, timing)
+                is still observable on clearnet—use Tor Browser for network anonymity. Verify fingerprints out-of-band to reduce active
+                interception risk. Browser memory cleanup is best-effort and cannot be reliably ensured.
               </p>
               <Link 
                 to="/limitations" 
-                className="inline-flex items-center gap-2 text-yellow-500 hover:text-yellow-400 text-sm font-semibold transition-colors"
+                className="inline-flex items-center text-sm text-primary hover:text-primary/80 transition-colors"
               >
                 Read full limitations →
               </Link>
@@ -170,11 +171,8 @@ const FeaturesSection = () => {
           transition={{ duration: 0.6, delay: 0.6 }}
           className="text-center mt-12"
         >
-          <p className="text-xl md:text-2xl font-outfit font-bold">
-            <span className="text-muted-foreground">"</span>
-            <span className="text-foreground">PRIVACY BY DESIGN. </span>
-            <span className="gradient-text">HONESTY BY DEFAULT.</span>
-            <span className="text-muted-foreground">"</span>
+          <p className="text-sm text-muted-foreground font-mono tracking-wider">
+            SECURITY CLAIMS: SCOPED. LIMITATIONS: DOCUMENTED.
           </p>
         </motion.div>
       </div>

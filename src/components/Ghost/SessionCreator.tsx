@@ -159,7 +159,7 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
             Initiate Secure Channel
           </h1>
           <p className="text-muted-foreground text-sm md:text-base max-w-md mx-auto">
-            End-to-end encrypted. RAM-only. No logs. No trace.
+            End-to-end encrypted. RAM-only message handling. Server stores no message plaintext.
           </p>
         </div>
 
@@ -253,6 +253,9 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
                     </div>
                     <p className="text-muted-foreground mb-4 md:mb-6 text-sm md:text-base">
                       Transmit this access code via secure channel only
+                    </p>
+                    <p className="text-muted-foreground mb-4 md:mb-6 text-sm md:text-base">
+                      For maximum safety: share this code out-of-band, and access Ghost via Tor Browser.
                     </p>
                     
                     {/* ID Box - Cinematic glowing border */}
@@ -351,7 +354,7 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
             Zero-knowledge • RAM-only • Ephemeral by design
           </p>
           <p className="text-[10px] text-muted-foreground/40">
-            Messages exist only in memory. No server logs. No persistence. No trace.
+            Messages exist only in memory during the session. End the session to purge local state (best-effort in browsers).
           </p>
         </div>
       </div>

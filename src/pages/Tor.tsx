@@ -8,7 +8,7 @@ const Tor = () => {
   const [isTorBrowser, setIsTorBrowser] = useState(false);
 
   useEffect(() => {
-    document.title = 'Tor Access — Coming Soon | Ghost Private Messaging';
+    document.title = 'Tor Access | Ghost Private Messaging';
   }, []);
 
   return (
@@ -40,7 +40,7 @@ const Tor = () => {
                         <span className="text-[#ff0a2a] opsec-pulse">[●] UNVERIFIED: ASSUME CLEARNET</span>
                       )}
                     </div>
-                    <div className="font-mono text-xs tracking-[0.12em] text-white/60">TOR HIDDEN SERVICE: NOT DEPLOYED</div>
+                    <div className="font-mono text-xs tracking-[0.12em] text-white/60">GHOST WORKS OVER TOR BROWSER TODAY. A .ONION SERVICE IS COMING SOON TO REDUCE NETWORK METADATA EXPOSURE FURTHER.</div>
                   </div>
                   <div className="mt-3 font-mono text-[12px] leading-relaxed text-white/70">
                     {isTorBrowser ? (
@@ -60,7 +60,7 @@ const Tor = () => {
                       <div>[✓] MESSAGE CONTENT: ENCRYPTED</div>
                       <div>[!] NETWORK METADATA: EXISTS (IP, TIMING)</div>
                       <div>[→] RECOMMENDATION: TOR BROWSER FOR HIGH-RISK OPERATIONS</div>
-                      <div className="text-[#ff0a2a]">[!] NOT A GUARANTEE AGAINST TARGETED OR STATE-LEVEL ADVERSARIES</div>
+                      <div className="text-[#ff0a2a]">[→] MITIGATION: USE TOR BROWSER AND VERIFY FINGERPRINTS OUT-OF-BAND</div>
                     </div>
                   </div>
 
@@ -136,7 +136,7 @@ const Tor = () => {
                     <div>[•] GHOST DOES NOT BUNDLE TOR</div>
                     <div>[•] GHOST DOES NOT PROXY YOUR TRAFFIC</div>
                     <div>[•] TOR IS EXTERNAL BY DESIGN</div>
-                    <div>[•] THIS PAGE DESCRIBES READINESS, NOT AVAILABILITY</div>
+                    <div>[•] THIS PAGE DESCRIBES NETWORK METADATA EXPOSURE AND MITIGATIONS</div>
                   </div>
                 </div>
               </div>

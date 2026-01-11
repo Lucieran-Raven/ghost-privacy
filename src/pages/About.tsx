@@ -19,7 +19,7 @@ const About = () => {
                 <div className="border border-[rgba(255,10,42,0.14)] p-4 bg-black/40">
                   <div className="font-mono text-sm tracking-[0.12em] text-white/90">THREAT MODEL: PUBLISHED. LIMITATIONS: DOCUMENTED.</div>
                   <div className="mt-2 font-mono text-[12px] leading-relaxed text-white/70">
-                    THIS INTERFACE IS DESIGNED FOR HIGH-RISK PROFESSIONAL USE. OPERATIONAL CLARITY OVER PRESENTATION.
+                    THIS INTERFACE IS DESIGNED FOR CONFIDENTIAL COMMUNICATION — INCLUDING JOURNALISTS AND ACTIVISTS WHEN USED WITH TOR BROWSER. OPERATIONAL CLARITY OVER PRESENTATION.
                   </div>
                 </div>
 

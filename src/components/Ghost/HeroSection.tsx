@@ -100,8 +100,8 @@ const HeroSection = () => {
                 <p className="text-muted-foreground leading-snug">Business professionals, legal teams, healthcare coordination</p>
               </div>
               <div className="text-left">
-                <p className="text-yellow-500 font-semibold mb-1">⚠️ Not yet ready for:</p>
-                <p className="text-muted-foreground leading-snug">Journalists in active conflict zones, whistleblowers</p>
+                <p className="text-yellow-500 font-semibold mb-1">⚠️ For high-risk use:</p>
+                <p className="text-muted-foreground leading-snug">Always access via Tor Browser to hide your IP.</p>
               </div>
             </div>
           </motion.div>

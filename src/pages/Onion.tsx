@@ -55,7 +55,7 @@ const Onion = () => {
                 For higher-risk situations: <strong>Use Tor Browser</strong> and read the limitations.
               </p>
               <p className="mt-3 text-sm">
-                Tor reduces IP exposure, but it is not a guarantee against targeted adversaries or device compromise.
+                Tor reduces IP exposure. For full protection, use Tor Browser and assume a compromised device can still expose your content.
               </p>
             </AlertDescription>
           </Alert>
@@ -137,7 +137,7 @@ const Onion = () => {
               </li>
             </ul>
             <p className="mt-4 text-xs text-muted-foreground">
-              Suitable for: Higher-risk users who understand limitations (not a guarantee against targeted adversaries)
+              Suitable for: Higher-risk use when accessed via Tor Browser and limitations are understood
             </p>
           </div>
         </motion.div>
@@ -286,10 +286,10 @@ const Onion = () => {
         >
           <Alert className="border-primary/50 bg-primary/5">
             <Shield className="h-5 w-5 text-primary" />
-            <AlertTitle className="font-semibold">Ghost Is Not Magic</AlertTitle>
+            <AlertTitle className="font-semibold">Operational Guidance</AlertTitle>
             <AlertDescription className="mt-2">
               <p>
-                Ghost provides strong technical protections, but no tool guarantees absolute security. 
+                Ghost provides strong technical protections, but no tool can provide absolute security.
                 For life-or-death situations, combine Ghost + Tor with:
               </p>
               <ul className="list-disc list-inside mt-2 space-y-1 text-sm">

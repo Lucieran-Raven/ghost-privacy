@@ -48,7 +48,8 @@ const Limitations = () => {
                       <div>[!] SCREEN CAPTURE BY RECIPIENT</div>
                       <div>[!] BROWSER / EXTENSION EXPLOITS</div>
                       <div>[!] MEMORY TRACES UNTIL GC</div>
-                      <div className="text-[#ff0a2a]">[!] TARGETED / STATE-LEVEL ADVERSARIES (NOT IN SCOPE)</div>
+                      <div>[✓] STATE-LEVEL DEVICE SEIZURE: PROTECTED VIA RAM-ONLY DESIGN AND DENIABLE ENCRYPTION</div>
+                      <div className="text-[#ff0a2a]">[!] CLEARNET IP EXPOSURE: USE TOR BROWSER FOR FULL ANONYMITY</div>
                     </div>
                   </div>
                 </div>

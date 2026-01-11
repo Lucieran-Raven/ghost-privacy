@@ -66,7 +66,7 @@ const Security = () => {
                     <div className="p-4 font-mono text-[12px] leading-relaxed text-white/70 space-y-2">
                       <div className="text-[#ff0a2a]">[!] IP ADDRESS: VISIBLE ON CLEARNET</div>
                       <div>[!] TIMING: EXISTS AT NETWORK LEVEL</div>
-                      <div>[→] MITIGATION: TOR BROWSER / VPN</div>
+                      <div>[→] MITIGATION: ALWAYS USE TOR BROWSER TO HIDE YOUR IP ADDRESS</div>
                       <div>[→] READ: /TOR AND /LIMITATIONS</div>
                     </div>
                   </div>
