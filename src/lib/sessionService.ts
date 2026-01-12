@@ -24,14 +24,15 @@ import { createDeleteSessionInvokeRequest } from '@/utils/algorithms/session/rev
 // In-memory validation cache (NO persistence)
 class MemoryValidationCache {
   private cache = new Map<string, { expiresAt: string; cachedAt: number; capabilityToken: string }>();
-  private cleanupInterval: number;
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
-    // Clean expired entries every 5 minutes
-    this.cleanupInterval = setInterval(() => this.cleanup(), 5 * 60 * 1000) as unknown as number;
-    
-    // Nuclear purge on browser close
+    // Only register browser lifecycle hooks in the browser.
     if (typeof window !== 'undefined') {
+      // Clean expired entries every 5 minutes
+      this.cleanupInterval = setInterval(() => this.cleanup(), 5 * 60 * 1000);
+
+      // Nuclear purge on browser close
       window.addEventListener('beforeunload', () => this.nuclearPurge());
       window.addEventListener('unload', () => this.nuclearPurge());
     }
@@ -79,7 +80,10 @@ class MemoryValidationCache {
 
   nuclearPurge(): void {
     this.cache.clear();
-    clearInterval(this.cleanupInterval);
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
   }
 }
 
