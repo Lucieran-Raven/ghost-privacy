@@ -17,6 +17,7 @@ function stripComments(input: string): string {
   let s = input;
   s = s.replace(/\/\*[\s\S]*?\*\//g, '');
   s = s.replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1');
+  s = s.replace(/(?<!:)\/\/.*(?=\n|$)/g, '');
   return s;
 }
 
@@ -38,6 +39,20 @@ function stripXmlComments(input: string): string {
 }
 
 describe('forensic artifact regression checks', () => {
+  it('stripComments removes line and block comments but preserves executable code', () => {
+    const raw = [
+      'const a = 1; // localStorage.setItem("k","v")',
+      '/* sessionStorage.setItem("k","v") */',
+      'const b = 2;',
+      'localStorage.setItem("k","v")'
+    ].join('\n');
+
+    const code = stripComments(raw);
+    expect(code).not.toContain('sessionStorage.setItem');
+    expect(code).not.toContain('// localStorage.setItem');
+    expect(code).toContain('localStorage.setItem');
+  });
+
   it('does not introduce disk persistence primitives in application source (non-comment)', () => {
     const root = path.resolve(process.cwd(), 'src');
     const files = listFiles(root)

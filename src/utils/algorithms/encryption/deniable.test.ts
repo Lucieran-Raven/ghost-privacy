@@ -63,6 +63,59 @@ describe('deniable.decryptHiddenFile', () => {
     20_000
   );
 
+  it('returns null for wrong password', async () => {
+    let ctr = 0;
+    const deps = {
+      subtle: crypto.subtle,
+      pbkdf2Iterations: 5_000,
+      getRandomValues: <T extends ArrayBufferView>(arr: T): T => {
+        const u8 = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
+        for (let i = 0; i < u8.length; i++) {
+          u8[i] = ctr & 0xff;
+          ctr = (ctr + 1) >>> 0;
+        }
+        return arr;
+      }
+    };
+
+    const packed = await DeniableEncryption.createHiddenFile(deps, 'REAL', 'DECOY', 'outer', 'inner');
+    const out = await DeniableEncryption.decryptHiddenFile(deps, packed, 'wrong');
+    expect(out).toBe(null);
+  }, 20_000);
+
+  it('returns null for invalid base64 characters even if length matches', async () => {
+    let ctr = 0;
+    const deps = {
+      subtle: crypto.subtle,
+      pbkdf2Iterations: 5_000,
+      getRandomValues: <T extends ArrayBufferView>(arr: T): T => {
+        const u8 = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
+        for (let i = 0; i < u8.length; i++) {
+          u8[i] = ctr & 0xff;
+          ctr = (ctr + 1) >>> 0;
+        }
+        return arr;
+      }
+    };
+
+    const packed = await DeniableEncryption.createHiddenFile(deps, 'REAL', 'DECOY', 'outer', 'inner');
+    const invalid = '!' + packed.slice(1);
+    const out = await DeniableEncryption.decryptHiddenFile(deps, invalid, 'outer');
+    expect(out).toBe(null);
+  }, 20_000);
+
+  it('returns null for wrong-length container (truncated)', async () => {
+    const deps = {
+      subtle: crypto.subtle,
+      getRandomValues: crypto.getRandomValues.bind(crypto)
+    };
+
+    const expectedLen = 4 * Math.ceil((10 * 1024 * 1024) / 3);
+    const truncated = 'A'.repeat(expectedLen - 4);
+    const out = await DeniableEncryption.decryptHiddenFile(deps, truncated, 'pw');
+    expect(out).toBe(null);
+  });
+
   it('rejects oversized base64 input without attempting to decode', async () => {
     const deps = {
       subtle: crypto.subtle,
