@@ -71,7 +71,10 @@ serve(async (req: Request) => {
       .eq('session_id', sessionId)
       .maybeSingle();
 
-    if (readError || !session) {
+    if (readError) {
+      return errorResponse(req, 500, 'SERVER_ERROR');
+    }
+    if (!session) {
       return errorResponse(req, 404, 'NOT_FOUND');
     }
 
@@ -107,7 +110,10 @@ serve(async (req: Request) => {
       .select('expires_at')
       .maybeSingle();
 
-    if (updateError || !updated?.expires_at) {
+    if (updateError) {
+      return errorResponse(req, 500, 'SERVER_ERROR');
+    }
+    if (!updated?.expires_at) {
       return errorResponse(req, 404, 'NOT_FOUND');
     }
 

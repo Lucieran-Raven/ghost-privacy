@@ -178,7 +178,12 @@ export class SessionService {
       // CRITICAL SECURITY FIX: ANY network anomaly = FAIL CLOSED
       if (error) {
         // Check offline status but STILL return false (zero-trust)
-        void navigator;
+        try {
+          if (typeof navigator !== 'undefined') {
+            void navigator.onLine;
+          }
+        } catch {
+        }
 
         // CRITICAL: Always return false on ANY network error
         return false;
