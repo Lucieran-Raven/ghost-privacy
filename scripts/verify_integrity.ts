@@ -84,12 +84,17 @@ function shouldIgnorePath(p: string): boolean {
 
 function computeRepoIntegrityHash(repoRoot: string): string {
     const includeRoots = [
+        '.github',
         'package.json',
         'package-lock.json',
         'eslint.config.js',
+        'vite.config.ts',
+        'capacitor.config.ts',
+        'netlify.toml',
         'auditor',
         'src',
         'src-tauri/src',
+        'src-tauri/Cargo.toml',
         'src-tauri/Cargo.lock',
         'supabase/functions',
         'supabase/migrations',
@@ -131,7 +136,30 @@ function computeRepoIntegrityHash(repoRoot: string): string {
         .sort((a, b) => a.relPath.localeCompare(b.relPath));
 
     const h = createHash('sha256');
+    const maxBytesPerFile = 5 * 1024 * 1024;
     for (const { absPath, relPath } of hashed) {
+        let lst: fs.Stats;
+        try {
+            lst = fs.lstatSync(absPath);
+        } catch {
+            continue;
+        }
+        if (lst.isSymbolicLink()) {
+            continue;
+        }
+        if (!lst.isFile()) {
+            continue;
+        }
+        if (lst.size > maxBytesPerFile) {
+            continue;
+        }
+
+        const resolved = path.resolve(absPath);
+        const rootResolved = path.resolve(repoRoot) + path.sep;
+        if (!resolved.startsWith(rootResolved)) {
+            continue;
+        }
+
         const raw = fs.readFileSync(absPath, 'utf8');
         const content = normalizeText(raw);
         h.update(relPath, 'utf8');
