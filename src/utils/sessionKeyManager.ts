@@ -40,6 +40,10 @@ class SecureSessionKeyManager {
         if (this.cleanupHandlersRegistered) return;
         this.cleanupHandlersRegistered = true;
 
+        if (typeof window === 'undefined' || typeof document === 'undefined') {
+            return;
+        }
+
         // Cleanup on browser close
         window.addEventListener('beforeunload', () => {
             this.nuclearPurge();
@@ -220,12 +224,12 @@ class SecureSessionKeyManager {
         }
 
         // Use gc() if available (Chrome with --expose-gc flag)
-        if (typeof (window as any).gc === 'function') {
-            try {
+        try {
+            if (typeof window !== 'undefined' && typeof (window as any).gc === 'function') {
                 (window as any).gc();
-            } catch {
-                // Ignore errors
             }
+        } catch {
+            // Ignore errors
         }
     }
 
@@ -256,13 +260,14 @@ class SecureSessionKeyManager {
 
 // Singleton instance for the application
 let keyManagerInstance: SecureSessionKeyManager | null = null;
+let staleCleanupInterval: ReturnType<typeof setInterval> | null = null;
 
 export const getSessionKeyManager = (): SecureSessionKeyManager => {
     if (!keyManagerInstance) {
         keyManagerInstance = new SecureSessionKeyManager();
 
         // Auto-cleanup stale sessions every 5 minutes
-        setInterval(() => {
+        staleCleanupInterval = setInterval(() => {
             keyManagerInstance?.cleanupStaleSessions();
         }, 5 * 60 * 1000);
     }
@@ -273,6 +278,14 @@ export const destroySessionKeyManager = (): void => {
     if (keyManagerInstance) {
         keyManagerInstance.nuclearPurge();
         keyManagerInstance = null;
+    }
+
+    if (staleCleanupInterval) {
+        try {
+            clearInterval(staleCleanupInterval);
+        } catch {
+        }
+        staleCleanupInterval = null;
     }
 };
 
