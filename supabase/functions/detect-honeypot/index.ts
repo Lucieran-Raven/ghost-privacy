@@ -26,6 +26,10 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders(req, ALLOWED_ORIGINS) });
   }
 
+  if (req.method !== 'POST') {
+    return new Response(null, { status: 405, headers: corsHeaders(req, ALLOWED_ORIGINS) });
+  }
+
   try {
     let body: { sessionId?: string; accessorFingerprint?: string };
     try {

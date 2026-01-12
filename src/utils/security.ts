@@ -249,7 +249,16 @@ export const getFileIcon = (file: File): string => {
 };
 
 export const sanitizeFileName = (name: string): string => {
-  return name.replace(/[<>"'&]/g, '').replace(/\.\./g, '');
+  const input = String(name ?? '');
+  const stripped = input
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/[\\/]/g, '')
+    .replace(/[<>:"'&|?*]/g, '')
+    .replace(/\.{2,}/g, '.')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const limited = stripped.slice(0, 128);
+  return limited || 'file';
 };
 
 // Format file size for display

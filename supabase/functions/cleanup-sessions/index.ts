@@ -26,6 +26,10 @@ serve(async (req: Request) => {
   if (cronAuthError) {
     return cronAuthError;
   }
+
+  if (req.method !== 'POST') {
+    return new Response(null, { status: 405, headers: corsHeaders(req, ALLOWED_ORIGINS) });
+  }
   try {
     const supabase = getSupabaseServiceClient();
 

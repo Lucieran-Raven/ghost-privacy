@@ -96,13 +96,13 @@ const Downloads = () => {
                   <div className="mt-2 font-mono text-[12px] leading-relaxed text-white/70 space-y-2">
                     <div>
                       Read:
-                      <a className="underline hover:text-white" href="https://github.com/Lucieran-Raven/ghost-privacy/blob/main/docs/RELEASE_VERIFICATION.md">
+                      <a className="underline hover:text-white" href="https://github.com/Lucieran-Raven/ghost-privacy/blob/main/docs/RELEASE_VERIFICATION.md" target="_blank" rel="noopener noreferrer">
                         docs/RELEASE_VERIFICATION.md
                       </a>
                     </div>
                     <div>
                       Install help:
-                      <a className="underline hover:text-white" href="https://github.com/Lucieran-Raven/ghost-privacy/blob/main/docs/INSTALL_GUIDE.md">
+                      <a className="underline hover:text-white" href="https://github.com/Lucieran-Raven/ghost-privacy/blob/main/docs/INSTALL_GUIDE.md" target="_blank" rel="noopener noreferrer">
                         docs/INSTALL_GUIDE.md
                       </a>
                     </div>

@@ -34,6 +34,10 @@ serve(async (req: Request) => {
   if (cronAuthError) {
     return cronAuthError;
   }
+
+  if (req.method !== 'POST') {
+    return new Response(null, { status: 405, headers: corsHeaders(req, ALLOWED_ORIGINS) });
+  }
   try {
     // Get today's date for tracking
     const today = new Date().toISOString().split('T')[0];
