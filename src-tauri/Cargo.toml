@@ -29,3 +29,10 @@ hmac = "0.12"
 sha2 = "0.10"
 
 zeroize = "1.8"
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+strip = true
+incremental = false
