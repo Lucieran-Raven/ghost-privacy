@@ -76,6 +76,7 @@ serve(async (req: Request) => {
     }
     
     if (!session) {
+      await new Promise(r => setTimeout(r, 50));
       return invalidResponse(req);
     }
 

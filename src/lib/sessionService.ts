@@ -31,8 +31,10 @@ class MemoryValidationCache {
     this.cleanupInterval = setInterval(() => this.cleanup(), 5 * 60 * 1000) as unknown as number;
     
     // Nuclear purge on browser close
-    window.addEventListener('beforeunload', () => this.nuclearPurge());
-    window.addEventListener('unload', () => this.nuclearPurge());
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', () => this.nuclearPurge());
+      window.addEventListener('unload', () => this.nuclearPurge());
+    }
   }
 
   get(sessionId: string, capabilityToken: string): { expiresAt: string; cachedAt: number } | null {
