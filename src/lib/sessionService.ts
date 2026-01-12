@@ -26,6 +26,10 @@ class MemoryValidationCache {
   private cache = new Map<string, { expiresAt: string; cachedAt: number; capabilityToken: string }>();
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
+  private key(sessionId: string, role: 'host' | 'guest'): string {
+    return `${sessionId}:${role}`;
+  }
+
   constructor() {
     // Only register browser lifecycle hooks in the browser.
     if (typeof window !== 'undefined') {
@@ -38,12 +42,12 @@ class MemoryValidationCache {
     }
   }
 
-  get(sessionId: string, capabilityToken: string): { expiresAt: string; cachedAt: number } | null {
-    const entry = this.cache.get(sessionId);
+  get(sessionId: string, role: 'host' | 'guest', capabilityToken: string): { expiresAt: string; cachedAt: number } | null {
+    const entry = this.cache.get(this.key(sessionId, role));
     if (!entry) return null;
 
     if (!constantTimeEqualString(entry.capabilityToken, capabilityToken)) {
-      this.cache.delete(sessionId);
+      this.cache.delete(this.key(sessionId, role));
       return null;
     }
 
@@ -53,12 +57,12 @@ class MemoryValidationCache {
     }
 
     // Remove expired entry
-    this.cache.delete(sessionId);
+    this.cache.delete(this.key(sessionId, role));
     return null;
   }
 
-  set(sessionId: string, capabilityToken: string, expiresAt: string): void {
-    this.cache.set(sessionId, {
+  set(sessionId: string, role: 'host' | 'guest', capabilityToken: string, expiresAt: string): void {
+    this.cache.set(this.key(sessionId, role), {
       expiresAt,
       cachedAt: Date.now(),
       capabilityToken
@@ -66,7 +70,8 @@ class MemoryValidationCache {
   }
 
   clear(sessionId: string): void {
-    this.cache.delete(sessionId);
+    this.cache.delete(this.key(sessionId, 'host'));
+    this.cache.delete(this.key(sessionId, 'guest'));
   }
 
   private cleanup(): void {
@@ -165,7 +170,7 @@ export class SessionService {
 
     try {
       // Check memory-only cache first
-      const cached = validationCache.get(sessionId, capabilityToken);
+      const cached = validationCache.get(sessionId, role, capabilityToken);
 
       if (cached) {
         const now = Date.now();
@@ -200,7 +205,7 @@ export class SessionService {
 
       // Cache successful validation WITH expiration timestamp
       if (isValid && data?.expiresAt) {
-        validationCache.set(sessionId, capabilityToken, data.expiresAt);
+        validationCache.set(sessionId, role, capabilityToken, data.expiresAt);
       } else {
         // Invalid session - clear any stale cache
         validationCache.clear(sessionId);
