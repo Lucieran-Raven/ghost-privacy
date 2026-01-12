@@ -19,3 +19,6 @@ verify_jwt = false
 
 [functions.rotate-honeytokens]
 verify_jwt = false
+
+[functions.background-delete]
+verify_jwt = false

@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors.ts";
 import {
   generateCapabilityToken,
@@ -7,12 +6,7 @@ import {
   hashCapabilityTokenToBytea,
   jsonError
 } from "../_shared/security.ts";
-
-declare const Deno: {
-  env: {
-    get(key: string): string | undefined;
-  };
-};
+import { getSupabaseServiceClient } from "../_shared/client.ts";
 
 const ALLOWED_ORIGINS = getAllowedOrigins();
 
@@ -45,9 +39,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = getSupabaseServiceClient();
 
     let body: { sessionId?: string };
     try {

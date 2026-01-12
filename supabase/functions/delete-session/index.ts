@@ -1,16 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors.ts";
 import {
+  hashCapabilityTokenToBytea,
   jsonError,
-  verifyCapabilityHash
 } from "../_shared/security.ts";
-
-declare const Deno: {
-  env: {
-    get(key: string): string | undefined;
-  };
-};
+import { getSupabaseServiceClient } from "../_shared/client.ts";
 
 const ALLOWED_ORIGINS = getAllowedOrigins();
 
@@ -43,9 +37,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = getSupabaseServiceClient();
 
     let body: { sessionId?: string; capabilityToken?: string };
     try {
@@ -66,30 +58,29 @@ serve(async (req: Request) => {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 
-    const { data: session, error: readError } = await supabase
-      .from('ghost_sessions')
-      .select('session_id, capability_hash')
-      .eq('session_id', sessionId)
-      .maybeSingle();
-
-    if (readError || !session) {
+    let capabilityHashBytea: string;
+    try {
+      capabilityHashBytea = await hashCapabilityTokenToBytea(capabilityToken);
+    } catch {
       return errorResponse(req, 404, 'NOT_FOUND');
     }
 
-    const capabilityOk = await verifyCapabilityHash(session.capability_hash, capabilityToken);
-    if (!capabilityOk) {
-      return errorResponse(req, 404, 'NOT_FOUND');
-    }
+    const revokedExpiryIso = new Date(0).toISOString();
 
-    const { data: deleted, error: deleteError } = await supabase
+    const { data: revoked, error: revokeError } = await supabase
       .from('ghost_sessions')
-      .delete()
+      .update({ expires_at: revokedExpiryIso, capability_hash: null })
       .eq('session_id', sessionId)
+      .eq('capability_hash', capabilityHashBytea)
       .select('session_id')
       .maybeSingle();
 
-    if (deleteError || !deleted?.session_id) {
+    if (revokeError) {
       return errorResponse(req, 500, 'SERVER_ERROR');
+    }
+
+    if (!revoked?.session_id) {
+      return errorResponse(req, 404, 'NOT_FOUND');
     }
 
     return new Response(

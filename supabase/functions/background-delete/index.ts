@@ -3,9 +3,14 @@ import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors
 import { jsonError, requireCronAuth } from "../_shared/security.ts";
 import { getSupabaseServiceClient } from "../_shared/client.ts";
 
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
+
 const ALLOWED_ORIGINS = getAllowedOrigins();
 
-// Generic error response
 const errorResponse = (req: Request) =>
   jsonError('Internal error', 'SERVER_ERROR', {
     status: 500,
@@ -26,39 +31,45 @@ serve(async (req: Request) => {
   if (cronAuthError) {
     return cronAuthError;
   }
+
+  if (req.method !== 'POST') {
+    return new Response(null, { status: 405, headers: corsHeaders(req, ALLOWED_ORIGINS) });
+  }
+
   try {
     const supabase = getSupabaseServiceClient();
 
-    // Delete all expired sessions
-    const { data, error } = await supabase
+    let body: { sessionId?: string };
+    try {
+      body = await req.json();
+    } catch {
+      return jsonError('Invalid request', 'INVALID_REQUEST', {
+        status: 400,
+        headers: corsHeaders(req, ALLOWED_ORIGINS)
+      });
+    }
+
+    const { sessionId } = body;
+    if (!sessionId || typeof sessionId !== 'string' || !/^GHOST-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(sessionId)) {
+      return jsonError('Invalid request', 'INVALID_REQUEST', {
+        status: 400,
+        headers: corsHeaders(req, ALLOWED_ORIGINS)
+      });
+    }
+
+    const { error } = await supabase
       .from('ghost_sessions')
       .delete()
-      .lt('expires_at', new Date().toISOString())
-      .select('session_id');
-    
+      .eq('session_id', sessionId);
+
     if (error) {
       return errorResponse(req);
     }
-    
-    const deletedCount = data?.length || 0;
-    
-    // Also cleanup old rate limit entries (older than 2 hours)
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-    const { error: rateLimitError } = await supabase
-      .from('rate_limits')
-      .delete()
-      .lt('window_start', twoHoursAgo);
-    
-    void rateLimitError;
-    
+
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        deletedCount
-      }),
+      JSON.stringify({ success: true }),
       { headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' } }
     );
-    
   } catch (error: unknown) {
     return errorResponse(req);
   }
