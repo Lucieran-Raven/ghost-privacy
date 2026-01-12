@@ -55,7 +55,13 @@ serve(async (req: Request) => {
     if (!sessionId || typeof sessionId !== 'string' || !/^GHOST-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(sessionId)) {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
-    if (!capabilityToken || typeof capabilityToken !== 'string' || capabilityToken.length < 16 || capabilityToken.length > 64) {
+    if (
+      !capabilityToken ||
+      typeof capabilityToken !== 'string' ||
+      capabilityToken.length < 16 ||
+      capabilityToken.length > 64 ||
+      !/^[A-Za-z0-9_-]+$/.test(capabilityToken)
+    ) {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 

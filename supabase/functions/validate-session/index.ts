@@ -48,7 +48,13 @@ serve(async (req: Request) => {
       return invalidResponse(req);
     }
 
-    if (!capabilityToken || typeof capabilityToken !== 'string' || capabilityToken.length < 16 || capabilityToken.length > 64) {
+    if (
+      !capabilityToken ||
+      typeof capabilityToken !== 'string' ||
+      capabilityToken.length < 16 ||
+      capabilityToken.length > 64 ||
+      !/^[A-Za-z0-9_-]+$/.test(capabilityToken)
+    ) {
       await new Promise(r => setTimeout(r, 50));
       return invalidResponse(req);
     }

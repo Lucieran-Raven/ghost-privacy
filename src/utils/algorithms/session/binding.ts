@@ -13,7 +13,10 @@ export function isValidSessionId(sessionId: string): boolean {
 }
 
 export function isValidCapabilityToken(token: string): boolean {
-  return token.length >= 16 && token.length <= 64;
+  if (token.length < 16 || token.length > 64) return false;
+  // Capability tokens are base64url (no padding) in production.
+  // We validate the character set to fail fast on malformed inputs.
+  return /^[A-Za-z0-9_-]+$/.test(token);
 }
 
 export interface SessionBindingBody {

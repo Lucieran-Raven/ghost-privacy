@@ -59,6 +59,10 @@ serve(async (req: Request) => {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 
+    if (!/^[A-Za-z0-9_-]+$/.test(capabilityToken)) {
+      return errorResponse(req, 400, 'INVALID_REQUEST');
+    }
+
     let capabilityHashBytea: string;
     try {
       capabilityHashBytea = await hashCapabilityTokenToBytea(capabilityToken);
