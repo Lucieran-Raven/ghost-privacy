@@ -51,24 +51,33 @@ jobs:
         run: npx cap sync android
 
       - name: Prepare Android signing keystore
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          umask 077
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release.jks
+
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            umask 077
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release.jks
+
+            {
+              echo "ANDROID_KEYSTORE_PATH=$GITHUB_WORKSPACE/android/app/release.jks"
+              echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD"
+              echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS"
+              echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+          else
+            echo "No Android keystore configured; building unsigned release APK."
+          fi
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
       - name: Build release APK
         working-directory: android
-        env:
-          ANDROID_KEYSTORE_PATH: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && format('{0}/android/app/release.jks', github.workspace) || '' }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD || '' }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEY_ALIAS || '' }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEY_PASSWORD || '' }}
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Compute SHA-256
