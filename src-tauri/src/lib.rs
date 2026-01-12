@@ -19,6 +19,7 @@ const MAX_CAPABILITY_TOKEN_LEN: usize = 256;
 const MAX_B64_INPUT_LEN: usize = 24 * 1024 * 1024;
 const MAX_VAULT_PLAINTEXT_BYTES: usize = 12 * 1024 * 1024;
 const MAX_VAULT_UTF8_BYTES: usize = 256 * 1024;
+const MAX_VAULT_KEYS: usize = 128;
 
 struct KeyVault {
   keys: Mutex<HashMap<String, Zeroizing<[u8; 32]>>>,
@@ -58,9 +59,13 @@ impl KeyVault {
     }
   }
 
-  fn set_key(&self, session_id: String, key: [u8; 32]) {
+  fn set_key(&self, session_id: String, key: [u8; 32]) -> Result<(), String> {
     let mut keys = self.keys.lock().unwrap_or_else(|e| e.into_inner());
+    if keys.len() >= MAX_VAULT_KEYS && !keys.contains_key(&session_id) {
+      return Err("vault full".to_string());
+    }
     keys.insert(session_id, Zeroizing::new(key));
+    Ok(())
   }
 
   fn get_key(&self, session_id: &str) -> Option<Zeroizing<[u8; 32]>> {
@@ -159,7 +164,7 @@ fn vault_set_key(session_id: String, key_base64: String) -> Result<(), String> {
   key.copy_from_slice(raw.as_slice());
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
-  vault.set_key(session_id, key);
+  vault.set_key(session_id, key)?;
   Ok(())
 }
 
