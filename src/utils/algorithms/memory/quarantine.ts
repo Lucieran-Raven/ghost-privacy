@@ -14,6 +14,17 @@ export interface QuarantineIndicators {
 }
 
 export function shouldQuarantine(indicators: QuarantineIndicators, now: number): boolean {
+  if (!indicators || typeof indicators !== 'object') return true;
+  if (!Number.isFinite(now)) return true;
+  if (!Number.isFinite(indicators.escalationLevel)) return true;
+  if (!Number.isFinite(indicators.firstAccessTime)) return true;
+  if (!Number.isFinite(indicators.reconnectAttempts)) return true;
+  if (!Number.isFinite(indicators.twoFactorAttempts)) return true;
+  if (indicators.escalationLevel < 0) return true;
+  if (indicators.reconnectAttempts < 0) return true;
+  if (indicators.twoFactorAttempts < 0) return true;
+  if (indicators.firstAccessTime > now) return true;
+
   const timeInTrap = now - indicators.firstAccessTime;
   const fifteenMinutes = 15 * 60 * 1000;
 
