@@ -34,6 +34,7 @@ const VoiceRecorder = ({
 
   const MAX_RECORDING_TIME = 60;
   const MIN_RECORDING_TIME = 0.5; // Minimum 0.5 seconds to send
+  const MAX_FALLBACK_FILE_BYTES = 10 * 1024 * 1024;
 
   useEffect(() => {
     return () => {
@@ -56,6 +57,12 @@ const VoiceRecorder = ({
     }
 
     if (!sessionKey) {
+      return;
+    }
+
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setShowPermissionModal(true);
+      setIsRecording(false);
       return;
     }
 
@@ -180,6 +187,7 @@ const VoiceRecorder = ({
 
   // Warning modal for unverified voice
   if (showWarning) {
+    const canPortal = typeof document !== 'undefined' && !!document.body;
     return (
       <>
         <button
@@ -192,7 +200,7 @@ const VoiceRecorder = ({
         >
           <Mic className="h-5 w-5" />
         </button>
-        {createPortal(
+        {canPortal ? createPortal(
           <div className="fixed inset-0 bg-background/95 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
             <div className="relative max-w-md w-full p-6 rounded-2xl glass border border-destructive/50">
               <button
@@ -223,7 +231,7 @@ const VoiceRecorder = ({
             </div>
           </div>,
           document.body
-        )}
+        ) : null}
       </>
     );
   }
@@ -255,9 +263,16 @@ const VoiceRecorder = ({
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = '';
-          if (file && voiceVerified) {
-            onVoiceMessage(file, 0);
+          if (!file || !voiceVerified || disabled) {
+            return;
           }
+          if (file.size > MAX_FALLBACK_FILE_BYTES) {
+            return;
+          }
+          if (typeof file.type !== 'string' || !file.type.startsWith('audio/')) {
+            return;
+          }
+          onVoiceMessage(file, 0);
         }}
         className="hidden"
       />

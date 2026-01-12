@@ -29,8 +29,11 @@ class TrapAudioManager {
   }
 
   private initContext() {
+    if (typeof window === 'undefined') return;
     if (!this.audioContext) {
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      this.audioContext = new Ctx();
     }
   }
 

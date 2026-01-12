@@ -25,6 +25,9 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
   const [showOuter, setShowOuter] = useState(false);
   const [showInner, setShowInner] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const MAX_PASSWORD_LEN = 128;
+  const MAX_FILE_BASE64_CHARS = 14_000_000;
+  const MAX_DECOY_BASE64_CHARS = 2_000_000;
   
   const fileType = fileName.split('.').pop()?.toLowerCase() || 'default';
   
@@ -36,18 +39,36 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
   };
   
   const handleCreateHiddenVolume = async () => {
-    if (!outerPassword || !innerPassword) {
+    const outer = outerPassword.trim();
+    const inner = innerPassword.trim();
+
+    if (!outer || !inner) {
       toast.error('Both passwords are required');
       return;
     }
     
-    if (outerPassword === innerPassword) {
+    if (outer === inner) {
       toast.error('Passwords must be different');
       return;
     }
     
-    if (outerPassword.length < 6 || innerPassword.length < 6) {
+    if (outer.length < 6 || inner.length < 6) {
       toast.error('Passwords must be at least 6 characters');
+      return;
+    }
+
+    if (outer.length > MAX_PASSWORD_LEN || inner.length > MAX_PASSWORD_LEN) {
+      toast.error(`Passwords must be at most ${MAX_PASSWORD_LEN} characters`);
+      return;
+    }
+
+    if (typeof fileContent !== 'string' || fileContent.length === 0 || fileContent.length > MAX_FILE_BASE64_CHARS) {
+      toast.error('File is too large for hidden volume mode');
+      return;
+    }
+
+    if (decoyContent && decoyContent.length > MAX_DECOY_BASE64_CHARS) {
+      toast.error('Decoy content is too large');
       return;
     }
     
@@ -57,12 +78,15 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
       const encryptedData = await DeniableEncryption.createHiddenFile(
         fileContent,
         decoyContent || generateDecoyContent(fileType),
-        outerPassword,
-        innerPassword
+        outer,
+        inner
       );
       
       toast.success('Hidden volume created');
       onComplete(encryptedData);
+      setOuterPassword('');
+      setInnerPassword('');
+      setDecoyContent('');
       onClose();
     } catch (error) {
       void error;

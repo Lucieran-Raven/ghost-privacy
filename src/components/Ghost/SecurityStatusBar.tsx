@@ -4,6 +4,7 @@ type TorStatus = 'unknown' | 'tor' | 'clearnet';
 
 function detectTorLikely(): boolean {
   try {
+    if (typeof window === 'undefined' || !window.screen) return false;
     const screenWidth = window.screen.width;
     const screenHeight = window.screen.height;
     return screenWidth === 1000 && screenHeight === 1000;
@@ -17,7 +18,7 @@ export default function SecurityStatusBar() {
 
   useEffect(() => {
     const isTorLikely = detectTorLikely();
-    setTorStatus(isTorLikely ? 'tor' : 'clearnet');
+    setTorStatus(isTorLikely ? 'tor' : 'unknown');
   }, []);
 
   const anonymityLine = useMemo(() => {
@@ -28,23 +29,16 @@ export default function SecurityStatusBar() {
       } as const;
     }
 
-    if (torStatus === 'clearnet') {
-      return {
-        tone: 'warn',
-        text: "[!] METADATA: IP VISIBLE (USE TOR)",
-      } as const;
-    }
-
     return {
       tone: 'neutral',
-      text: "[?] ANONYMITY: CHECKING",
+      text: "[?] ANONYMITY: UNKNOWN (USE TOR)",
     } as const;
   }, [torStatus]);
 
   const anonymityStatusText = useMemo(() => {
     if (torStatus === 'tor') return '[●] ANONYMITY: TOR';
     if (torStatus === 'clearnet') return '[●] ANONYMITY: CLEARNET';
-    return '[●] ANONYMITY: CHECKING';
+    return '[●] ANONYMITY: UNKNOWN';
   }, [torStatus]);
 
   return (

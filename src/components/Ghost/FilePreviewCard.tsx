@@ -68,6 +68,9 @@ const FilePreviewCard = ({ fileName, content, sender }: FilePreviewCardProps) =>
     if (!(objectUrl.startsWith('blob:') || objectUrl.startsWith('data:'))) {
       return;
     }
+    if (typeof document === 'undefined') {
+      return;
+    }
     const link = document.createElement('a');
     link.href = objectUrl;
     link.download = safeName;

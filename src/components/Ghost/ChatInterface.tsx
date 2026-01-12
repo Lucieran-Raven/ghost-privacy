@@ -101,6 +101,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     lastActivityRef.current = Date.now();
   };
 
+  const MAX_VOICE_MESSAGES = 50;
+
   const purgeFileTransfer = (fileId: string): void => {
     const t = fileTransfersRef.current.get(fileId);
     if (!t) return;
@@ -202,12 +204,12 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       });
     };
 
-    if (window.visualViewport) {
+    if (typeof window !== 'undefined' && window.visualViewport) {
       window.visualViewport.addEventListener('resize', scrollToBottom);
     }
 
     return () => {
-      if (window.visualViewport) {
+      if (typeof window !== 'undefined' && window.visualViewport) {
         window.visualViewport.removeEventListener('resize', scrollToBottom);
       }
     };
@@ -215,6 +217,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
   useEffect(() => {
     const handleVisibilityChange = () => {
+      if (typeof document === 'undefined') return;
       setIsWindowVisible(!document.hidden);
     };
 
@@ -226,14 +229,22 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       setIsWindowVisible(true);
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleBlur);
-    window.addEventListener('focus', handleFocus);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('blur', handleBlur);
+      window.addEventListener('focus', handleFocus);
+    }
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleBlur);
-      window.removeEventListener('focus', handleFocus);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('blur', handleBlur);
+        window.removeEventListener('focus', handleFocus);
+      }
     };
   }, []);
 
@@ -244,8 +255,11 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       return e.returnValue;
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }
+    return;
   }, [sessionId]);
 
   useEffect(() => {
@@ -299,12 +313,15 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       }
     };
 
-    window.addEventListener('pagehide', handlePageHide);
-    window.addEventListener('unload', handlePageHide);
-    return () => {
-      window.removeEventListener('pagehide', handlePageHide);
-      window.removeEventListener('unload', handlePageHide);
-    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pagehide', handlePageHide);
+      window.addEventListener('unload', handlePageHide);
+      return () => {
+        window.removeEventListener('pagehide', handlePageHide);
+        window.removeEventListener('unload', handlePageHide);
+      };
+    }
+    return;
   }, [sessionId]);
 
   const initializeSession = async () => {
@@ -724,14 +741,17 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
         decryptedBytes.fill(0);
 
-        setVoiceMessages(prev => [...prev, {
-          id: payload.nonce,
-          blob,
-          duration: payload.data.duration,
-          sender: 'partner',
-          timestamp: payload.timestamp,
-          played: false
-        }]);
+        setVoiceMessages(prev => {
+          const next = [...prev, {
+            id: payload.nonce,
+            blob,
+            duration: payload.data.duration,
+            sender: 'partner',
+            timestamp: payload.timestamp,
+            played: false
+          }];
+          return next.length > MAX_VOICE_MESSAGES ? next.slice(-MAX_VOICE_MESSAGES) : next;
+        });
 
         messageQueueRef.current.addMessage(sessionId, {
           id: payload.nonce,
@@ -840,14 +860,17 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         }
       }
 
-      setVoiceMessages(prev => [...prev, {
-        id: messageId,
-        blob,
-        duration,
-        sender: 'me',
-        timestamp: Date.now(),
-        played: false
-      }]);
+      setVoiceMessages(prev => {
+        const next = [...prev, {
+          id: messageId,
+          blob,
+          duration,
+          sender: 'me',
+          timestamp: Date.now(),
+          played: false
+        }];
+        return next.length > MAX_VOICE_MESSAGES ? next.slice(-MAX_VOICE_MESSAGES) : next;
+      });
 
       messageQueueRef.current.addMessage(sessionId, {
         id: messageId,
@@ -875,7 +898,10 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
   const handleVoiceMessagePlayed = (messageId: string) => {
     setVoiceMessages(prev =>
-      prev.map(vm => vm.id === messageId ? { ...vm, played: true } : vm)
+      prev.map(vm => {
+        if (vm.id !== messageId) return vm;
+        return { ...vm, played: true, blob: new Blob([], { type: 'application/octet-stream' }) };
+      })
     );
   };
 
@@ -1005,6 +1031,10 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           }
         }
 
+        if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+          toast.error('File previews are not supported in this environment');
+          return;
+        }
         const objectUrl = URL.createObjectURL(file);
 
         messageQueueRef.current.addMessage(sessionId, {
@@ -1455,6 +1485,9 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                                 <button
                                   onClick={() => {
                                     if (!(message.content.startsWith('blob:') || message.content.startsWith('data:'))) {
+                                      return;
+                                    }
+                                    if (typeof document === 'undefined') {
                                       return;
                                     }
                                     const link = document.createElement('a');
