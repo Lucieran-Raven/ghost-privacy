@@ -4,6 +4,7 @@ import { Ghost, Send, Paperclip, Shield, X, Loader2, Trash2, HardDrive, FileText
 import { toast } from 'sonner';
 import { EncryptionEngine, KeyExchange, generateNonce } from '@/utils/encryption';
 import { SecurityManager, validateMessage, validateFile, sanitizeFileName } from '@/utils/security';
+import { checkOrPinFingerprint } from '@/utils/tofuFingerprintStore';
 import { RealtimeManager, BroadcastPayload, ConnectionState } from '@/lib/realtimeManager';
 import { SessionService } from '@/lib/sessionService';
 import { getMessageQueue, QueuedMessage } from '@/utils/clientMessageQueue';
@@ -515,6 +516,37 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
     manager.onMessage('key-exchange', async (payload) => {
       try {
+        let remoteFingerprint = '';
+        try {
+          const pkB64 = String(payload.data?.publicKey || '');
+          if (pkB64) {
+            const pkBytes = base64ToBytes(pkB64);
+            const hash = await crypto.subtle.digest('SHA-256', pkBytes);
+            remoteFingerprint = Array.from(new Uint8Array(hash))
+              .slice(0, 16)
+              .map((b) => b.toString(16).padStart(2, '0'))
+              .join('')
+              .toUpperCase();
+            pkBytes.fill(0);
+          }
+        } catch {
+        }
+
+        if (remoteFingerprint) {
+          const senderId = String(payload.senderId || 'partner');
+          const pinKey = `session:${sessionId}:peer:${senderId}`;
+          const pinRes = checkOrPinFingerprint(pinKey, remoteFingerprint);
+          if (pinRes.status === 'mismatch') {
+            toast.error('Security alert: partner key changed. Session blocked.');
+            addSystemMessage('🚫 Security alert: partner fingerprint changed — session ended');
+            await handleEndSession();
+            return;
+          }
+          if (pinRes.status === 'pinned') {
+            addSystemMessage('📌 Fingerprint pinned (TOFU). Always verify codes for high-risk conversations.');
+          }
+        }
+
         const partnerPublicKey = await KeyExchange.importPublicKey(payload.data.publicKey);
         partnerPublicKeyRef.current = partnerPublicKey;
         setIsPartnerConnected(true);
@@ -567,22 +599,6 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           try {
             if (keyPairRef.current) {
               localFingerprintRef.current = await KeyExchange.generateFingerprint(keyPairRef.current.publicKey);
-            }
-          } catch {
-          }
-
-          let remoteFingerprint = '';
-          try {
-            const pkB64 = String(payload.data?.publicKey || '');
-            if (pkB64) {
-              const pkBytes = base64ToBytes(pkB64);
-              const hash = await crypto.subtle.digest('SHA-256', pkBytes);
-              remoteFingerprint = Array.from(new Uint8Array(hash))
-                .slice(0, 16)
-                .map((b) => b.toString(16).padStart(2, '0'))
-                .join('')
-                .toUpperCase();
-              pkBytes.fill(0);
             }
           } catch {
           }
@@ -1159,8 +1175,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     // SECURITY FIX: Removed localStorage usage - keys now stored ONLY in memory
     // No disk persistence - true RAM-only storage
     // Previous code (REMOVED):
-    // localStorage.removeItem(`ghost_session_${sessionId}`);
-    // localStorage.removeItem(`ghost_keys_${sessionId}`);
+    // localStorage removeItem(`ghost_session_${sessionId}`);
+    // localStorage removeItem(`ghost_keys_${sessionId}`);
 
     if (typeof (window as any).gc === 'function') {
       try {

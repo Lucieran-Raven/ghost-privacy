@@ -56,6 +56,8 @@ All share the same RAM-only core (`src/utils/algorithms/`) — no drift.
 | `capability_hash` | Session access control | Deleted with session |
 | `ip_hash` (truncated) | Anti-hijacking | HMAC-SHA256, 16-char only |
 
+Pinned in-memory: Partner public-key fingerprints (TOFU) used to detect key changes during the session.
+
 **Never stored**: Message content, encryption keys, user identities.
 
 ## 🎭 Threat Model
@@ -63,9 +65,11 @@ All share the same RAM-only core (`src/utils/algorithms/`) — no drift.
 ### ✅ Protected Against
 - **Forensic message recovery** (RAM-only design)
 - **Session hijacking** (capability + IP binding)
-- **MITM** (with fingerprint verification)
+- **MITM** (when fingerprints are verified or pinned)
 - **Server compromise** (no plaintext stored)
 - **Legal subpoena** (nothing to disclose)
+
+> ⚠️ **High-risk conversations:** Always verify fingerprints out-of-band (phone/in-person). Pinning detects later changes during the session, but first contact is only as safe as your verification.
 
 ### ❌ Not Protected Against
 - **Clearnet IP exposure** → **use Tor Browser**

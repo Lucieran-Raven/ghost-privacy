@@ -87,7 +87,7 @@ const TransparencySection = () => {
                     <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                     <span className="text-primary font-semibold text-sm uppercase tracking-wider">KEY VERIFICATION</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Fingerprints for MITM protection</p>
+                  <p className="text-xs text-muted-foreground">Fingerprints for MITM protection (verified or pinned)</p>
                 </div>
                 <div className="p-5 rounded-xl bg-ghost-purple/10 border border-ghost-purple/20">
                   <div className="flex items-center justify-center gap-2 mb-2">

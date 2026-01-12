@@ -42,7 +42,7 @@ const Security = () => {
                     <div>[✓] E2E ENCRYPTION: AES-256-GCM</div>
                     <div>[✓] KEY EXCHANGE: ECDH P-256</div>
                     <div>[✓] KDF: PBKDF2-SHA256 (600,000 ITERATIONS)</div>
-                    <div>[✓] FINGERPRINT: 128-BIT DISPLAY (MITM VERIFICATION)</div>
+                    <div>[✓] FINGERPRINT: 128-BIT DISPLAY (MITM VERIFICATION / TOFU PINNING)</div>
                   </div>
                 </div>
 

@@ -23,7 +23,7 @@ const features = [
     icon: ShieldCheck,
     title: 'MITM PROTECTION',
     tagline: '🛡️ WHEN YOU VERIFY',
-    description: 'Key fingerprint verification protects against interception—but only if you manually verify codes with your partner through a separate channel.',
+    description: 'MITM protection is provided when fingerprints are verified or pinned (TOFU). Always verify codes out-of-band (phone/in-person) for high-risk conversations.',
     color: 'accent',
     stamp: 'VERIFY'
   },
