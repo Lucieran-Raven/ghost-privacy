@@ -3,22 +3,22 @@
     "project": "ghost-privacy",
     "project_version": "2.0.0",
     "scan_date": "2026-01-02",
+    "verified_against_commit": "4c81ea89113da44031a1ce48e46695d7c73a6c46",
+    "verification_date": "2026-01-13",
+    "verification_method": "Static repository check (package-lock/package.json string search)",
     "rating": "LOW_RISK",
     "summary": {
         "cryptography": "PASSED",
         "persistence": "PASSED (RAM-only verified)",
         "secrets": "PASSED",
-        "supply_chain": "WARNING (ip package vulnerability)"
+        "supply_chain": "PASSED (no ip package present in lockfile)"
     },
-    "vulnerabilities": [
+    "vulnerabilities": [],
+    "fix_verification": [
         {
             "id": "V-2026-001",
-            "package": "ip",
-            "severity": "MODERATE",
-            "cve": "CVE-2023-42282",
-            "description": "Information leakage in ip package",
-            "remediation": "npm update ip",
-            "status": "OPEN"
+            "status": "VERIFIED_FIXED",
+            "evidence": "No occurrences of package name \"ip\" in package-lock.json/package.json at verified commit"
         }
     ],
     "compliance": {

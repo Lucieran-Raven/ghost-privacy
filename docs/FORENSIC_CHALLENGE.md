@@ -89,6 +89,17 @@ Submit:
 
 Security reports should follow the private disclosure process in `SECURITY.md`.
 
+## Verification procedure (maintainers)
+
+To validate a submission, maintainers will:
+
+- Check out the exact commit/tag referenced by the report.
+- Reproduce the session flow as described.
+- Run local verification:
+  - `npm test`
+  - `npm run integrity`
+- Compare recovered plaintext against claimed session messages and timestamps.
+
 ## Notes on claims and limitations
 
 - Ghost makes **scoped** claims: “RAM-only under normal operation” and “best-effort cleanup.”

@@ -52,9 +52,9 @@ All share the same RAM-only core (`src/utils/algorithms/`) — no drift.
 
 | Field | Purpose | Retention |
 |------|--------|----------|
-| `session_id` | Session coordination | Auto-deleted after 30 min |
-| `capability_hash` | Session access control | Deleted with session |
-| `ip_hash` (truncated) | Anti-hijacking | HMAC-SHA256, 16-char only |
+| `session_id` | Session coordination | Expires after 10 min (extendable) |
+| `capability_hash` | Session access control | Rotated on delete, expires with session |
+| `ip_hash` | Rate limiting | HMAC-SHA256, stored in `rate_limits` only |
 
 Pinned in-memory: Partner public-key fingerprints (TOFU) used to detect key changes during the session.
 
@@ -64,7 +64,7 @@ Pinned in-memory: Partner public-key fingerprints (TOFU) used to detect key chan
 
 ### ✅ Protected Against
 - **Forensic message recovery** (RAM-only design)
-- **Session hijacking** (capability + IP binding)
+- **Session hijacking** (unguessable capability token + unguessable channel name)
 - **MITM** (when fingerprints are verified or pinned)
 - **Server compromise** (no plaintext stored)
 - **Legal subpoena** (nothing to disclose)
@@ -78,27 +78,30 @@ Pinned in-memory: Partner public-key fingerprints (TOFU) used to detect key chan
 
 ## 🧾 Key Fixes Implemented
 
-- **Voice encryption**: Removed key export in `voiceEncryption.ts`  
-- **IP binding**: Enforced on `extend-session` and `delete-session`  
+- **Voice encryption**: No key export in `src/utils/algorithms/encryption/voice.ts`  
+- **IP hashing**: HMAC-based IP hashing used for rate limiting (no session IP binding)  
 - **Non-extractable keys**: ECDH shared secrets never leave RAM  
 - **Replay suppression**: Drops duplicate `(senderId, nonce)`  
 - **File transfer hardening**: Caps on chunks, size, metadata  
 - **UI artifact reduction**: Revokes object URLs, clipboard auto-clear  
+- **Build integrity checks**: `npm run integrity` verifies repository integrity inputs prior to release  
 
 ## 🧪 Claim → Enforcement → Tests
 
 ### Capability token required for session access
 - **Frontend**: `src/components/Ghost/SessionCreator.tsx`, `src/utils/algorithms/session/accessCode.ts`  
-- **Backend**: `supabase/functions/validate-session/index.ts`, `extend-session`, `delete-session`  
+- **Backend**: `supabase/functions/validate-session/index.ts`, `supabase/functions/extend-session/index.ts`, `supabase/functions/delete-session/index.ts`  
 - **Tests**: `src/utils/algorithms/session/accessCode.test.ts`
 
 ### Token-derived realtime channels
 - **Implementation**: `src/utils/algorithms/session/realtimeChannel.ts`, `src/lib/realtimeManager.ts`  
 - **Tests**: `src/utils/algorithms/session/realtimeChannel.test.ts`
 
-### IP binding (anti-hijacking)
-- **Shared**: `supabase/functions/_shared/security.ts`  
-- **Enforcement**: `validate-session`, `extend-session`, `delete-session`  
+### IP hashing (rate limiting)
+Ghost currently uses client IP hashing for rate limiting. Session authorization is enforced via the capability token.
+
+- **Shared**: `supabase/functions/_shared/security.ts` → `getClientIpHashHex`  
+- **Enforcement**: `supabase/functions/create-session/index.ts` → rate limiting via `increment_rate_limit`  
 
 ### Desktop CSP hardening
 - **Config**: `src-tauri/tauri.conf.json`

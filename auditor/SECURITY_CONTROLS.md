@@ -30,21 +30,43 @@ Message channels are unguessable without the capability token.
 - `src/utils/algorithms/session/realtimeChannel.test.ts`
 
 ## IP Binding (Anti-Hijacking)
-Session access is bound to the creator’s IP hash. Guest IP is bound on first join.
+Ghost uses client IP hashing for rate limiting. Session authorization is enforced via the capability token.
 
 **Shared primitives**:  
-- `supabase/functions/_shared/security.ts` → `getClientIpHashHex`, `buildSessionIpHashBytea`
+- `supabase/functions/_shared/security.ts` → `getClientIpHashHex`
 
 **Enforcement**:  
-- `supabase/functions/validate-session/index.ts` → enforces host/guest IP hash match  
-- `supabase/functions/extend-session/index.ts` → requires IP hash match  
-- `supabase/functions/delete-session/index.ts` → requires IP hash match
+- `supabase/functions/create-session/index.ts` → calls `increment_rate_limit` with `p_ip_hash`
 
 ## Desktop CSP Hardening
 Tauri desktop app prevents script injection escalation.
 
 **Configuration**:  
 - `src-tauri/tauri.conf.json` → Content Security Policy enabled
+
+## Web CSP Hardening
+Web deployment sets security headers at the edge.
+
+**Configuration**:
+- `netlify.toml` → Content Security Policy + security headers
+
+## Replay Suppression (Realtime)
+Incoming realtime payloads are rejected if they are replays or malformed.
+
+**Implementation**:
+- `src/lib/realtimeManager.ts` → `shouldAcceptIncoming` validates type, nonce, timestamp, size, replay TTL
+
+**Test coverage**:
+- `src/lib/realtimeManager.test.ts`
+
+## Build Integrity Verification
+Build pipelines verify integrity inputs used by security-critical configuration.
+
+**Implementation**:
+- `scripts/verify_integrity.ts` → integrity hash over selected config/security inputs
+
+**CI enforcement**:
+- `.github/workflows/ci.yml` → `npm run integrity`
 
 ## RAM-Only Guarantees
 Messages and keys exist only in memory — never persisted intentionally.
