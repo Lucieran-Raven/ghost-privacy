@@ -40,7 +40,15 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
 
 export function generateNonce(deps: EphemeralCryptoDeps): string {
   const array = deps.getRandomValues(new Uint8Array(16));
-  return arrayBufferToBase64(array.buffer);
+  try {
+    return arrayBufferToBase64(array.buffer);
+  } finally {
+    try {
+      array.fill(0);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export function generateGhostId(deps: EphemeralCryptoDeps): string {
@@ -70,7 +78,15 @@ export function generateGhostId(deps: EphemeralCryptoDeps): string {
   for (let i = 4; i < 8; i++) {
     part2 += getUnbiasedChar(randomBytes[i]);
   }
-  return `GHOST-${part1}-${part2}`;
+  try {
+    return `GHOST-${part1}-${part2}`;
+  } finally {
+    try {
+      randomBytes.fill(0);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export function isValidGhostId(id: string): boolean {
@@ -231,7 +247,15 @@ export async function exportEcdhPublicKeySpkiBase64(deps: EphemeralCryptoDeps, p
 
 export async function importEcdhPublicKeySpkiBase64(deps: EphemeralCryptoDeps, publicKeyBase64: string): Promise<CryptoKey> {
   const keyBuffer = base64ToArrayBuffer(publicKeyBase64);
-  return deps.subtle.importKey('spki', keyBuffer, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  try {
+    return await deps.subtle.importKey('spki', keyBuffer, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  } finally {
+    try {
+      new Uint8Array(keyBuffer).fill(0);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export async function deriveSharedSecretAesGcmKey(

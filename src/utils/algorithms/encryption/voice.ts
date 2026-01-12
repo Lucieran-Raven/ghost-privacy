@@ -35,13 +35,24 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const bytes = base64ToBytes(base64);
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  try {
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  } finally {
+    try {
+      bytes.fill(0);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export function secureZeroBuffer(deps: Pick<VoiceCryptoDeps, 'getRandomValues'>, buffer: ArrayBuffer): void {
   const view = new Uint8Array(buffer);
-  deps.getRandomValues(view);
-  view.fill(0);
+  try {
+    deps.getRandomValues(view);
+  } finally {
+    view.fill(0);
+  }
 }
 
 export async function encryptAudioChunk(
@@ -61,13 +72,17 @@ export async function encryptAudioChunk(
       chunk
     );
 
-    return {
-      encrypted: arrayBufferToBase64(encrypted),
-      iv: arrayBufferToBase64(iv.buffer)
-    };
+    const encryptedB64 = arrayBufferToBase64(encrypted);
+    const ivB64 = arrayBufferToBase64(iv.buffer);
+    return { encrypted: encryptedB64, iv: ivB64 };
   } finally {
     try {
       aad.fill(0);
+    } catch {
+      // Ignore
+    }
+    try {
+      iv.fill(0);
     } catch {
       // Ignore
     }
@@ -91,6 +106,16 @@ export async function decryptAudioChunk(
   } finally {
     try {
       aad.fill(0);
+    } catch {
+      // Ignore
+    }
+    try {
+      iv.fill(0);
+    } catch {
+      // Ignore
+    }
+    try {
+      new Uint8Array(encrypted).fill(0);
     } catch {
       // Ignore
     }
