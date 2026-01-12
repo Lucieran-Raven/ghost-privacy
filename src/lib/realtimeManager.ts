@@ -27,6 +27,7 @@ export class RealtimeManager {
   private outbox: Array<{ payload: BroadcastPayload; retries: number; enqueuedAt: number }> = [];
   private readonly outboxMaxItems = 64;
   private readonly outboxMaxPayloadChars = 200_000;
+  private readonly incomingMaxPayloadChars = 250_000;
   private messageHandlers: Map<string, (payload: BroadcastPayload) => void> = new Map();
   private presenceHandlers: ((participants: string[]) => void)[] = [];
   private statusHandlers: ((state: ConnectionState) => void)[] = [];
@@ -35,6 +36,8 @@ export class RealtimeManager {
   private maxReconnectAttempts = 10; // Increased from 2 to 10 for resilience
   private isDestroyed = false;
   private partnerCount = 0;
+
+  private lastHeartbeat = 0;
 
   private seenIncoming: Map<string, number> = new Map();
   private readonly seenIncomingTtlMs = 10 * 60 * 1000;
@@ -53,10 +56,36 @@ export class RealtimeManager {
 
   private shouldAcceptIncoming(payload: any): payload is BroadcastPayload {
     if (!payload || typeof payload !== 'object') return false;
+    if (
+      payload.type !== 'chat-message' &&
+      payload.type !== 'key-exchange' &&
+      payload.type !== 'presence' &&
+      payload.type !== 'typing' &&
+      payload.type !== 'file' &&
+      payload.type !== 'message-ack' &&
+      payload.type !== 'session-terminated' &&
+      payload.type !== 'voice-message' &&
+      payload.type !== 'video-message'
+    ) {
+      return false;
+    }
     if (typeof payload.senderId !== 'string' || payload.senderId.length === 0) return false;
     if (typeof payload.nonce !== 'string' || payload.nonce.length === 0) return false;
 
+    if (payload.nonce.length > 256) return false;
+    if (payload.nonce.indexOf(' ') !== -1 || payload.nonce.indexOf('\n') !== -1 || payload.nonce.indexOf('\r') !== -1) return false;
+
+    if (typeof payload.timestamp !== 'number' || !Number.isFinite(payload.timestamp)) return false;
     const now = Date.now();
+    if (Math.abs(now - payload.timestamp) > 15 * 60 * 1000) return false;
+
+    try {
+      const approx = this.estimatePayloadChars(payload as BroadcastPayload);
+      if (!Number.isFinite(approx) || approx > this.incomingMaxPayloadChars) return false;
+    } catch {
+      return false;
+    }
+
     const cutoff = now - this.seenIncomingTtlMs;
 
     if (this.seenIncoming.size > 0) {

@@ -13,9 +13,13 @@ function bytesToHex(bytes: Uint8Array): string {
 async function hmacSha256Hex(deps: RealtimeChannelDeps, keyBytes: Uint8Array, message: string): Promise<string> {
   const keyMaterial = new Uint8Array(keyBytes.byteLength);
   keyMaterial.set(keyBytes);
-  const key = await deps.subtle.importKey('raw', keyMaterial, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const sig = await deps.subtle.sign('HMAC', key, new TextEncoder().encode(message));
-  return bytesToHex(new Uint8Array(sig));
+  try {
+    const key = await deps.subtle.importKey('raw', keyMaterial, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const sig = await deps.subtle.sign('HMAC', key, new TextEncoder().encode(message));
+    return bytesToHex(new Uint8Array(sig));
+  } finally {
+    keyMaterial.fill(0);
+  }
 }
 
 export async function deriveRealtimeChannelName(deps: RealtimeChannelDeps, sessionId: string, capabilityToken: string): Promise<string> {
@@ -27,6 +31,7 @@ export async function deriveRealtimeChannelName(deps: RealtimeChannelDeps, sessi
   }
 
   const mac = await hmacSha256Hex(deps, keyBytes, sessionId);
+  keyBytes.fill(0);
   const tag = mac.slice(0, 32);
   return `ghost-session-${sessionId}-${tag}`;
 }

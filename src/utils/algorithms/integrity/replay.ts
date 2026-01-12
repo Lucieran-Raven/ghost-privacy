@@ -16,6 +16,7 @@ export interface MessageMetadata {
 export interface ReplayProtectionConfig {
   maxTimeSkewMs: number;
   nonceRetentionMs: number;
+  maxSequenceGap: number;
 }
 
 export interface ReplayProtectionState {
@@ -31,7 +32,8 @@ export interface ReplayValidationResult {
 
 export const DEFAULT_REPLAY_CONFIG: ReplayProtectionConfig = {
   maxTimeSkewMs: 5 * 60 * 1000,
-  nonceRetentionMs: 30 * 60 * 1000
+  nonceRetentionMs: 30 * 60 * 1000,
+  maxSequenceGap: 32
 };
 
 export function createReplayState(): ReplayProtectionState {
@@ -48,17 +50,39 @@ export function validateMessage(
   now: number,
   config: ReplayProtectionConfig = DEFAULT_REPLAY_CONFIG
 ): { state: ReplayProtectionState; result: ReplayValidationResult } {
-  if (state.seenNonces.has(input.nonce)) {
+  if (!Number.isSafeInteger(input.sequence) || input.sequence <= 0) {
+    return { state, result: { valid: false, reason: 'Invalid sequence' } };
+  }
+  if (!Number.isFinite(input.timestamp)) {
+    return { state, result: { valid: false, reason: 'Invalid timestamp' } };
+  }
+  if (typeof input.nonce !== 'string' || input.nonce.length === 0 || input.nonce.length > 256) {
+    return { state, result: { valid: false, reason: 'Invalid nonce' } };
+  }
+
+  const nonceKey = `${input.sessionId}:${input.nonce}`;
+
+  if (state.seenNonces.has(nonceKey)) {
     return { state, result: { valid: false, reason: 'Duplicate nonce detected - possible replay attack' } };
   }
 
   const lastSeq = state.lastSequence.get(input.sessionId) || 0;
-  if (input.sequence !== lastSeq + 1) {
+  if (input.sequence <= lastSeq) {
     return {
       state,
       result: {
         valid: false,
-        reason: `Sequence gap detected: expected ${lastSeq + 1}, got ${input.sequence}`
+        reason: `Out-of-order/replayed sequence: last ${lastSeq}, got ${input.sequence}`
+      }
+    };
+  }
+
+  if (input.sequence > lastSeq + config.maxSequenceGap) {
+    return {
+      state,
+      result: {
+        valid: false,
+        reason: `Sequence gap too large: last ${lastSeq}, got ${input.sequence}`
       }
     };
   }
@@ -72,9 +96,9 @@ export function validateMessage(
   const lastSequence = new Map(state.lastSequence);
   const nonceMetadata = new Map(state.nonceMetadata);
 
-  seenNonces.add(input.nonce);
+  seenNonces.add(nonceKey);
   lastSequence.set(input.sessionId, input.sequence);
-  nonceMetadata.set(input.nonce, {
+  nonceMetadata.set(nonceKey, {
     nonce: input.nonce,
     sequence: input.sequence,
     timestamp: input.timestamp,
