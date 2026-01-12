@@ -250,8 +250,13 @@ export const getFileIcon = (file: File): string => {
 
 export const sanitizeFileName = (name: string): string => {
   const input = String(name ?? '');
-  const stripped = input
-    .replace(/[\u0000-\u001F\u007F]/g, '')
+  const withoutControlChars = Array.from(input)
+    .filter((ch) => {
+      const code = ch.charCodeAt(0);
+      return !(code <= 0x1f || code === 0x7f);
+    })
+    .join('');
+  const stripped = withoutControlChars
     .replace(/[\\/]/g, '')
     .replace(/[<>:"'&|?*]/g, '')
     .replace(/\.{2,}/g, '.')
