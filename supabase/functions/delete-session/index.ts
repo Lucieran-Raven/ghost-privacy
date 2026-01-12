@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors.ts";
 import {
+  generateCapabilityToken,
   hashCapabilityTokenToBytea,
   jsonError,
 } from "../_shared/security.ts";
@@ -67,9 +68,12 @@ serve(async (req: Request) => {
 
     const revokedExpiryIso = new Date(0).toISOString();
 
+    const rotatedToken = generateCapabilityToken();
+    const rotatedCapabilityHashBytea = await hashCapabilityTokenToBytea(rotatedToken);
+
     const { data: revoked, error: revokeError } = await supabase
       .from('ghost_sessions')
-      .update({ expires_at: revokedExpiryIso, capability_hash: null })
+      .update({ expires_at: revokedExpiryIso, capability_hash: rotatedCapabilityHashBytea })
       .eq('session_id', sessionId)
       .eq('capability_hash', capabilityHashBytea)
       .select('session_id')
