@@ -37,6 +37,10 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders(req, ALLOWED_ORIGINS) });
   }
 
+  if (req.method !== 'POST') {
+    return new Response(null, { status: 405, headers: corsHeaders(req, ALLOWED_ORIGINS) });
+  }
+
   try {
     const supabase = getSupabaseServiceClient();
 

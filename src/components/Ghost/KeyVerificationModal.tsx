@@ -21,7 +21,11 @@ const KeyVerificationModal = ({
   const [copiedRemote, setCopiedRemote] = useState(false);
 
   const copyToClipboard = async (text: string, type: 'local' | 'remote') => {
-    await navigator.clipboard.writeText(text);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      return;
+    }
 
     // Best-effort: clear clipboard shortly after copy to reduce persistence.
     // (User can still paste immediately; this is a strict-mode hygiene measure.)

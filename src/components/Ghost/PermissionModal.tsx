@@ -13,6 +13,10 @@ interface PermissionModalProps {
 }
 
 const PermissionModal = ({ type, isOpen, onClose, onRetry, onFallback }: PermissionModalProps) => {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined' || typeof document === 'undefined') {
+    return null;
+  }
+
   const isCamera = type === 'camera';
   const Icon = isCamera ? Video : Mic;
   const title = isCamera ? 'Camera Access Required' : 'Microphone Access Required';
@@ -156,10 +160,6 @@ const PermissionModal = ({ type, isOpen, onClose, onRetry, onFallback }: Permiss
   };
 
   const instructions = getInstructions();
-
-  if (typeof document === 'undefined') {
-    return null;
-  }
 
   return createPortal(
     <AnimatePresence>
