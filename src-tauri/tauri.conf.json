@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Ghost Privacy",
         "url": "index.html",
         "width": 800,

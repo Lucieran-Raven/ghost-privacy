@@ -7,6 +7,7 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" 
     />
     <meta name="theme-color" content="#ff0a2a" />
+    <meta name="referrer" content="no-referrer" />
     <title>Ghost</title>
     <meta name="description" content="Military-grade encrypted messaging that never existed. End-to-end encryption, zero server knowledge, auto-vanishing messages.">
     <meta name="author" content="Ghost" />
@@ -49,29 +50,5 @@
 
     <!-- GoatCounter: Privacy-respecting analytics for public pages ONLY -->
     <!-- SECURITY: This script is structurally blocked from loading on /session/* routes -->
-    <script>
-      (function() {
-        var analyticsEnabled = false;
-        if (!analyticsEnabled) return;
-
-        // HARD GATE: Prevent analytics in secure contexts
-        var isLocalhost = 
-          location.hostname === "localhost" ||
-          location.hostname === "127.0.0.1" ||
-          location.hostname === "::1";
-        
-        var isSecureRoute = location.pathname.startsWith("/session");
-        
-        // Silent exit - analytics must never exist in secure contexts
-        if (isLocalhost || isSecureRoute) return;
-        
-        // Only inject on public marketing pages
-        var s = document.createElement("script");
-        s.async = true;
-        s.src = "//gc.zgo.at/count.js";
-        s.dataset.goatcounter = "https://ghostprivacy.goatcounter.com/count";
-        document.body.appendChild(s);
-      })();
-    </script>
   </body>
 </html>

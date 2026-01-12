@@ -16,7 +16,15 @@ const APP_SHELL = [
 
 // Install - cache static assets + app shell
 self.addEventListener('install', (event) => {
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil((async () => {
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.addAll(STATIC_ASSETS.map((p) => new Request(p, { cache: 'reload' })));
+    } catch {
+      
+    }
+    await self.skipWaiting();
+  })());
 });
 
 // Activate - clean old caches, take control
@@ -24,12 +32,22 @@ self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     try {
       const cacheNames = await caches.keys();
-      await Promise.all(cacheNames.map((name) => caches.delete(name)));
+      await Promise.all(
+        cacheNames
+          .filter((name) => name.startsWith('ghost-pwa-') && name !== CACHE_NAME)
+          .map((name) => caches.delete(name))
+      );
     } catch {
       
     }
 
     try {
+      try {
+        await self.registration.update();
+      } catch {
+        
+      }
+
       await self.clients.claim();
     } catch {
       
@@ -51,16 +69,51 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   const hasAuth = Boolean(req.headers.get('authorization'));
   const isSupabase = url.hostname.endsWith('.supabase.co');
+  const isSameOrigin = url.origin === self.location.origin;
+  const isStaticAllowlist = isSameOrigin && STATIC_ASSETS.includes(url.pathname);
+  const isHashedAsset = isSameOrigin && url.pathname.startsWith('/assets/');
 
   const isSessionRoute = url.origin === self.location.origin && url.pathname.startsWith('/session');
   const isBundleAsset = url.origin === self.location.origin && url.pathname.startsWith('/assets/') && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname.endsWith('.map'));
 
-  if (hasAuth || isSupabase || req.mode === 'navigate' || isSessionRoute || isBundleAsset) {
+  if (hasAuth || isSupabase) {
     event.respondWith(fetch(new Request(req, { cache: 'no-store' })));
     return;
   }
 
-  event.respondWith(fetch(new Request(req, { cache: 'reload' })));
+  if (!isSameOrigin) {
+    return;
+  }
+
+  if (req.mode === 'navigate' || isSessionRoute || isBundleAsset) {
+    event.respondWith(fetch(new Request(req, { cache: 'no-store' })));
+    return;
+  }
+
+  if (isStaticAllowlist || isHashedAsset) {
+    event.respondWith((async () => {
+      try {
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match(req);
+        if (cached) return cached;
+
+        const res = await fetch(new Request(req, { cache: 'no-store' }));
+        try {
+          if (res && res.ok && res.type === 'basic') {
+            await cache.put(req, res.clone());
+          }
+        } catch {
+          
+        }
+        return res;
+      } catch {
+        return fetch(new Request(req, { cache: 'no-store' }));
+      }
+    })());
+    return;
+  }
+
+  event.respondWith(fetch(new Request(req, { cache: 'no-store' })));
 });
 
 // Handle skip waiting message
