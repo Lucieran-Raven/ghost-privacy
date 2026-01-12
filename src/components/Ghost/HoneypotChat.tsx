@@ -64,8 +64,27 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
   
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const keystrokeLogRef = useRef<string[]>([]);
-  const originalTitle = useRef(document.title);
+  const lastInputLenRef = useRef<number>(0);
+  const originalTitle = useRef(typeof document !== 'undefined' ? document.title : '');
+  const phantomTypingStopRef = useRef<(() => void) | null>(null);
+
+  const MAX_MESSAGES = 500;
+
+  const sanitizeUserContent = (raw: string): string => {
+    const text = typeof raw === 'string' ? raw : String(raw);
+    const trimmed = text.trim().slice(0, 512);
+    if (trimmed.length === 0) return '';
+
+    // Redact obvious secrets/keys while keeping the interaction plausible.
+    if (/password\s*[:=]/i.test(trimmed)) return '[REDACTED]';
+    if (/token\s*[:=]/i.test(trimmed)) return '[REDACTED]';
+    if (/api[_-]?key\s*[:=]/i.test(trimmed)) return '[REDACTED]';
+    if (/bearer\s+[A-Za-z0-9._-]+/i.test(trimmed)) return '[REDACTED]';
+    if (/^[-A-Za-z0-9+/=]{32,}$/.test(trimmed)) return '[REDACTED]';
+    if (/^[0-9a-f]{32,}$/i.test(trimmed)) return '[REDACTED]';
+
+    return trimmed;
+  };
 
   // Initialize trap
   useEffect(() => {
@@ -82,6 +101,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
 
     // Tab title manipulation
     const handleVisibilityChange = () => {
+      if (typeof document === 'undefined') return;
       if (document.hidden) {
         document.title = '⚠️ Session Monitored';
         trapAudio.playFocusNotification();
@@ -90,7 +110,9 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
         trapState.recordTabFocusChange();
       }
     };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
 
     // Check for quarantine periodically
     const quarantineCheck = setInterval(() => {
@@ -103,8 +125,10 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
     }, 30000);
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      document.title = originalTitle.current;
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        document.title = originalTitle.current;
+      }
       clearInterval(quarantineCheck);
     };
   }, [trapType]);
@@ -115,11 +139,14 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
     
     const typingLoop = () => {
       setIsPartnerTyping(true);
-      trapAudio.startPhantomTyping();
+      phantomTypingStopRef.current?.();
+      phantomTypingStopRef.current = trapAudio.startPhantomTyping();
       
       // Stop typing after random duration
       setTimeout(() => {
         setIsPartnerTyping(false);
+        phantomTypingStopRef.current?.();
+        phantomTypingStopRef.current = null;
       }, 3000 + Math.random() * 7000);
     };
 
@@ -128,12 +155,13 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
       if (Math.random() > 0.5) typingLoop();
     }, 15000 + Math.random() * 30000);
 
-    // Initial typing after 10 seconds
     const initial = setTimeout(typingLoop, 10000);
 
     return () => {
       clearInterval(interval);
       clearTimeout(initial);
+      phantomTypingStopRef.current?.();
+      phantomTypingStopRef.current = null;
     };
   }, [isConnecting, isConnectionLost, isDecrypting]);
 
@@ -184,12 +212,15 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
   const startFakeMessages = () => {
     scenario.messages.forEach((msg, index) => {
       setTimeout(() => {
-        setMessages(prev => [...prev, {
-          id: `fake-${index}`,
-          content: msg.content,
-          sender: 'partner',
-          timestamp: Date.now()
-        }]);
+        setMessages(prev => {
+          const next = [...prev, {
+            id: `fake-${index}`,
+            content: msg.content,
+            sender: 'partner' as const,
+            timestamp: Date.now()
+          }];
+          return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next;
+        });
       }, msg.delay);
     });
   };
@@ -198,11 +229,12 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
   const handleInputChange = (value: string) => {
     // Add slight delay to create "capture" feeling
     setTimeout(() => setInputText(value), 30 + Math.random() * 50);
-    
-    if (value.length > keystrokeLogRef.current.join('').length) {
+
+    if (value.length > lastInputLenRef.current) {
       trapState.recordKeystroke();
       trapAudio.playType();
     }
+    lastInputLenRef.current = value.length;
   };
 
   const handleSend = () => {
@@ -210,15 +242,24 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
 
     trapState.recordMessage();
 
+    const safeContent = sanitizeUserContent(inputText);
+    if (!safeContent) {
+      setInputText('');
+      return;
+    }
+
     // Add with "delivered" status
     const newMsg = {
       id: `user-${Date.now()}`,
-      content: inputText,
+      content: safeContent,
       sender: 'me' as const,
       timestamp: Date.now(),
       read: false
     };
-    setMessages(prev => [...prev, newMsg]);
+    setMessages(prev => {
+      const next = [...prev, newMsg];
+      return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next;
+    });
     setInputText('');
     setUserMessageCount(prev => prev + 1);
 
@@ -235,12 +276,15 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
     } else {
       // Fake response
       setTimeout(() => {
-        setMessages(prev => [...prev, {
-          id: `fake-response-${Date.now()}`,
-          content: 'Let me check on that...',
-          sender: 'partner',
-          timestamp: Date.now()
-        }]);
+        setMessages(prev => {
+          const next = [...prev, {
+            id: `fake-response-${Date.now()}`,
+            content: 'Let me check on that...',
+            sender: 'partner' as const,
+            timestamp: Date.now()
+          }];
+          return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next;
+        });
       }, 3000);
     }
   };
@@ -267,12 +311,15 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
       setPaginationPage(prev => prev + 1);
       // Add same fake messages again (infinite loop)
       scenario.messages.forEach((msg, index) => {
-        setMessages(prev => [{
-          id: `old-${paginationPage}-${index}`,
-          content: msg.content,
-          sender: 'partner',
-          timestamp: Date.now() - (paginationPage * 3600000)
-        }, ...prev]);
+        setMessages(prev => {
+          const next = [{
+            id: `old-${paginationPage}-${index}`,
+            content: msg.content,
+            sender: 'partner' as const,
+            timestamp: Date.now() - (paginationPage * 3600000)
+          }, ...prev];
+          return next.length > MAX_MESSAGES ? next.slice(0, MAX_MESSAGES) : next;
+        });
       });
       setIsLoadingMore(false);
     }, 2000 + Math.random() * 2000);

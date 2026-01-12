@@ -179,6 +179,21 @@ const FakeDebugConsole = ({ isOpen, onClose }: FakeDebugConsoleProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const sanitizeCommand = (raw: string): string => {
+    const text = typeof raw === 'string' ? raw : String(raw);
+    const trimmed = text.trim().slice(0, 256);
+    if (trimmed.length === 0) return '';
+
+    if (/password\s*[:=]/i.test(trimmed)) return '[REDACTED]';
+    if (/token\s*[:=]/i.test(trimmed)) return '[REDACTED]';
+    if (/api[_-]?key\s*[:=]/i.test(trimmed)) return '[REDACTED]';
+    if (/bearer\s+[A-Za-z0-9._-]+/i.test(trimmed)) return '[REDACTED]';
+    if (/^[-A-Za-z0-9+/=]{32,}$/.test(trimmed)) return '[REDACTED]';
+    if (/^[0-9a-f]{32,}$/i.test(trimmed)) return '[REDACTED]';
+
+    return trimmed;
+  };
+
   // Auto-scroll and focus
   useEffect(() => {
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
@@ -188,8 +203,10 @@ const FakeDebugConsole = ({ isOpen, onClose }: FakeDebugConsoleProps) => {
   }, [history, isOpen]);
 
   const processCommand = (cmd: string) => {
-    const trimmed = cmd.trim().toLowerCase();
-    trapState.recordCommand(cmd);
+    const safeCmd = sanitizeCommand(cmd);
+    if (!safeCmd) return;
+    const trimmed = safeCmd.trim().toLowerCase();
+    trapState.recordCommand(safeCmd);
     trapAudio.playTick();
 
     if (trimmed === 'clear') {
@@ -228,20 +245,32 @@ const FakeDebugConsole = ({ isOpen, onClose }: FakeDebugConsoleProps) => {
       response = response();
     }
 
-    setHistory(prev => [
-      ...prev,
-      { type: 'input', content: `ghost@prod-01:~$ ${cmd}` },
-      { type: 'output', content: response as string },
-    ]);
+    setHistory(prev => {
+      const next = [
+        ...prev,
+        { type: 'input', content: `ghost@prod-01:~$ ${safeCmd}` },
+        { type: 'output', content: response as string },
+      ];
+      return next.length > 200 ? next.slice(-200) : next;
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
 
-    setCommandHistory(prev => [...prev, input]);
+    const safeCmd = sanitizeCommand(input);
+    if (!safeCmd) {
+      setInput('');
+      return;
+    }
+
+    setCommandHistory(prev => {
+      const next = [...prev, safeCmd];
+      return next.length > 50 ? next.slice(-50) : next;
+    });
     setHistoryIndex(-1);
-    processCommand(input);
+    processCommand(safeCmd);
     setInput('');
   };
 

@@ -137,14 +137,18 @@ const FakeApiDocs = ({ isOpen, onClose }: FakeApiDocsProps) => {
   const [copied, setCopied] = useState<string | null>(null);
 
   const handleCopy = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-
-    setTimeout(() => {
-      try {
-        void navigator.clipboard.writeText('');
-      } catch {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        void navigator.clipboard.writeText(text);
+        setTimeout(() => {
+          try {
+            void navigator.clipboard.writeText('');
+          } catch {
+          }
+        }, 30000);
       }
-    }, 30000);
+    } catch {
+    }
     setCopied(id);
     trapAudio.playTick();
     setTimeout(() => setCopied(null), 2000);

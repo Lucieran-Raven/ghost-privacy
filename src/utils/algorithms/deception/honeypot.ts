@@ -27,6 +27,16 @@ export interface TrapDeps {
   randomInt: (maxExclusive: number) => number;
 }
 
+function clampNonNegativeInt(value: number, max: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  return Math.min(Math.floor(value), max);
+}
+
+function sanitizeShortLabel(input: string, maxLen: number): string {
+  const trimmed = input.trim().slice(0, maxLen);
+  return trimmed;
+}
+
 export function createDefaultTrapState(deps: Pick<TrapDeps, 'now'>): TrapState {
   const now = deps.now();
   return {
@@ -77,17 +87,24 @@ export function recordTwoFactorAttempt(state: TrapState, deps: Pick<TrapDeps, 'n
 
 export function recordCommand(state: TrapState, cmd: string, deps: Pick<TrapDeps, 'now'>): TrapState {
   const now = deps.now();
-  const commandsEntered = [...state.commandsEntered, cmd];
-  const trimmed = commandsEntered.length > 100 ? commandsEntered.slice(-100) : commandsEntered;
+  const safeCmd = sanitizeShortLabel(typeof cmd === 'string' ? cmd : String(cmd), 256);
+  const commandsEntered = [...state.commandsEntered, safeCmd];
+  const trimmed = commandsEntered.length > 50 ? commandsEntered.slice(-50) : commandsEntered;
   return withActivity({ ...state, commandsEntered: trimmed }, now);
 }
 
 export function recordPhantomUser(state: TrapState, username: string, deps: Pick<TrapDeps, 'now'>): TrapState {
-  if (state.phantomUsersShown.includes(username)) {
+  const safeUsername = sanitizeShortLabel(typeof username === 'string' ? username : String(username), 64);
+  if (safeUsername.length === 0) {
+    return state;
+  }
+  if (state.phantomUsersShown.includes(safeUsername)) {
     return state;
   }
   const now = deps.now();
-  return withActivity({ ...state, phantomUsersShown: [...state.phantomUsersShown, username] }, now);
+  const nextList = [...state.phantomUsersShown, safeUsername];
+  const bounded = nextList.length > 100 ? nextList.slice(-100) : nextList;
+  return withActivity({ ...state, phantomUsersShown: bounded }, now);
 }
 
 export function recordTabFocusChange(state: TrapState, deps: Pick<TrapDeps, 'now'>): { state: TrapState; count: number } {
@@ -124,14 +141,20 @@ export function shouldShowAdminPanel(state: TrapState): boolean {
 }
 
 export function shouldQuarantine(state: TrapState, now: number): boolean {
+  if (!Number.isFinite(now) || !Number.isFinite(state.firstAccessTime)) {
+    return true;
+  }
+  if (now < 0 || state.firstAccessTime < 0 || state.firstAccessTime > now) {
+    return true;
+  }
   const timeInTrap = now - state.firstAccessTime;
   const fifteenMinutes = 15 * 60 * 1000;
 
   return (
     state.escalationLevel >= 3 ||
     timeInTrap > fifteenMinutes ||
-    state.reconnectAttempts > 10 ||
-    state.twoFactorAttempts > 20
+    clampNonNegativeInt(state.reconnectAttempts, 1000) > 10 ||
+    clampNonNegativeInt(state.twoFactorAttempts, 10000) > 20
   );
 }
 

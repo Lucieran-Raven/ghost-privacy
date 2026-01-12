@@ -135,24 +135,31 @@ class TrapAudioManager {
 
   // Random typing sounds (not synced to user input)
   startPhantomTyping(): () => void {
+    let running = true;
+    let loopTimeout: ReturnType<typeof setTimeout> | null = null;
+
     const type = () => {
+      if (!running) return;
       this.playType();
       // Random interval between 100-400ms
-      setTimeout(type, 100 + Math.random() * 300);
+      loopTimeout = setTimeout(type, 100 + Math.random() * 300);
     };
-    
-    const timeout = setTimeout(type, Math.random() * 2000);
-    let running = true;
-    
+
+    const startTimeout = setTimeout(type, Math.random() * 2000);
+
     // Stop after random duration (5-15 seconds)
     const stopTimeout = setTimeout(() => {
       running = false;
+      if (loopTimeout) clearTimeout(loopTimeout);
+      loopTimeout = null;
     }, 5000 + Math.random() * 10000);
-    
+
     return () => {
-      clearTimeout(timeout);
-      clearTimeout(stopTimeout);
       running = false;
+      clearTimeout(startTimeout);
+      clearTimeout(stopTimeout);
+      if (loopTimeout) clearTimeout(loopTimeout);
+      loopTimeout = null;
     };
   }
 }

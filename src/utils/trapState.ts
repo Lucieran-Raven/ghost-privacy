@@ -45,6 +45,10 @@ class InMemoryTrapState {
     if (this.cleanupHandlersRegistered) return;
     this.cleanupHandlersRegistered = true;
 
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
     // Nuclear purge on browser close
     window.addEventListener('beforeunload', () => {
       this.nuclearPurge();

@@ -13,6 +13,22 @@ export interface HoneypotCheckResult {
   trapType: 'explicit_trap' | 'dead_session' | 'unknown' | null;
 }
 
+function isReasonableIdentifier(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  if (value.length < 1 || value.length > 128) return false;
+  // Conservative allowlist for client->edge payloads
+  return /^[A-Za-z0-9_-]+$/.test(value) || /^GHOST-[A-Za-z0-9_-]+$/.test(value);
+}
+
+function sanitizeOptionalFingerprint(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length < 8 || trimmed.length > 256) return undefined;
+  // Fingerprints in this app are typically hex/base64-like; avoid sending arbitrary blobs
+  if (!/^[A-Za-z0-9+/=_:-]+$/.test(trimmed)) return undefined;
+  return trimmed;
+}
+
 export class HoneypotService {
   /**
    * Check if a session ID is a honeypot/trap
@@ -27,8 +43,21 @@ export class HoneypotService {
         return { isHoneypot: false, trapType: null };
       }
 
+      // Quick local check for planted honeytokens (avoid network + prevent false negatives)
+      if (this.hasHoneypotPrefix(sessionId)) {
+        return { isHoneypot: true, trapType: 'explicit_trap' };
+      }
+
+      if (!isReasonableIdentifier(sessionId)) {
+        // Avoid sending attacker-controlled large/unexpected strings to the edge function.
+        return { isHoneypot: false, trapType: null };
+      }
+
+      const safeFingerprint = sanitizeOptionalFingerprint(accessorFingerprint);
+
       const { data, error } = await supabase.functions.invoke('detect-honeypot', {
-        body: { sessionId, accessorFingerprint }
+        method: 'POST',
+        body: { sessionId, accessorFingerprint: safeFingerprint }
       });
 
       if (error) {
@@ -36,8 +65,8 @@ export class HoneypotService {
       }
 
       return {
-        isHoneypot: data.isHoneypot === true,
-        trapType: data.trapType || null
+        isHoneypot: (data as any)?.isHoneypot === true,
+        trapType: (data as any)?.trapType || null
       };
     } catch {
       return { isHoneypot: false, trapType: null };
@@ -50,11 +79,22 @@ export class HoneypotService {
    */
   static generateHoneytoken(prefix: 'TRAP' | 'DECOY' = 'TRAP'): string {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let result = `GHOST-${prefix}-`;
-    for (let i = 0; i < 4; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    const bytes = new Uint8Array(12);
+    try {
+      if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+        crypto.getRandomValues(bytes);
+      } else {
+        for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+      }
+    } catch {
+      for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
     }
-    return result;
+
+    let suffix = '';
+    for (let i = 0; i < bytes.length; i++) {
+      suffix += chars[bytes[i] % chars.length];
+    }
+    return `GHOST-${prefix}-${suffix}`;
   }
 
   /**

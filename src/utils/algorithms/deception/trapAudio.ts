@@ -21,10 +21,12 @@ export const MAX_VOLUME = 0.15;
 export const AMBIENT_VOLUME = 0.08;
 
 export function clampVolume(volume: number, max: number = MAX_VOLUME): number {
-  if (Number.isNaN(volume)) return 0;
-  return Math.min(Math.max(volume, 0), max);
+  if (!Number.isFinite(volume) || volume < 0) return 0;
+  const safeMax = Number.isFinite(max) && max > 0 ? max : MAX_VOLUME;
+  return Math.min(Math.max(volume, 0), safeMax);
 }
 
 export function getAudioUri(type: TrapAudioType): string {
-  return AUDIO_DATA[type];
+  const uri = (AUDIO_DATA as Record<string, string>)[type as unknown as string];
+  return typeof uri === 'string' ? uri : AUDIO_DATA.tick;
 }
