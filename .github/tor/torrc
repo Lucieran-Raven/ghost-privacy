@@ -1,5 +1,6 @@
 # Tor configuration for hidden service
 SocksPort 0
+DataDirectory .github/tor/data
 HiddenServiceDir .github/tor/hidden_service
 HiddenServicePort 80 127.0.0.1:8080
 Log notice file .github/tor/tor.log
