@@ -1,7 +1,5 @@
 # Tor configuration for hidden service
 SocksPort 0
-ControlPort 9051
-CookieAuthentication 1
-HiddenServiceDir /home/runner/work/ghost-privacy/ghost-privacy/.github/tor/hidden_service/
+HiddenServiceDir .github/tor/hidden_service
 HiddenServicePort 80 127.0.0.1:8080
-Log notice file /home/runner/work/ghost-privacy/ghost-privacy/.github/tor/tor.log
+Log notice file .github/tor/tor.log
