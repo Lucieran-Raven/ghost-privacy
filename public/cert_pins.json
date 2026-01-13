@@ -1,0 +1,17 @@
+{
+  "expires": "2026-04-13",
+  "domains": {
+    "ghostprivacy.netlify.app": {
+      "pins": [
+        "DFv0rPImhleLzIvctvEusBa5wnzQ/+aSqyW18y26L+s="
+      ],
+      "backupPins": []
+    },
+    "muirdvibzicpedfmqdrf.supabase.co": {
+      "pins": [
+        "p/0tEtQuS5nc34qL4c1JS+XqKizBjtowkWbF6Mw0t9A="
+      ],
+      "backupPins": []
+    }
+  }
+}

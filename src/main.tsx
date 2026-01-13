@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { isTauriRuntime, tauriInvoke } from "@/utils/runtime";
+import { runCertificatePinningCheck } from "@/utils/certPinning";
 
 const enableServiceWorker = import.meta.env.VITE_ENABLE_SERVICE_WORKER === 'true';
 
@@ -96,6 +97,13 @@ if (!isTauriRuntime() && !window.Capacitor) {
 
 // Setup offline detection for native apps
 setupOfflineDetection();
+
+try {
+  setTimeout(() => {
+    void runCertificatePinningCheck();
+  }, 0);
+} catch {
+}
 
 if (isTauriRuntime()) {
   try {

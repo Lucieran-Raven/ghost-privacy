@@ -7,9 +7,11 @@ use aes_gcm::{Aes256Gcm, Key, Nonce};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use hmac::{Hmac, Mac};
-use sha2::Sha256;
+use reqwest::redirect::Policy;
+use sha2::{Digest, Sha256};
 use tauri::RunEvent;
 use tauri_plugin_log::{Target, TargetKind};
+use x509_parser::prelude::X509Certificate;
 use zeroize::{Zeroize, Zeroizing};
 
 static KEY_VAULT: OnceLock<KeyVault> = OnceLock::new();
@@ -140,6 +142,82 @@ fn hmac_sha256_hex(key: &[u8], message: &str) -> Result<String, String> {
   let out = bytes_to_hex(&digest);
   digest.zeroize();
   Ok(out)
+}
+
+#[derive(serde::Deserialize)]
+struct PinningTarget {
+  host: String,
+  pins: Vec<String>,
+}
+
+#[tauri::command]
+async fn verify_cert_pinning(targets: Vec<PinningTarget>) -> Result<serde_json::Value, String> {
+  let client = reqwest::Client::builder()
+    .redirect(Policy::none())
+    .timeout(std::time::Duration::from_secs(7))
+    .tls_info(true)
+    .build()
+    .map_err(|_| "pinning probe init failed".to_string())?;
+
+  let mut results: Vec<serde_json::Value> = Vec::new();
+
+  for t in targets {
+    let host = t.host;
+
+    if host.is_empty() {
+      results.push(serde_json::json!({"host": host, "status": "error"}));
+      continue;
+    }
+
+    if t.pins.is_empty() {
+      results.push(serde_json::json!({"host": host, "status": "skipped"}));
+      continue;
+    }
+
+    let url = format!("https://{}/", host);
+    let resp = match client.get(url).send().await {
+      Ok(r) => r,
+      Err(_) => {
+        results.push(serde_json::json!({"host": host, "status": "error"}));
+        continue;
+      }
+    };
+
+    let tls = match resp.extensions().get::<reqwest::tls::TlsInfo>() {
+      Some(t) => t,
+      None => {
+        results.push(serde_json::json!({"host": host, "status": "error"}));
+        continue;
+      }
+    };
+
+    let leaf_der = match tls.peer_certificate() {
+      Some(b) => b,
+      None => {
+        results.push(serde_json::json!({"host": host, "status": "error"}));
+        continue;
+      }
+    };
+
+    let (_, cert) = match X509Certificate::from_der(leaf_der) {
+      Ok(c) => c,
+      Err(_) => {
+        results.push(serde_json::json!({"host": host, "status": "error"}));
+        continue;
+      }
+    };
+
+    let spki_der = cert.tbs_certificate.subject_pki.raw;
+    let observed_pin = encode_b64(Sha256::digest(spki_der).as_slice());
+    let matched = t.pins.iter().any(|p| p == &observed_pin);
+    results.push(serde_json::json!({
+      "host": host,
+      "observedPin": observed_pin,
+      "status": if matched { "ok" } else { "mismatch" }
+    }));
+  }
+
+  Ok(serde_json::json!({"results": results}))
 }
 
 #[tauri::command]
@@ -348,6 +426,7 @@ pub fn run() {
     })
     .invoke_handler(tauri::generate_handler![
       secure_panic_wipe,
+      verify_cert_pinning,
       vault_set_key,
       vault_encrypt,
       vault_encrypt_utf8,

@@ -17,6 +17,7 @@ public class MainActivity extends BridgeActivity {
     super.onCreate(savedInstanceState);
     try {
       registerPlugin(AppSettingsPlugin.class);
+      registerPlugin(CertPinningPlugin.class);
     } catch (Exception e) {
     }
     hardenWebView();
