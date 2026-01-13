@@ -7,92 +7,93 @@ on:
   push:
     branches: [ main ]
     paths:
-      - '.github/workflows/tor.yml'
+      - '.github/workflows/tor-hidden-service.yml'
       - '.github/tor/**'
 
 jobs:
   deploy-tor:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-    
+      contents: read
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      
-    - name: Setup Tor
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y tor python3-pip
-        pip3 install requests
-        
-    - name: Create Tor directories
-      run: |
-        mkdir -p .github/tor/hidden_service
-        mkdir -p .github/tor/logs
-        chmod 700 .github/tor/hidden_service
-        sudo chown -R debian-tor:debian-tor .github/tor/hidden_service
-        
-    - name: Start Tor service
-      run: |
-        sudo -u debian-tor tor -f .github/tor/torrc &
-        sleep 10
-        
-    - name: Wait for hidden service to be ready
-      run: |
-        timeout 60 bash -c 'until [ -f ".github/tor/hidden_service/hostname" ]; do sleep 1; done'
-        
-    - name: Get .onion address
-      id: onion-address
-      run: |
-        ONION_ADDRESS=$(cat .github/tor/hidden_service/hostname)
-        echo "address=$ONION_ADDRESS" >> $GITHUB_OUTPUT
-        echo "🔐 Tor Hidden Service Address: $ONION_ADDRESS"
-        
-    - name: Start proxy server
-      run: |
-        cd .github/tor
-        python3 proxy.py &
-        sleep 5
-        
-    - name: Test Tor service
-      run: |
-        ONION_ADDRESS=$(cat .github/tor/hidden_service/hostname)
-        echo "Testing connection to $ONION_ADDRESS..."
-        timeout 30 torsocks curl -s --connect-timeout 10 "http://$ONION_ADDRESS/" | head -20 || true
-        
-    - name: Persist Tor keys
-      run: |
-        chmod 600 .github/tor/hidden_service/private_key
-        
-    - name: Commit .onion address if new
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add .github/tor/hidden_service/hostname
-        git add .github/tor/hidden_service/private_key
-        git commit -m "Add Tor hidden service keys for persistent .onion address" || true
-        git push || true
-        
-    - name: Job Summary
-      run: |
-        ONION_ADDRESS="${{ steps.onion-address.outputs.address }}"
-        echo "## 🔐 Tor Hidden Service Deployed" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Your persistent .onion address:**" >> $GITHUB_STEP_SUMMARY
-        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-        echo "$ONION_ADDRESS" >> $GITHUB_STEP_SUMMARY
-        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Access via Tor Browser:**" >> $GITHUB_STEP_SUMMARY
-        echo "1. Download and install Tor Browser" >> $GITHUB_STEP_SUMMARY
-        echo "2. Navigate to: \`$ONION_ADDRESS\`" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Status:** ✅ Service is running and will auto-restart every 55 minutes" >> $GITHUB_STEP_SUMMARY
-        
-    - name: Keep service alive
-      run: |
-        ONION_ADDRESS=$(cat .github/tor/hidden_service/hostname)
-        echo "Tor hidden service is running at: $ONION_ADDRESS"
-        echo "Proxy server is running on port 8080"
-        sleep 3000
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore Tor state (best-effort)
+        uses: actions/cache@v4
+        with:
+          path: |
+            .github/tor/hidden_service
+            .github/tor/data
+          key: tor-hidden-service-v1
+
+      - name: Setup Tor
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tor torsocks python3-pip
+          pip3 install requests
+
+      - name: Prepare Tor directories
+        run: |
+          mkdir -p .github/tor/hidden_service
+          mkdir -p .github/tor/data
+          touch .github/tor/tor.log
+          chmod 700 .github/tor/hidden_service
+          chmod 700 .github/tor/data
+          chmod 600 .github/tor/tor.log
+          if [ -f .github/tor/hidden_service/private_key ]; then chmod 600 .github/tor/hidden_service/private_key; fi
+
+      - name: Verify Tor config
+        run: |
+          tor --verify-config -f .github/tor/torrc
+
+      - name: Start Tor
+        run: |
+          tor -f .github/tor/torrc &
+          sleep 2
+
+      - name: Wait for hostname
+        run: |
+          timeout 180 bash -c 'until [ -f ".github/tor/hidden_service/hostname" ]; do sleep 1; done'
+
+      - name: Show Tor log
+        if: always()
+        run: |
+          echo "--- tor.log ---"
+          cat .github/tor/tor.log || true
+
+      - name: Fail if hostname missing
+        run: |
+          test -f .github/tor/hidden_service/hostname
+
+      - name: Get .onion address
+        id: onion
+        run: |
+          ONION=$(cat .github/tor/hidden_service/hostname)
+          echo "onion=$ONION" >> $GITHUB_OUTPUT
+          echo "Tor Hidden Service Address: $ONION"
+
+      - name: Start proxy
+        run: |
+          python3 .github/tor/proxy.py &
+          sleep 2
+
+      - name: Test via torsocks
+        run: |
+          ONION=$(cat .github/tor/hidden_service/hostname)
+          timeout 30 torsocks curl -s --connect-timeout 10 "http://$ONION/" | head -20 || true
+
+      - name: Job Summary
+        run: |
+          ONION="${{ steps.onion.outputs.onion }}"
+          echo "## Tor Hidden Service" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**.onion address:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "$ONION" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Keep alive (runner limit applies)
+        run: |
+          sleep 3000
