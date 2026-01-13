@@ -8,6 +8,7 @@
  * - No forensic traces on disk
  */
 
+ import { secureZeroUint8Array } from '@/utils/algorithms/memory/zeroization';
  import {
    acknowledgeMessage as acknowledgeMessageAlgorithm,
    addMessage as addMessageAlgorithm,
@@ -21,7 +22,7 @@
 
 export interface QueuedMessage {
   id: string;
-  content: string;
+  content: string | Uint8Array;
   sender: 'me' | 'partner';
   timestamp: number;
   type: 'text' | 'file' | 'system' | 'voice' | 'video';
@@ -35,6 +36,21 @@ export class ClientMessageQueue {
   private pendingAcks: Map<string, (acknowledged: boolean) => void> = new Map();
   private readonly maxMessagesPerSession = 500;
   private destroyed = false;
+
+  private secureZeroContentIfNeeded(message: QueuedMessage): void {
+    if (message.type === 'file') return;
+    if (!(message.content instanceof Uint8Array)) return;
+    try {
+      const crypto = window.crypto;
+      secureZeroUint8Array({ getRandomValues: (arr) => crypto.getRandomValues(arr) }, message.content);
+    } catch {
+      try {
+        message.content.fill(0);
+      } catch {
+        // Ignore
+      }
+    }
+  }
 
   private revokeObjectUrlIfNeeded(message: QueuedMessage): void {
     if (message.type !== 'file') return;
@@ -66,6 +82,7 @@ export class ClientMessageQueue {
       const evicted = existingMessages[0];
       if (evicted) {
         this.revokeObjectUrlIfNeeded(evicted);
+        this.secureZeroContentIfNeeded(evicted);
         evicted.content = '';
         evicted.fileName = undefined;
       }
@@ -133,6 +150,7 @@ export class ClientMessageQueue {
       // Overwrite content before deletion (paranoid mode)
       messages.forEach(msg => {
         this.revokeObjectUrlIfNeeded(msg);
+        this.secureZeroContentIfNeeded(msg);
         msg.content = '';
         msg.fileName = undefined;
       });
@@ -156,6 +174,7 @@ export class ClientMessageQueue {
     this.state.messages.forEach((messages) => {
       messages.forEach(msg => {
         this.revokeObjectUrlIfNeeded(msg);
+        this.secureZeroContentIfNeeded(msg);
         msg.content = '';
         msg.fileName = undefined;
       });

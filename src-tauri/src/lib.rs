@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use aes_gcm::aead::rand_core::RngCore;
@@ -14,7 +15,75 @@ use tauri_plugin_log::{Target, TargetKind};
 use x509_parser::prelude::X509Certificate;
 use zeroize::{Zeroize, Zeroizing};
 
+mod memory_lock {
+  #[derive(Clone, Copy)]
+  pub struct LockError;
+
+  pub struct LockedRegion {
+    ptr: *const u8,
+    len: usize,
+  }
+
+  impl LockedRegion {
+    pub fn lock(ptr: *const u8, len: usize) -> Result<Self, LockError> {
+      if ptr.is_null() || len == 0 {
+        return Err(LockError);
+      }
+      lock_raw(ptr, len)?;
+      Ok(Self { ptr, len })
+    }
+  }
+
+  impl Drop for LockedRegion {
+    fn drop(&mut self) {
+      if self.ptr.is_null() || self.len == 0 {
+        return;
+      }
+      let _ = unlock_raw(self.ptr, self.len);
+    }
+  }
+
+  #[cfg(unix)]
+  fn lock_raw(ptr: *const u8, len: usize) -> Result<(), LockError> {
+    let rc = unsafe { libc::mlock(ptr as *const core::ffi::c_void, len) };
+    if rc == 0 { Ok(()) } else { Err(LockError) }
+  }
+
+  #[cfg(unix)]
+  fn unlock_raw(ptr: *const u8, len: usize) -> Result<(), LockError> {
+    let rc = unsafe { libc::munlock(ptr as *const core::ffi::c_void, len) };
+    if rc == 0 { Ok(()) } else { Err(LockError) }
+  }
+
+  #[cfg(windows)]
+  fn lock_raw(ptr: *const u8, len: usize) -> Result<(), LockError> {
+    let ok = unsafe {
+      windows_sys::Win32::System::Memory::VirtualLock(ptr as *const core::ffi::c_void, len)
+    };
+    if ok != 0 { Ok(()) } else { Err(LockError) }
+  }
+
+  #[cfg(windows)]
+  fn unlock_raw(ptr: *const u8, len: usize) -> Result<(), LockError> {
+    let ok = unsafe {
+      windows_sys::Win32::System::Memory::VirtualUnlock(ptr as *const core::ffi::c_void, len)
+    };
+    if ok != 0 { Ok(()) } else { Err(LockError) }
+  }
+
+  #[cfg(not(any(unix, windows)))]
+  fn lock_raw(_ptr: *const u8, _len: usize) -> Result<(), LockError> {
+    Err(LockError)
+  }
+
+  #[cfg(not(any(unix, windows)))]
+  fn unlock_raw(_ptr: *const u8, _len: usize) -> Result<(), LockError> {
+    Err(LockError)
+  }
+}
+
 static KEY_VAULT: OnceLock<KeyVault> = OnceLock::new();
+static MLOCK_WARNED: AtomicBool = AtomicBool::new(false);
 
 const MAX_SESSION_ID_LEN: usize = 32;
 const MAX_CAPABILITY_TOKEN_LEN: usize = 256;
@@ -23,8 +92,13 @@ const MAX_VAULT_PLAINTEXT_BYTES: usize = 12 * 1024 * 1024;
 const MAX_VAULT_UTF8_BYTES: usize = 256 * 1024;
 const MAX_VAULT_KEYS: usize = 128;
 
+struct LockedKey {
+  key: Zeroizing<Box<[u8; 32]>>,
+  _lock: Option<memory_lock::LockedRegion>,
+}
+
 struct KeyVault {
-  keys: Mutex<HashMap<String, Zeroizing<[u8; 32]>>>,
+  keys: Mutex<HashMap<String, LockedKey>>,
 }
 
 fn validate_session_id(session_id: &str) -> Result<(), String> {
@@ -66,13 +140,32 @@ impl KeyVault {
     if keys.len() >= MAX_VAULT_KEYS && !keys.contains_key(&session_id) {
       return Err("vault full".to_string());
     }
-    keys.insert(session_id, Zeroizing::new(key));
+    let mut boxed = Box::new([0u8; 32]);
+    boxed.copy_from_slice(&key);
+    let key = Zeroizing::new(boxed);
+
+    let lock = match memory_lock::LockedRegion::lock(key.as_ref().as_ptr(), 32) {
+      Ok(l) => Some(l),
+      Err(_) => {
+        #[cfg(debug_assertions)]
+        {
+          if !MLOCK_WARNED.swap(true, Ordering::Relaxed) {
+            eprintln!("[WARN] mlock/VirtualLock failed; running in best-effort mode");
+          }
+        }
+        None
+      }
+    };
+
+    keys.insert(session_id, LockedKey { key, _lock: lock });
     Ok(())
   }
 
-  fn get_key(&self, session_id: &str) -> Option<Zeroizing<[u8; 32]>> {
+  fn with_key<T>(&self, session_id: &str, f: impl FnOnce(&[u8; 32]) -> Result<T, String>) -> Result<T, String> {
     let keys = self.keys.lock().unwrap_or_else(|e| e.into_inner());
-    keys.get(session_id).cloned()
+    let locked = keys.get(session_id).ok_or_else(|| "missing session key".to_string())?;
+    let key_ref: &[u8; 32] = locked.key.as_ref();
+    f(key_ref)
   }
 
   fn purge(&self) {
@@ -251,23 +344,23 @@ fn vault_encrypt(session_id: String, plaintext_base64: String) -> Result<serde_j
   validate_session_id(&session_id)?;
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
-  let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
+  vault.with_key(&session_id, |key_bytes| {
+    let plaintext = Zeroizing::new(decode_b64_limited(&plaintext_base64, MAX_B64_INPUT_LEN, MAX_VAULT_PLAINTEXT_BYTES)?);
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes));
 
-  let plaintext = Zeroizing::new(decode_b64_limited(&plaintext_base64, MAX_B64_INPUT_LEN, MAX_VAULT_PLAINTEXT_BYTES)?);
-  let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes.as_ref()));
+    let mut nonce_bytes = [0u8; 12];
+    OsRng.fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
 
-  let mut nonce_bytes = [0u8; 12];
-  OsRng.fill_bytes(&mut nonce_bytes);
-  let nonce = Nonce::from_slice(&nonce_bytes);
+    let ciphertext = cipher
+      .encrypt(nonce, plaintext.as_ref())
+      .map_err(|_| "encrypt failed".to_string())?;
 
-  let ciphertext = cipher
-    .encrypt(nonce, plaintext.as_ref())
-    .map_err(|_| "encrypt failed".to_string())?;
-
-  Ok(serde_json::json!({
-    "ciphertext": encode_b64(&ciphertext),
-    "iv": encode_b64(&nonce_bytes)
-  }))
+    Ok(serde_json::json!({
+      "ciphertext": encode_b64(&ciphertext),
+      "iv": encode_b64(&nonce_bytes)
+    }))
+  })
 }
 
 #[tauri::command]
@@ -275,28 +368,28 @@ fn vault_encrypt_utf8(session_id: String, plaintext: String) -> Result<serde_jso
   validate_session_id(&session_id)?;
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
-  let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
 
   if plaintext.len() > MAX_VAULT_UTF8_BYTES {
     return Err("plaintext too large".to_string());
   }
 
-  let plaintext = Zeroizing::new(plaintext);
+  vault.with_key(&session_id, |key_bytes| {
+    let plaintext = Zeroizing::new(plaintext);
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes));
 
-  let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes.as_ref()));
+    let mut nonce_bytes = [0u8; 12];
+    OsRng.fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
 
-  let mut nonce_bytes = [0u8; 12];
-  OsRng.fill_bytes(&mut nonce_bytes);
-  let nonce = Nonce::from_slice(&nonce_bytes);
+    let ciphertext = cipher
+      .encrypt(nonce, plaintext.as_bytes())
+      .map_err(|_| "encrypt failed".to_string())?;
 
-  let ciphertext = cipher
-    .encrypt(nonce, plaintext.as_bytes())
-    .map_err(|_| "encrypt failed".to_string())?;
-
-  Ok(serde_json::json!({
-    "ciphertext": encode_b64(&ciphertext),
-    "iv": encode_b64(&nonce_bytes)
-  }))
+    Ok(serde_json::json!({
+      "ciphertext": encode_b64(&ciphertext),
+      "iv": encode_b64(&nonce_bytes)
+    }))
+  })
 }
 
 #[tauri::command]
@@ -304,28 +397,28 @@ fn vault_decrypt(session_id: String, ciphertext_base64: String, iv_base64: Strin
   validate_session_id(&session_id)?;
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
-  let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
-
   if iv_base64.len() > 64 {
     return Err("iv payload too large".to_string());
   }
-  let ciphertext = decode_b64_limited(&ciphertext_base64, MAX_B64_INPUT_LEN, MAX_VAULT_PLAINTEXT_BYTES + 32)?;
-  let iv = decode_b64_limited(&iv_base64, 64, 64)?;
-  if iv.len() != 12 {
-    return Err("iv must be 12 bytes".to_string());
-  }
 
-  let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes.as_ref()));
-  let nonce = Nonce::from_slice(&iv);
+  vault.with_key(&session_id, |key_bytes| {
+    let ciphertext = decode_b64_limited(&ciphertext_base64, MAX_B64_INPUT_LEN, MAX_VAULT_PLAINTEXT_BYTES + 32)?;
+    let iv = decode_b64_limited(&iv_base64, 64, 64)?;
+    if iv.len() != 12 {
+      return Err("iv must be 12 bytes".to_string());
+    }
 
-  let plaintext = Zeroizing::new(
-    cipher
-    .decrypt(nonce, ciphertext.as_ref())
-    .map_err(|_| "decrypt failed".to_string())?
-  );
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes));
+    let nonce = Nonce::from_slice(&iv);
 
-  let out = encode_b64(plaintext.as_ref());
-  Ok(out)
+    let plaintext = Zeroizing::new(
+      cipher
+        .decrypt(nonce, ciphertext.as_ref())
+        .map_err(|_| "decrypt failed".to_string())?,
+    );
+
+    Ok(encode_b64(plaintext.as_ref()))
+  })
 }
 
 #[tauri::command]
@@ -333,30 +426,30 @@ fn vault_decrypt_utf8(session_id: String, ciphertext_base64: String, iv_base64: 
   validate_session_id(&session_id)?;
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
-  let key_bytes = vault.get_key(&session_id).ok_or_else(|| "missing session key".to_string())?;
-
   if iv_base64.len() > 64 {
     return Err("iv payload too large".to_string());
   }
-  let ciphertext = decode_b64_limited(&ciphertext_base64, MAX_B64_INPUT_LEN, MAX_VAULT_PLAINTEXT_BYTES + 32)?;
-  let iv = decode_b64_limited(&iv_base64, 64, 64)?;
-  if iv.len() != 12 {
-    return Err("iv must be 12 bytes".to_string());
-  }
 
-  let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes.as_ref()));
-  let nonce = Nonce::from_slice(&iv);
+  vault.with_key(&session_id, |key_bytes| {
+    let ciphertext = decode_b64_limited(&ciphertext_base64, MAX_B64_INPUT_LEN, MAX_VAULT_PLAINTEXT_BYTES + 32)?;
+    let iv = decode_b64_limited(&iv_base64, 64, 64)?;
+    if iv.len() != 12 {
+      return Err("iv must be 12 bytes".to_string());
+    }
 
-  let plaintext = Zeroizing::new(
-    cipher
-      .decrypt(nonce, ciphertext.as_ref())
-      .map_err(|_| "decrypt failed".to_string())?,
-  );
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes));
+    let nonce = Nonce::from_slice(&iv);
 
-  let out = std::str::from_utf8(plaintext.as_ref())
-    .map_err(|_| "invalid utf-8".to_string())?
-    .to_string();
-  Ok(out)
+    let plaintext = Zeroizing::new(
+      cipher
+        .decrypt(nonce, ciphertext.as_ref())
+        .map_err(|_| "decrypt failed".to_string())?,
+    );
+
+    std::str::from_utf8(plaintext.as_ref())
+      .map_err(|_| "invalid utf-8".to_string())
+      .map(|s| s.to_string())
+  })
 }
 
 #[tauri::command]

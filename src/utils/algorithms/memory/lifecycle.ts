@@ -8,7 +8,7 @@
 
 export interface QueuedMessage {
   id: string;
-  content: string;
+  content: string | Uint8Array;
   sender: 'me' | 'partner';
   timestamp: number;
   type: 'text' | 'file' | 'system' | 'voice' | 'video';
@@ -45,8 +45,9 @@ export function addMessage(
   }
   if (!input.message || typeof input.message !== 'object') return state;
   if (typeof input.message.id !== 'string' || input.message.id.length === 0 || input.message.id.length > 256) return state;
-  if (typeof input.message.content !== 'string') return state;
-  if (input.message.content.length > 250_000) return state;
+  if (!(typeof input.message.content === 'string' || input.message.content instanceof Uint8Array)) return state;
+  if (typeof input.message.content === 'string' && input.message.content.length > 250_000) return state;
+  if (input.message.content instanceof Uint8Array && input.message.content.byteLength > 250_000) return state;
   if (!Number.isFinite(input.message.timestamp) || input.message.timestamp <= 0) return state;
   if (input.message.sender !== 'me' && input.message.sender !== 'partner') return state;
   if (
@@ -128,7 +129,10 @@ export function getMemoryStats(
     return { messageCount: 0, estimatedBytes: 0 };
   }
   const messages = state.messages.get(sessionId) || [];
-  const estimatedBytes = messages.reduce((total, msg) => total + (msg.content?.length || 0) * 2 + 200, 0);
+  const estimatedBytes = messages.reduce((total, msg) => {
+    const contentBytes = typeof msg.content === 'string' ? (msg.content?.length || 0) * 2 : msg.content.byteLength;
+    return total + contentBytes + 200;
+  }, 0);
   return { messageCount: messages.length, estimatedBytes };
 }
 

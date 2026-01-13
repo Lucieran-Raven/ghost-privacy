@@ -13,6 +13,7 @@ import { generatePlausibleTimestamp, isTimestampObfuscationEnabled } from '@/uti
 import { useMemoryCleanup } from '@/hooks/useMemoryCleanup';
 import { isTauriRuntime, tauriInvoke } from '@/utils/runtime';
 import { base64ToBytes, bytesToBase64 } from '@/utils/algorithms/encoding/base64';
+import { secureZeroUint8Array } from '@/utils/algorithms/memory/zeroization';
 import KeyVerificationModal from './KeyVerificationModal';
 import VoiceRecorder from './VoiceRecorder';
 import VoiceMessage from './VoiceMessage';
@@ -703,14 +704,15 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             ? rawType
             : 'text';
 
-          const decrypted = await encryptionEngineRef.current.decryptMessage(
+          const decrypted = await encryptionEngineRef.current.decryptBytes(
             encrypted,
             iv
           );
+          const decryptedBytes = new Uint8Array(decrypted);
 
           messageQueueRef.current.addMessage(sessionId, {
             id: payload.nonce,
-            content: decrypted,
+            content: decryptedBytes,
             sender: 'partner',
             timestamp: payload.timestamp,
             type: safeType,
@@ -950,13 +952,27 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
     try {
       const messageId = generateNonce();
-      const { encrypted, iv } = await encryptionEngineRef.current.encryptMessage(inputText.trim());
+      const trimmed = inputText.trim();
+      const messageBytes = new TextEncoder().encode(trimmed);
+      const encryptBytes = messageBytes.slice();
+      const { encrypted, iv } = await encryptionEngineRef.current.encryptBytes(encryptBytes.buffer);
+
+      try {
+        const crypto = window.crypto;
+        secureZeroUint8Array({ getRandomValues: (arr) => crypto.getRandomValues(arr) }, encryptBytes);
+      } catch {
+        try {
+          encryptBytes.fill(0);
+        } catch {
+          // Ignore
+        }
+      }
 
       const { displayTimestamp } = generatePlausibleTimestamp();
 
       messageQueueRef.current.addMessage(sessionId, {
         id: messageId,
-        content: inputText.trim(),
+        content: messageBytes,
         sender: 'me',
         timestamp: displayTimestamp,
         type: 'text'
@@ -1304,6 +1320,16 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     // 1. Server-side nuclear wipe (atomic)
     const deleted = await SessionService.deleteSession(sessionId);
 
+    // Android native hardening: clear WebView caches immediately on user-initiated session end.
+    try {
+      const mod = await import('@capacitor/core');
+      if (mod.Capacitor?.isNativePlatform?.()) {
+        const WebViewCleanup = mod.registerPlugin('WebViewCleanup') as { clearWebViewData: () => Promise<{ ok: boolean }> };
+        await WebViewCleanup.clearWebViewData();
+      }
+    } catch {
+    }
+
     // 2. Clear all in-memory state
     destroyLocalSessionData();
 
@@ -1441,6 +1467,10 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                     ? voiceMessages.find(vm => vm.id === message.id)
                     : null;
 
+                  const contentText = message.content instanceof Uint8Array
+                    ? new TextDecoder().decode(message.content)
+                    : message.content;
+
                   return (
                     <div
                       key={message.id}
@@ -1451,7 +1481,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                     >
                       {message.type === 'system' ? (
                         <div className="px-4 py-2 rounded-full border border-[rgba(255,10,42,0.14)] bg-black/35 backdrop-blur-md font-mono text-[12px] tracking-[0.12em] text-white/80 max-w-[90%] text-center">
-                          {message.content}
+                          {contentText}
                         </div>
                       ) : message.type === 'voice' && voiceMessage ? (
                         <VoiceMessage
@@ -1472,7 +1502,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                           )}
                         >
                           {message.type === 'file' ? (
-                            message.content.startsWith('data:image') ? (
+                            typeof message.content === 'string' && message.content.startsWith('data:image') ? (
                               <div className="relative group">
                                 <img
                                   src={message.content}
@@ -1484,6 +1514,9 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                                 />
                                 <button
                                   onClick={() => {
+                                    if (typeof message.content !== 'string') {
+                                      return;
+                                    }
                                     if (!(message.content.startsWith('blob:') || message.content.startsWith('data:'))) {
                                       return;
                                     }
@@ -1509,18 +1542,18 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                             ) : (
                               <FilePreviewCard
                                 fileName={message.fileName || 'Unknown File'}
-                                content={message.content}
+                                content={typeof message.content === 'string' ? message.content : ''}
                                 sender={message.sender}
                               />
                             )
-                          ) : message.content.startsWith('https://') ? (
+                          ) : typeof message.content === 'string' && message.content.startsWith('https://') ? (
                             <FilePreviewCard
                               fileName={message.content}
                               content={message.content}
                               sender={message.sender}
                             />
                           ) : (
-                            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                            <p className="whitespace-pre-wrap break-words">{contentText}</p>
                           )}
                           <div className={cn(
                             "text-xs mt-2 opacity-60",

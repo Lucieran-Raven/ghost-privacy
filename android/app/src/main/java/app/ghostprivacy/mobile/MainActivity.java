@@ -18,6 +18,7 @@ public class MainActivity extends BridgeActivity {
     try {
       registerPlugin(AppSettingsPlugin.class);
       registerPlugin(CertPinningPlugin.class);
+      registerPlugin(WebViewCleanupPlugin.class);
     } catch (Exception e) {
     }
     hardenWebView();
@@ -175,7 +176,7 @@ public class MainActivity extends BridgeActivity {
     }
   }
 
-  private void clearWebViewData() {
+  public void clearWebViewData() {
     try {
       WebView webView = null;
       try {

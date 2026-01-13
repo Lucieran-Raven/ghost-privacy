@@ -33,6 +33,12 @@ x509-parser = "0.16"
 
 zeroize = "1.8"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_System_Memory"] }
+
 [profile.release]
 panic = "abort"
 lto = true
