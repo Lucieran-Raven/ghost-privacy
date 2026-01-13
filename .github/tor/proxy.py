@@ -16,6 +16,10 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
             url = urljoin(NETLIFY_URL, self.path)
             headers = dict(self.headers)
             headers['Host'] = 'ghostprivacy.netlify.app'
+            # Avoid brotli/gzip responses that may not be decoded correctly
+            # (Tor Browser will show compressed bytes as gibberish if encoding is stripped)
+            headers.pop('Accept-Encoding', None)
+            headers['Accept-Encoding'] = 'identity'
             
             response = requests.get(url, headers=headers, timeout=10)
             
@@ -40,6 +44,8 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
             url = urljoin(NETLIFY_URL, self.path)
             headers = dict(self.headers)
             headers['Host'] = 'ghostprivacy.netlify.app'
+            headers.pop('Accept-Encoding', None)
+            headers['Accept-Encoding'] = 'identity'
             
             response = requests.post(url, data=post_data, headers=headers, timeout=10)
             
