@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -315,6 +317,36 @@ async fn verify_cert_pinning(targets: Vec<PinningTarget>) -> Result<serde_json::
 }
 
 #[tauri::command]
+fn verify_build_integrity() -> Result<serde_json::Value, String> {
+  let expected = option_env!("GHOST_EXPECTED_TAURI_EXE_SHA256").unwrap_or("");
+  if expected.is_empty() {
+    return Ok(serde_json::json!({"status": "skipped"}));
+  }
+
+  let exe_path = std::env::current_exe().map_err(|_| "exe path unavailable".to_string())?;
+  let mut f = File::open(&exe_path).map_err(|_| "failed to open executable".to_string())?;
+
+  let mut h = Sha256::new();
+  let mut buf = [0u8; 8192];
+  loop {
+    let n = f.read(&mut buf).map_err(|_| "failed to read executable".to_string())?;
+    if n == 0 {
+      break;
+    }
+    h.update(&buf[..n]);
+  }
+
+  let observed = bytes_to_hex(h.finalize().as_slice());
+  let ok = observed.eq_ignore_ascii_case(expected);
+
+  Ok(serde_json::json!({
+    "status": if ok { "verified" } else { "unverified" },
+    "observed": observed,
+    "expected": expected
+  }))
+}
+
+#[tauri::command]
 fn secure_panic_wipe() {
   purge_cleanup_plan();
 }
@@ -521,6 +553,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       secure_panic_wipe,
       verify_cert_pinning,
+      verify_build_integrity,
       vault_set_key,
       vault_encrypt,
       vault_encrypt_utf8,

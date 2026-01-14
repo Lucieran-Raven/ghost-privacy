@@ -3,6 +3,11 @@ apply plugin: 'com.android.application'
 android {
     namespace "app.ghostprivacy.mobile"
     compileSdk rootProject.ext.compileSdkVersion
+
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
         applicationId "app.ghostprivacy.mobile"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -10,6 +15,8 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        def expectedSigningCertSha256 = System.getenv('ANDROID_EXPECTED_SIGNING_CERT_SHA256')
+        buildConfigField "String", "EXPECTED_SIGNING_CERT_SHA256", "\"${expectedSigningCertSha256 ?: ''}\""
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61

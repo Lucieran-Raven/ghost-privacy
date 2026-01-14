@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { checkBuildIntegrity, type BuildIntegrityResult } from '@/utils/buildIntegrity';
 
 type TorStatus = 'unknown' | 'tor' | 'clearnet';
 
@@ -15,10 +16,26 @@ function detectTorLikely(): boolean {
 
 export default function SecurityStatusBar() {
   const [torStatus, setTorStatus] = useState<TorStatus>('unknown');
+  const [buildIntegrity, setBuildIntegrity] = useState<BuildIntegrityResult | null>(null);
 
   useEffect(() => {
     const isTorLikely = detectTorLikely();
     setTorStatus(isTorLikely ? 'tor' : 'unknown');
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const res = await checkBuildIntegrity();
+      if (!alive) return;
+      setBuildIntegrity(res);
+    })().catch(() => {
+      if (!alive) return;
+      setBuildIntegrity({ status: 'error', platform: 'web' });
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const anonymityLine = useMemo(() => {
@@ -85,6 +102,14 @@ export default function SecurityStatusBar() {
             </span>
           </div>
           <div className="hidden md:flex items-center gap-3 text-white/60">
+            {buildIntegrity?.status === 'verified' ? (
+              <span className="text-white/85">SECURITY SEAL</span>
+            ) : buildIntegrity?.status === 'unverified' ? (
+              <span className="text-[#ff0a2a]">UNVERIFIED BUILD</span>
+            ) : null}
+            {buildIntegrity?.status === 'verified' || buildIntegrity?.status === 'unverified' ? (
+              <span className="text-white/20">|</span>
+            ) : null}
             <span>OPERATIONAL INTERFACE</span>
             <span className="text-white/20">|</span>
             <span>v2.0.0</span>

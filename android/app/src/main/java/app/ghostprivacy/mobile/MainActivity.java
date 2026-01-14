@@ -19,6 +19,7 @@ public class MainActivity extends BridgeActivity {
       registerPlugin(AppSettingsPlugin.class);
       registerPlugin(CertPinningPlugin.class);
       registerPlugin(WebViewCleanupPlugin.class);
+      registerPlugin(BuildIntegrityPlugin.class);
     } catch (Exception e) {
     }
     hardenWebView();
