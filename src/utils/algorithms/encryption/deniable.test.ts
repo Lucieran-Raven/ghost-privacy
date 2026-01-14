@@ -9,11 +9,12 @@ describe('deniable.decryptHiddenFile', () => {
       let ctr = 0;
       const deps = {
         subtle: crypto.subtle,
+        allowWeakPbkdf2ForTesting: true,
         pbkdf2Iterations: 5_000,
         getRandomValues: <T extends ArrayBufferView>(arr: T): T => {
           const u8 = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
           for (let i = 0; i < u8.length; i++) {
-            u8[i] = ctr & 0xff;
+            u8[i] = (ctr++ & 0xff);
             ctr = (ctr + 1) >>> 0;
           }
           return arr;
@@ -41,11 +42,12 @@ describe('deniable.decryptHiddenFile', () => {
       let ctr = 0;
       const deps = {
         subtle: crypto.subtle,
+        allowWeakPbkdf2ForTesting: true,
         pbkdf2Iterations: 5_000,
         getRandomValues: <T extends ArrayBufferView>(arr: T): T => {
           const u8 = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
           for (let i = 0; i < u8.length; i++) {
-            u8[i] = ctr & 0xff;
+            u8[i] = (ctr++ & 0xff);
             ctr = (ctr + 1) >>> 0;
           }
           return arr;
@@ -67,11 +69,12 @@ describe('deniable.decryptHiddenFile', () => {
     let ctr = 0;
     const deps = {
       subtle: crypto.subtle,
+      allowWeakPbkdf2ForTesting: true,
       pbkdf2Iterations: 5_000,
       getRandomValues: <T extends ArrayBufferView>(arr: T): T => {
         const u8 = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
         for (let i = 0; i < u8.length; i++) {
-          u8[i] = ctr & 0xff;
+          u8[i] = (ctr++ & 0xff);
           ctr = (ctr + 1) >>> 0;
         }
         return arr;
@@ -87,11 +90,12 @@ describe('deniable.decryptHiddenFile', () => {
     let ctr = 0;
     const deps = {
       subtle: crypto.subtle,
+      allowWeakPbkdf2ForTesting: true,
       pbkdf2Iterations: 5_000,
       getRandomValues: <T extends ArrayBufferView>(arr: T): T => {
         const u8 = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
         for (let i = 0; i < u8.length; i++) {
-          u8[i] = ctr & 0xff;
+          u8[i] = (ctr++ & 0xff);
           ctr = (ctr + 1) >>> 0;
         }
         return arr;

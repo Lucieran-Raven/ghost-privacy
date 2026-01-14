@@ -14,6 +14,7 @@ export interface DeniableCryptoDeps {
   subtle: SubtleCrypto;
   getRandomValues: GetRandomValues;
   pbkdf2Iterations?: number;
+  allowWeakPbkdf2ForTesting?: boolean;
 }
 
 export interface DecryptHiddenVolumeResult {
@@ -22,6 +23,29 @@ export interface DecryptHiddenVolumeResult {
 }
 
 const PBKDF2_ITERATIONS = 600000;
+
+function normalizePbkdf2Iterations(deps: Pick<DeniableCryptoDeps, 'pbkdf2Iterations' | 'allowWeakPbkdf2ForTesting'>): number {
+  const maxIterations = 5_000_000;
+
+  let it = deps.pbkdf2Iterations ?? PBKDF2_ITERATIONS;
+  if (!Number.isFinite(it)) {
+    it = PBKDF2_ITERATIONS;
+  }
+  it = Math.floor(it);
+  if (it <= 0) {
+    it = PBKDF2_ITERATIONS;
+  }
+
+  if (!deps.allowWeakPbkdf2ForTesting && it < PBKDF2_ITERATIONS) {
+    it = PBKDF2_ITERATIONS;
+  }
+
+  if (it > maxIterations) {
+    it = maxIterations;
+  }
+
+  return it;
+}
 
 const SALT_SIZE = 16;
 const IV_SIZE = 12;
@@ -83,7 +107,7 @@ async function deriveKeyFromPassword(
     {
       name: 'PBKDF2',
       salt: saltBuffer,
-      iterations: deps.pbkdf2Iterations ?? PBKDF2_ITERATIONS,
+      iterations: normalizePbkdf2Iterations(deps),
       hash: 'SHA-256'
     },
     keyMaterial,

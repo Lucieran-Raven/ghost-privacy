@@ -603,8 +603,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         }
 
         if (remoteFingerprint) {
-          const senderId = String(payload.senderId || 'partner');
-          const pinKey = `session:${sessionId}:peer:${senderId}`;
+          const pinKey = `session:${sessionId}:peer`;
           const pinRes = checkOrPinFingerprint(pinKey, remoteFingerprint);
           if (pinRes.status === 'mismatch') {
             toast.error('Security alert: partner key changed. Session blocked.');
