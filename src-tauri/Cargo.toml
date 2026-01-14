@@ -37,7 +37,7 @@ zeroize = "1.8"
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.52", features = ["Win32_System_Memory"] }
+windows-sys = { version = "0.61", features = ["Win32_System_Memory", "Win32_Foundation"] }
 
 [profile.release]
 panic = "abort"

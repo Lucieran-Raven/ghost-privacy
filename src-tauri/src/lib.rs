@@ -12,7 +12,7 @@ use reqwest::redirect::Policy;
 use sha2::{Digest, Sha256};
 use tauri::RunEvent;
 use tauri_plugin_log::{Target, TargetKind};
-use x509_parser::prelude::X509Certificate;
+use x509_parser::prelude::{FromDer, X509Certificate};
 use zeroize::{Zeroize, Zeroizing};
 
 mod memory_lock {
@@ -20,7 +20,7 @@ mod memory_lock {
   pub struct LockError;
 
   pub struct LockedRegion {
-    ptr: *const u8,
+    ptr: usize,
     len: usize,
   }
 
@@ -30,16 +30,16 @@ mod memory_lock {
         return Err(LockError);
       }
       lock_raw(ptr, len)?;
-      Ok(Self { ptr, len })
+      Ok(Self { ptr: ptr as usize, len })
     }
   }
 
   impl Drop for LockedRegion {
     fn drop(&mut self) {
-      if self.ptr.is_null() || self.len == 0 {
+      if self.ptr == 0 || self.len == 0 {
         return;
       }
-      let _ = unlock_raw(self.ptr, self.len);
+      let _ = unlock_raw(self.ptr as *const u8, self.len);
     }
   }
 
@@ -93,8 +93,8 @@ const MAX_VAULT_UTF8_BYTES: usize = 256 * 1024;
 const MAX_VAULT_KEYS: usize = 128;
 
 struct LockedKey {
-  key: Zeroizing<Box<[u8; 32]>>,
   _lock: Option<memory_lock::LockedRegion>,
+  key: Box<Zeroizing<[u8; 32]>>,
 }
 
 struct KeyVault {
@@ -140,11 +140,12 @@ impl KeyVault {
     if keys.len() >= MAX_VAULT_KEYS && !keys.contains_key(&session_id) {
       return Err("vault full".to_string());
     }
-    let mut boxed = Box::new([0u8; 32]);
-    boxed.copy_from_slice(&key);
-    let key = Zeroizing::new(boxed);
+    let mut key = key;
+    let key_box: Box<Zeroizing<[u8; 32]>> = Box::new(Zeroizing::new(key));
+    key.zeroize();
 
-    let lock = match memory_lock::LockedRegion::lock(key.as_ref().as_ptr(), 32) {
+    let key_bytes: &[u8; 32] = &*key_box;
+    let lock = match memory_lock::LockedRegion::lock(key_bytes.as_ptr(), 32) {
       Ok(l) => Some(l),
       Err(_) => {
         #[cfg(debug_assertions)]
@@ -157,14 +158,14 @@ impl KeyVault {
       }
     };
 
-    keys.insert(session_id, LockedKey { key, _lock: lock });
+    keys.insert(session_id, LockedKey { _lock: lock, key: key_box });
     Ok(())
   }
 
   fn with_key<T>(&self, session_id: &str, f: impl FnOnce(&[u8; 32]) -> Result<T, String>) -> Result<T, String> {
     let keys = self.keys.lock().unwrap_or_else(|e| e.into_inner());
     let locked = keys.get(session_id).ok_or_else(|| "missing session key".to_string())?;
-    let key_ref: &[u8; 32] = locked.key.as_ref();
+    let key_ref: &[u8; 32] = &*locked.key;
     f(key_ref)
   }
 

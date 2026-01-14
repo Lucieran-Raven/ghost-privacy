@@ -126,7 +126,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-log",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
  "x509-parser",
  "zeroize",
 ]
