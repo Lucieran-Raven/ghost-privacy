@@ -1124,6 +1124,10 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           return;
         }
 
+        // Primary path: chunked file protocol with ACKs (new clients).
+        // Compatibility fallback: legacy clients may not ACK or may not handle `file` events.
+        let legacyPeer = false;
+
         let sent = (await realtimeManagerRef.current?.send('file', {
           kind: 'init',
           fileId: messageId,
@@ -1135,8 +1139,20 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         })) ?? false;
 
         if (sent) {
-          const initAck = await waitForFileAck(`${messageId}:init`, 6000);
-          sent = initAck;
+          const initAck = await waitForFileAck(`${messageId}:init`, 1500);
+          legacyPeer = !initAck;
+        }
+
+        // If the peer is legacy and this fits in one chunk, use the old `chat-message` file path.
+        if (sent && legacyPeer && totalChunks <= 1) {
+          sent = (await realtimeManagerRef.current?.send('chat-message', {
+            encrypted,
+            iv,
+            type: 'file',
+            fileName: sanitizedName,
+            fileType: file.type,
+            messageId
+          })) ?? false;
         }
 
         if (sent) {
@@ -1161,10 +1177,31 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                 continue;
               }
 
-              const ackOk = await waitForFileAck(`${messageId}:${i}`, 6000);
-              if (ackOk) {
+              if (legacyPeer) {
+                // Best-effort for older peers: send a duplicate to reduce drop risk.
+                try {
+                  await new Promise(resolve => setTimeout(resolve, 120));
+                } catch {
+                }
+                await realtimeManagerRef.current?.send('file', {
+                  kind: 'chunk',
+                  fileId: messageId,
+                  index: i,
+                  chunk,
+                  totalChunks,
+                  iv,
+                  fileName: sanitizedName,
+                  fileType: file.type,
+                  timestamp: displayTimestamp
+                });
                 delivered = true;
                 break;
+              } else {
+                const ackOk = await waitForFileAck(`${messageId}:${i}`, 6000);
+                if (ackOk) {
+                  delivered = true;
+                  break;
+                }
               }
             }
 

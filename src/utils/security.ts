@@ -95,7 +95,7 @@ export const validateMessage = (text: string): { valid: boolean; error?: string 
 
 // File validation - EXPANDED for professional document types
 export const FILE_VALIDATION = {
-  MAX_SIZE: 10 * 1024 * 1024, // 10MB
+  MAX_SIZE: 16 * 1024 * 1024, // 16MB
   
   // Allowed file types - expanded for professionals
   ALLOWED_TYPES: [
@@ -142,13 +142,24 @@ export const FILE_VALIDATION = {
   BLOCKED_TYPES: [
     'application/x-msdownload', // .exe
     'application/x-msdos-program',
-    'application/x-sh', // shell scripts
-    'application/x-bat', // batch files
     'application/x-msi', // installer
     'application/x-apple-diskimage', // .dmg
     'application/vnd.android.package-archive', // .apk
     'application/x-elf',
     'application/x-mach-binary'
+  ] as const,
+
+  // Dangerous extensions to block (covers platforms where MIME is empty/unknown)
+  BLOCKED_EXTENSIONS: [
+    'exe', 'com', 'bat', 'cmd', 'msi', 'msp',
+    'apk', 'aab', 'dmg', 'app',
+    'elf'
+  ] as const,
+
+  // Extensions that are allowed but should warn (scripts/macros). Not blocked because users may legitimately share them.
+  WARN_EXTENSIONS: [
+    'ps1', 'psm1', 'vbs', 'js', 'jse', 'wsf',
+    'sh', 'bash', 'zsh', 'fish'
   ] as const,
   
   // User-friendly type names for display
@@ -195,7 +206,7 @@ export const validateFile = (file: File): { valid: boolean; error?: string; warn
       error: `File too large. Maximum size is ${FILE_VALIDATION.MAX_SIZE / 1024 / 1024}MB` 
     };
   }
-  
+
   // Block dangerous types
   if (FILE_VALIDATION.BLOCKED_TYPES.includes(file.type as typeof FILE_VALIDATION.BLOCKED_TYPES[number])) {
     return { 
@@ -203,28 +214,26 @@ export const validateFile = (file: File): { valid: boolean; error?: string; warn
       error: 'This file type is not allowed for security reasons (executable files blocked)' 
     };
   }
-  
-  // Check allowed types
-  const isAllowedType = FILE_VALIDATION.ALLOWED_TYPES.includes(file.type as typeof FILE_VALIDATION.ALLOWED_TYPES[number]);
-  
-  if (isAllowedType) {
-    return { valid: true };
-  }
-  
-  // Fallback: check by extension for files with unknown MIME types
-  const extension = file.name.split('.').pop()?.toLowerCase();
-  if (extension && FILE_VALIDATION.ALLOWED_EXTENSIONS.includes(extension as typeof FILE_VALIDATION.ALLOWED_EXTENSIONS[number])) {
-    return { 
-      valid: true, 
-      warning: 'File type detected by extension. Please ensure this is a safe file.' 
+
+  // Block dangerous extensions (mobile often provides empty/incorrect MIME)
+  const extension = file.name.split('.').pop()?.toLowerCase() || '';
+  if (extension && FILE_VALIDATION.BLOCKED_EXTENSIONS.includes(extension as typeof FILE_VALIDATION.BLOCKED_EXTENSIONS[number])) {
+    return {
+      valid: false,
+      error: 'This file extension is not allowed for security reasons (executable/script blocked)'
     };
   }
-  
-  // Not allowed
-  return { 
-    valid: false, 
-    error: 'File type not supported. Supported: PDF, Word, Excel, PowerPoint, Images, Text files, CSV, ZIP' 
-  };
+
+  if (extension && FILE_VALIDATION.WARN_EXTENSIONS.includes(extension as typeof FILE_VALIDATION.WARN_EXTENSIONS[number])) {
+    return { valid: true, warning: 'This looks like a script file. Do not run it unless you trust the sender.' };
+  }
+
+  // Allow all non-dangerous types. Warn when we cannot confidently identify MIME.
+  if (!file.type || file.type === 'application/octet-stream') {
+    return { valid: true, warning: 'File type could not be detected (mobile limitation). Ensure this file is safe.' };
+  }
+
+  return { valid: true };
 };
 
 // Get user-friendly file type name
