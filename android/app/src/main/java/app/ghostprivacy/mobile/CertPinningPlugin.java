@@ -14,6 +14,8 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 @CapacitorPlugin(name = "CertPinning")
 public class CertPinningPlugin extends Plugin {
@@ -35,16 +37,17 @@ public class CertPinningPlugin extends Plugin {
     JSArray results = new JSArray();
 
     for (int i = 0; i < targets.length(); i++) {
-      JSObject t = targets.getJSObject(i);
-      if (t == null) continue;
+      Object tObj = targets.opt(i);
+      if (!(tObj instanceof JSONObject)) continue;
 
-      String host = t.getString("host", "");
-      JSArray pins = t.getArray("pins");
+      JSONObject t = (JSONObject) tObj;
+      String host = t.optString("host", "");
+      JSONArray pins = t.optJSONArray("pins");
       ArrayList<String> pinList = new ArrayList<>();
       if (pins != null) {
         for (int p = 0; p < pins.length(); p++) {
           try {
-            String pin = pins.getString(p);
+            String pin = pins.optString(p, null);
             if (pin != null && pin.length() > 0) pinList.add(pin);
           } catch (Exception e) {
           }
