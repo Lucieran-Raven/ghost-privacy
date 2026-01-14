@@ -8,6 +8,20 @@ declare const Deno: {
 
 let cachedClient: ReturnType<typeof createClient> | null = null;
 
+function scrubTelemetryHeaders(init?: RequestInit): RequestInit | undefined {
+  if (!init || !init.headers) return init;
+  const h = new Headers(init.headers);
+  h.delete('x-client-info');
+  h.delete('X-Client-Info');
+  h.delete('x-supabase-api-version');
+  h.delete('X-Supabase-Api-Version');
+  return { ...init, headers: h };
+}
+
+const scrubbedFetch: typeof fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  return fetch(input, scrubTelemetryHeaders(init));
+};
+
 export function getSupabaseServiceClient() {
   if (cachedClient) return cachedClient;
 
@@ -17,6 +31,10 @@ export function getSupabaseServiceClient() {
     throw new Error('Missing Supabase service client environment');
   }
 
-  cachedClient = createClient(supabaseUrl, supabaseServiceKey);
+  cachedClient = createClient(supabaseUrl, supabaseServiceKey, {
+    global: {
+      fetch: scrubbedFetch,
+    },
+  });
   return cachedClient;
 }

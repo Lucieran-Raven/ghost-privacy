@@ -59,7 +59,7 @@ export function corsHeaders(req: Request, allowedOrigins?: Set<string>) {
 
   return {
     'Access-Control-Allow-Origin': allowOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-ghost-session-id',
+    'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-ghost-session-id',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Vary': 'Origin'
   };
