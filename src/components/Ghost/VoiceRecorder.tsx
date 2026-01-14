@@ -18,6 +18,7 @@ const VoiceRecorder = ({
   onVoiceMessage,
   disabled,
   voiceVerified,
+  onRequestVerification,
 }: VoiceRecorderProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -52,7 +53,10 @@ const VoiceRecorder = ({
 
   const startRecording = useCallback(async () => {
     if (!voiceVerified) {
-      setShowWarning(true);
+      try {
+        onRequestVerification();
+      } catch {
+      }
       return;
     }
 
@@ -106,7 +110,7 @@ const VoiceRecorder = ({
       
       setIsRecording(false);
     }
-  }, [voiceVerified, sessionKey]);
+  }, [voiceVerified, sessionKey, onRequestVerification]);
 
   const handleStopRecording = useCallback(async (autoSend: boolean = false) => {
     if (!recorderRef.current || !isRecording) return;
@@ -263,7 +267,14 @@ const VoiceRecorder = ({
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = '';
-          if (!file || !voiceVerified || disabled) {
+          if (!file || disabled) {
+            return;
+          }
+          if (!voiceVerified) {
+            try {
+              onRequestVerification();
+            } catch {
+            }
             return;
           }
           if (file.size > MAX_FALLBACK_FILE_BYTES) {

@@ -1600,7 +1600,19 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                 />
 
                 <button
-                  onClick={sendMessage}
+                  onClick={() => {
+                    if (!isKeyExchangeComplete) {
+                      return;
+                    }
+                    if (!verificationState.verified) {
+                      toast.error('Please verify security codes before sending messages');
+                      if (!verificationState.show) {
+                        setVerificationState(prev => ({ ...prev, show: true }));
+                      }
+                      return;
+                    }
+                    sendMessage();
+                  }}
                   disabled={!inputText.trim() || !isKeyExchangeComplete}
                   className="send-button-mobile bg-primary text-primary-foreground flex-shrink-0"
                   aria-label="Send message"
@@ -1618,7 +1630,19 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                   className="hidden"
                 />
                 <button
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    if (!isKeyExchangeComplete) {
+                      return;
+                    }
+                    if (!verificationState.verified) {
+                      toast.error('Please verify security codes before sending files');
+                      if (!verificationState.show) {
+                        setVerificationState(prev => ({ ...prev, show: true }));
+                      }
+                      return;
+                    }
+                    fileInputRef.current?.click();
+                  }}
                   disabled={!isKeyExchangeComplete}
                   className="action-button-mobile border border-border/50 bg-secondary/30"
                   aria-label="Attach file"
