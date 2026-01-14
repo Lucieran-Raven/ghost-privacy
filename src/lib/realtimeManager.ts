@@ -3,13 +3,94 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 import { generateNonce } from '@/utils/encryption';
 import { deriveRealtimeChannelName } from '@/utils/realtimeChannel';
 
+const PADDED_FRAME_TOTAL_CHARS = 1024;
+const PADDED_FRAME_HEADER_CHARS = 6;
+const PADDED_FRAME_PAYLOAD_CHARS = PADDED_FRAME_TOTAL_CHARS - PADDED_FRAME_HEADER_CHARS;
+
+const PADDED_FRAME_MAX_INNER_FRAMES = 256;
+const PADDED_FRAME_BUFFER_TTL_MS = 30 * 1000;
+const PADDED_FRAME_MAX_INFLIGHT = 128;
+
+function encodeUtf8ToBase64(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function decodeBase64ToUtf8(b64: string): string {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+function toFixedLenFrameString(innerJson: string): string {
+  const len = innerJson.length;
+  const lenStr = String(len).padStart(PADDED_FRAME_HEADER_CHARS, '0');
+  if (lenStr.length !== PADDED_FRAME_HEADER_CHARS) {
+    throw new Error('frame header overflow');
+  }
+  if (len > PADDED_FRAME_PAYLOAD_CHARS) {
+    throw new Error('frame payload overflow');
+  }
+
+  const padLen = PADDED_FRAME_PAYLOAD_CHARS - len;
+  if (padLen === 0) {
+    return `${lenStr}${innerJson}`;
+  }
+
+  let pad = '';
+  try {
+    const bytes = new Uint8Array(Math.ceil((padLen * 3) / 4) + 8);
+    crypto.getRandomValues(bytes);
+    pad = btoa(String.fromCharCode(...bytes)).replace(/=+$/g, '');
+  } catch {
+    pad = '0'.repeat(padLen);
+  }
+
+  if (pad.length < padLen) {
+    pad = pad.padEnd(padLen, '0');
+  }
+
+  return `${lenStr}${innerJson}${pad.slice(0, padLen)}`;
+}
+
+function fromFixedLenFrameString(p: string): string | null {
+  if (typeof p !== 'string') return null;
+  if (p.length !== PADDED_FRAME_TOTAL_CHARS) return null;
+  const lenStr = p.slice(0, PADDED_FRAME_HEADER_CHARS);
+  if (!/^[0-9]{6}$/.test(lenStr)) return null;
+  const len = Number.parseInt(lenStr, 10);
+  if (!Number.isFinite(len) || len < 0 || len > PADDED_FRAME_PAYLOAD_CHARS) return null;
+  return p.slice(PADDED_FRAME_HEADER_CHARS, PADDED_FRAME_HEADER_CHARS + len);
+}
+
 export interface BroadcastPayload {
-  type: 'chat-message' | 'key-exchange' | 'presence' | 'typing' | 'file' | 'message-ack' | 'session-terminated' | 'voice-message' | 'video-message';
+  type: BroadcastType;
   senderId: string;
   data: any;
   timestamp: number;
   nonce: string;
 }
+
+export type BroadcastType =
+  | 'chat-message'
+  | 'key-exchange'
+  | 'presence'
+  | 'typing'
+  | 'file'
+  | 'message-ack'
+  | 'session-terminated'
+  | 'voice-message'
+  | 'video-message'
+  | 'padded-frame';
+
+export type PublicBroadcastType = Exclude<BroadcastType, 'padded-frame'>;
 
 export type ConnectionStatus = 'connecting' | 'validating' | 'subscribing' | 'handshaking' | 'connected' | 'reconnecting' | 'disconnected' | 'error';
 
@@ -28,7 +109,7 @@ export class RealtimeManager {
   private readonly outboxMaxItems = 64;
   private readonly outboxMaxPayloadChars = 200_000;
   private readonly incomingMaxPayloadChars = 250_000;
-  private messageHandlers: Map<string, (payload: BroadcastPayload) => void> = new Map();
+  private messageHandlers: Map<PublicBroadcastType, (payload: BroadcastPayload) => void> = new Map();
   private presenceHandlers: ((participants: string[]) => void)[] = [];
   private statusHandlers: ((state: ConnectionState) => void)[] = [];
   private connectionState: ConnectionState = { status: 'connecting', progress: 0 };
@@ -43,6 +124,8 @@ export class RealtimeManager {
   private readonly seenIncomingTtlMs = 10 * 60 * 1000;
   private readonly seenIncomingMaxEntries = 4096;
 
+  private incomingFrames: Map<string, { total: number; chunks: string[]; received: number; updatedAt: number }> = new Map();
+
   constructor(sessionId: string, capabilityToken: string, participantId: string) {
     this.sessionId = sessionId;
     this.capabilityToken = capabilityToken;
@@ -54,7 +137,10 @@ export class RealtimeManager {
     this.statusHandlers.forEach(handler => handler(this.connectionState));
   }
 
-  private shouldAcceptIncoming(payload: any): payload is BroadcastPayload {
+  private shouldAcceptIncoming(
+    payload: any,
+    options?: { allowPaddedFrame?: boolean; skipReplayCheck?: boolean }
+  ): payload is BroadcastPayload {
     if (!payload || typeof payload !== 'object') return false;
     if (
       payload.type !== 'chat-message' &&
@@ -65,8 +151,12 @@ export class RealtimeManager {
       payload.type !== 'message-ack' &&
       payload.type !== 'session-terminated' &&
       payload.type !== 'voice-message' &&
-      payload.type !== 'video-message'
+      payload.type !== 'video-message' &&
+      payload.type !== 'padded-frame'
     ) {
+      return false;
+    }
+    if (payload.type === 'padded-frame' && !options?.allowPaddedFrame) {
       return false;
     }
     if (typeof payload.senderId !== 'string' || payload.senderId.length === 0) return false;
@@ -96,18 +186,20 @@ export class RealtimeManager {
       }
     }
 
-    const key = `${payload.senderId}:${payload.nonce}`;
-    const prev = this.seenIncoming.get(key);
-    if (prev !== undefined && prev >= cutoff) {
-      return false;
-    }
+    if (!options?.skipReplayCheck) {
+      const key = `${payload.senderId}:${payload.nonce}`;
+      const prev = this.seenIncoming.get(key);
+      if (prev !== undefined && prev >= cutoff) {
+        return false;
+      }
 
-    this.seenIncoming.set(key, now);
+      this.seenIncoming.set(key, now);
 
-    while (this.seenIncoming.size > this.seenIncomingMaxEntries) {
-      const firstKey = this.seenIncoming.keys().next().value as string | undefined;
-      if (!firstKey) break;
-      this.seenIncoming.delete(firstKey);
+      while (this.seenIncoming.size > this.seenIncomingMaxEntries) {
+        const firstKey = this.seenIncoming.keys().next().value as string | undefined;
+        if (!firstKey) break;
+        this.seenIncoming.delete(firstKey);
+      }
     }
 
     return true;
@@ -117,6 +209,10 @@ export class RealtimeManager {
     // Avoid JSON.stringify for small, frequent events.
     if (payload.type === 'typing' || payload.type === 'presence' || payload.type === 'message-ack') {
       return 512;
+    }
+
+    if (payload.type === 'padded-frame') {
+      return PADDED_FRAME_TOTAL_CHARS;
     }
 
     // Key exchange payloads can be moderately sized (public key), but not huge.
@@ -183,15 +279,29 @@ export class RealtimeManager {
       return false;
     }
 
+    let frames: BroadcastPayload[];
+    try {
+      frames = this.toPaddedFrames(payload);
+    } catch {
+      return false;
+    }
+
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const result = await this.channel.send({
-          type: 'broadcast',
-          event: 'ghost-message',
-          payload
-        });
+        let ok = true;
+        for (const frame of frames) {
+          const result = await this.channel.send({
+            type: 'broadcast',
+            event: 'ghost-message',
+            payload: frame
+          });
+          if (result !== 'ok') {
+            ok = false;
+            break;
+          }
+        }
 
-        if (result === 'ok') {
+        if (ok) {
           this.lastHeartbeat = Date.now();
           return true;
         }
@@ -205,6 +315,124 @@ export class RealtimeManager {
     }
 
     return false;
+  }
+
+  private cleanupFrameBuffers(now: number): void {
+    const cutoff = now - PADDED_FRAME_BUFFER_TTL_MS;
+    for (const [k, v] of this.incomingFrames) {
+      if (v.updatedAt < cutoff) {
+        this.incomingFrames.delete(k);
+      }
+    }
+
+    while (this.incomingFrames.size > PADDED_FRAME_MAX_INFLIGHT) {
+      const firstKey = this.incomingFrames.keys().next().value as string | undefined;
+      if (!firstKey) break;
+      this.incomingFrames.delete(firstKey);
+    }
+  }
+
+  private toPaddedFrames(inner: BroadcastPayload): BroadcastPayload[] {
+    const innerJson = JSON.stringify(inner);
+    const innerB64 = encodeUtf8ToBase64(innerJson);
+
+    // Conservative chunk sizing so the JSON metadata fits.
+    // All frames will have identical `data.p` length.
+    const maxChunk = 700;
+    const total = Math.max(1, Math.ceil(innerB64.length / maxChunk));
+    if (total > PADDED_FRAME_MAX_INNER_FRAMES) {
+      throw new Error('payload too large');
+    }
+
+    const frames: BroadcastPayload[] = [];
+    for (let seq = 0; seq < total; seq++) {
+      const chunk = innerB64.slice(seq * maxChunk, (seq + 1) * maxChunk);
+      const frameData = {
+        v: 1,
+        mid: inner.nonce,
+        seq,
+        total,
+        chunk
+      };
+      const frameJson = JSON.stringify(frameData);
+      const p = toFixedLenFrameString(frameJson);
+
+      frames.push({
+        type: 'padded-frame',
+        senderId: inner.senderId,
+        data: { p },
+        timestamp: inner.timestamp,
+        nonce: generateNonce()
+      });
+    }
+    return frames;
+  }
+
+  private handleIncomingPaddedFrame(payload: BroadcastPayload): void {
+    const now = Date.now();
+    this.cleanupFrameBuffers(now);
+
+    const p = payload.data && typeof payload.data.p === 'string' ? payload.data.p : null;
+    const frameJson = p ? fromFixedLenFrameString(p) : null;
+    if (!frameJson) return;
+
+    let frame: any;
+    try {
+      frame = JSON.parse(frameJson);
+    } catch {
+      return;
+    }
+
+    if (!frame || frame.v !== 1) return;
+    if (typeof frame.mid !== 'string' || frame.mid.length === 0 || frame.mid.length > 256) return;
+    if (typeof frame.seq !== 'number' || !Number.isFinite(frame.seq)) return;
+    if (typeof frame.total !== 'number' || !Number.isFinite(frame.total)) return;
+    if (frame.total < 1 || frame.total > PADDED_FRAME_MAX_INNER_FRAMES) return;
+    if (frame.seq < 0 || frame.seq >= frame.total) return;
+    if (typeof frame.chunk !== 'string') return;
+    if (frame.chunk.length > 2048) return;
+
+    const key = `${payload.senderId}:${frame.mid}`;
+    let buf = this.incomingFrames.get(key);
+    if (!buf) {
+      buf = { total: frame.total, chunks: new Array(frame.total).fill(''), received: 0, updatedAt: now };
+      this.incomingFrames.set(key, buf);
+    }
+
+    if (buf.total !== frame.total) {
+      this.incomingFrames.delete(key);
+      return;
+    }
+
+    if (!buf.chunks[frame.seq]) {
+      buf.chunks[frame.seq] = frame.chunk;
+      buf.received++;
+    }
+    buf.updatedAt = now;
+
+    if (buf.received !== buf.total) {
+      return;
+    }
+
+    this.incomingFrames.delete(key);
+    const innerB64 = buf.chunks.join('');
+    let innerPayload: any;
+    try {
+      const innerJsonDecoded = decodeBase64ToUtf8(innerB64);
+      innerPayload = JSON.parse(innerJsonDecoded);
+    } catch {
+      return;
+    }
+
+    if (!this.shouldAcceptIncoming(innerPayload, { allowPaddedFrame: false })) {
+      return;
+    }
+
+    const type = innerPayload.type as PublicBroadcastType;
+    const handler = this.messageHandlers.get(type);
+    if (handler) {
+      handler(innerPayload as BroadcastPayload);
+    }
   }
 
   private async flushOutbox(): Promise<void> {
@@ -254,9 +482,18 @@ export class RealtimeManager {
     this.channel.on('broadcast', { event: 'ghost-message' }, ({ payload }) => {
       if (this.isDestroyed) return;
       if (!payload || payload.senderId === this.participantId) return;
-      if (!this.shouldAcceptIncoming(payload)) return;
 
-      const handler = this.messageHandlers.get(payload.type);
+      // Frames are fixed-size; suppress per-frame replay tracking to avoid filling replay cache.
+      if (payload.type === 'padded-frame') {
+        if (!this.shouldAcceptIncoming(payload, { allowPaddedFrame: true, skipReplayCheck: true })) return;
+        this.handleIncomingPaddedFrame(payload as BroadcastPayload);
+        return;
+      }
+
+      if (!this.shouldAcceptIncoming(payload, { allowPaddedFrame: false })) return;
+
+      const type = payload.type as PublicBroadcastType;
+      const handler = this.messageHandlers.get(type);
       if (handler) {
         handler(payload as BroadcastPayload);
       }
@@ -375,7 +612,7 @@ export class RealtimeManager {
     }
   }
 
-  async send(type: BroadcastPayload['type'], data: any, retries = 3): Promise<boolean> {
+  async send(type: PublicBroadcastType, data: any, retries = 3): Promise<boolean> {
     const payload: BroadcastPayload = {
       type,
       senderId: this.participantId,
@@ -396,7 +633,7 @@ export class RealtimeManager {
     return this.enqueuePayload(payload, retries);
   }
 
-  async sendWithAck(type: BroadcastPayload['type'], data: any, ackTimeout = 5000): Promise<{ sent: boolean; messageId: string }> {
+  async sendWithAck(type: PublicBroadcastType, data: any, ackTimeout = 5000): Promise<{ sent: boolean; messageId: string }> {
     const messageId = generateNonce();
     const dataWithId = { ...data, messageId };
     
@@ -405,7 +642,7 @@ export class RealtimeManager {
     return { sent, messageId };
   }
 
-  onMessage(type: BroadcastPayload['type'], handler: (payload: BroadcastPayload) => void): void {
+  onMessage(type: PublicBroadcastType, handler: (payload: BroadcastPayload) => void): void {
     this.messageHandlers.set(type, handler);
   }
 

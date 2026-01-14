@@ -276,7 +276,7 @@ export class DeniableEncryption {
       return null;
     }
 
-    const compact = packedData.replace(/\s+/g, '');
+    const compact = /\s/.test(packedData) ? packedData.replace(/\s+/g, '') : packedData;
     if (compact.length !== expectedLen) {
       return null;
     }

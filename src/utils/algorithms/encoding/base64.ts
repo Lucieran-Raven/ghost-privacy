@@ -37,7 +37,7 @@ export function bytesToBase64(bytes: Uint8Array): string {
 }
 
 export function base64ToBytes(input: string): Uint8Array {
-  const str = input.replace(/\s+/g, '');
+  const str = /\s/.test(input) ? input.replace(/\s+/g, '') : input;
   if (str.length === 0) return new Uint8Array(0);
 
   const padLen = str.endsWith('==') ? 2 : str.endsWith('=') ? 1 : 0;
