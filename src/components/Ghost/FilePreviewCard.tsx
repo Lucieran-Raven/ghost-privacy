@@ -1,7 +1,7 @@
 import { FileText, FileSpreadsheet, FileImage, FileArchive, FileCode, File, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sanitizeFileName, getFileIconType } from '@/utils/security';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 
 interface FilePreviewCardProps {
   fileName: string;
@@ -44,7 +44,6 @@ const FilePreviewCard = ({ fileName, content, sender }: FilePreviewCardProps) =>
   const isVideo = safeName.match(/\.(mp4|webm|mov)$/i);
   const isLink = content.startsWith('https://');
 
-  
   // Estimate file size from base64 content
   const base64Length = content.split(',')[1]?.length || content.length;
   const estimatedSize = content.startsWith('data:') 
@@ -60,7 +59,7 @@ const FilePreviewCard = ({ fileName, content, sender }: FilePreviewCardProps) =>
         ? `${(estimatedSize / 1024).toFixed(1)} KB`
         : `${(estimatedSize / (1024 * 1024)).toFixed(2)} MB`;
   
-  const handleDownload = (e?: React.MouseEvent) => {
+  const handleDownload = (e?: MouseEvent) => {
     if (e) {
       e.stopPropagation();
     }
@@ -71,10 +70,28 @@ const FilePreviewCard = ({ fileName, content, sender }: FilePreviewCardProps) =>
     if (typeof document === 'undefined') {
       return;
     }
+
     const link = document.createElement('a');
     link.href = objectUrl;
     link.download = safeName;
-    link.click();
+    link.rel = 'noopener noreferrer';
+    link.style.display = 'none';
+
+    // Some browsers/WebViews require the link to be in the DOM.
+    document.body.appendChild(link);
+    try {
+      link.click();
+    } catch {
+      try {
+        window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      } catch {
+      }
+    } finally {
+      try {
+        document.body.removeChild(link);
+      } catch {
+      }
+    }
   };
   
   const IconComponent = {

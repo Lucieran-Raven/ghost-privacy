@@ -87,6 +87,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   const inactivityIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
   const fileTransfersRef = useRef<Map<string, { chunks: string[]; received: number; total: number; iv: string; fileName: string; fileType: string; timestamp: number; cleanupTimer: ReturnType<typeof setTimeout> | null }>>(new Map());
+  const pendingFileAcksRef = useRef<Map<string, (ok: boolean) => void>>(new Map());
   const localFingerprintRef = useRef<string>('');
   const isTerminatingRef = useRef(false);
   const verificationShownRef = useRef(false);
@@ -103,6 +104,20 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   };
 
   const MAX_VOICE_MESSAGES = 50;
+
+  const waitForFileAck = (key: string, timeoutMs: number): Promise<boolean> => {
+    return new Promise((resolve) => {
+      pendingFileAcksRef.current.set(key, resolve);
+
+      setTimeout(() => {
+        const resolver = pendingFileAcksRef.current.get(key);
+        if (resolver) {
+          pendingFileAcksRef.current.delete(key);
+          resolver(false);
+        }
+      }, timeoutMs);
+    });
+  };
 
   const purgeFileTransfer = (fileId: string): void => {
     const t = fileTransfersRef.current.get(fileId);
@@ -412,10 +427,39 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
     manager.onMessage('file', async (payload) => {
       try {
+        markActivity();
         if (!encryptionEngineRef.current) return;
 
         const data = payload.data;
         if (!data || !data.fileId || !data.kind) return;
+
+        if (data.kind === 'ack') {
+          const fileId = String(data.fileId || '');
+          if (!fileId) return;
+          const ackKind = String(data.ackKind || '');
+          if (ackKind === 'init') {
+            const resolver = pendingFileAcksRef.current.get(`${fileId}:init`);
+            if (resolver) {
+              pendingFileAcksRef.current.delete(`${fileId}:init`);
+              resolver(true);
+            }
+            return;
+          }
+
+          if (ackKind === 'chunk') {
+            const idx = Number(data.index);
+            if (!Number.isFinite(idx) || idx < 0) return;
+            const k = `${fileId}:${idx}`;
+            const resolver = pendingFileAcksRef.current.get(k);
+            if (resolver) {
+              pendingFileAcksRef.current.delete(k);
+              resolver(true);
+            }
+            return;
+          }
+
+          return;
+        }
 
         if (data.kind === 'init') {
           const MAX_FILE_CHUNKS = 512;
@@ -449,6 +493,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             timestamp: Number(data.timestamp) || payload.timestamp,
             cleanupTimer
           });
+
+          await manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
           return;
         }
 
@@ -487,7 +533,11 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           }
           const idx = Number(data.index);
           if (!Number.isFinite(idx) || idx < 0 || idx >= t.total) return;
-          if (t.chunks[idx]) return;
+
+          if (t.chunks[idx]) {
+            await manager.send('file', { kind: 'ack', ackKind: 'chunk', fileId, index: idx });
+            return;
+          }
 
           const chunk = String(data.chunk || '');
           if (chunk.length === 0 || chunk.length > MAX_CHUNK_CHARS) {
@@ -497,6 +547,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
           t.chunks[idx] = chunk;
           t.received += 1;
+
+          await manager.send('file', { kind: 'ack', ackKind: 'chunk', fileId, index: idx });
 
           if (t.received >= t.total && t.total > 0) {
             const encrypted = t.chunks.join('');
@@ -1072,30 +1124,27 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           return;
         }
 
-        let sent = true;
-        if (totalChunks <= 1) {
-          sent = await realtimeManagerRef.current?.send('chat-message', {
-            encrypted,
-            iv,
-            type: 'file',
-            fileName: sanitizedName,
-            fileType: file.type,
-            messageId
-          }) ?? false;
-        } else {
-          sent = (await realtimeManagerRef.current?.send('file', {
-            kind: 'init',
-            fileId: messageId,
-            fileName: sanitizedName,
-            fileType: file.type,
-            iv,
-            totalChunks,
-            timestamp: displayTimestamp
-          })) ?? false;
+        let sent = (await realtimeManagerRef.current?.send('file', {
+          kind: 'init',
+          fileId: messageId,
+          fileName: sanitizedName,
+          fileType: file.type,
+          iv,
+          totalChunks,
+          timestamp: displayTimestamp
+        })) ?? false;
 
-          if (sent) {
-            for (let i = 0; i < totalChunks; i++) {
-              const chunk = encrypted.slice(i * chunkSize, (i + 1) * chunkSize);
+        if (sent) {
+          const initAck = await waitForFileAck(`${messageId}:init`, 6000);
+          sent = initAck;
+        }
+
+        if (sent) {
+          for (let i = 0; i < totalChunks; i++) {
+            const chunk = encrypted.slice(i * chunkSize, (i + 1) * chunkSize);
+
+            let delivered = false;
+            for (let attempt = 0; attempt < 3; attempt++) {
               const ok = (await realtimeManagerRef.current?.send('file', {
                 kind: 'chunk',
                 fileId: messageId,
@@ -1107,10 +1156,21 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
                 fileType: file.type,
                 timestamp: displayTimestamp
               })) ?? false;
+
               if (!ok) {
-                sent = false;
+                continue;
+              }
+
+              const ackOk = await waitForFileAck(`${messageId}:${i}`, 6000);
+              if (ackOk) {
+                delivered = true;
                 break;
               }
+            }
+
+            if (!delivered) {
+              sent = false;
+              break;
             }
           }
         }
@@ -1180,6 +1240,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     for (const fileId of fileTransfersRef.current.keys()) {
       purgeFileTransfer(fileId);
     }
+
+    pendingFileAcksRef.current.clear();
 
     if (encryptionEngineRef.current) {
       encryptionEngineRef.current = null;
