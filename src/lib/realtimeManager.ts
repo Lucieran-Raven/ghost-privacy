@@ -11,6 +11,8 @@ const PADDED_FRAME_MAX_INNER_FRAMES = 256;
 const PADDED_FRAME_BUFFER_TTL_MS = 30 * 1000;
 const PADDED_FRAME_MAX_INFLIGHT = 128;
 
+const COVER_TRAFFIC_HEARTBEAT_INTERVAL_MS = 30 * 1000;
+
 function encodeUtf8ToBase64(s: string): string {
   const bytes = new TextEncoder().encode(s);
   let binary = '';
@@ -83,6 +85,7 @@ export type BroadcastType =
   | 'key-exchange'
   | 'presence'
   | 'typing'
+  | 'heartbeat'
   | 'file'
   | 'message-ack'
   | 'session-terminated'
@@ -119,6 +122,9 @@ export class RealtimeManager {
   private partnerCount = 0;
 
   private lastHeartbeat = 0;
+  private lastOutboundAt = 0;
+  private coverTrafficTimer: ReturnType<typeof setInterval> | null = null;
+  private coverTrafficInFlight = false;
 
   private seenIncoming: Map<string, number> = new Map();
   private readonly seenIncomingTtlMs = 10 * 60 * 1000;
@@ -147,6 +153,7 @@ export class RealtimeManager {
       payload.type !== 'key-exchange' &&
       payload.type !== 'presence' &&
       payload.type !== 'typing' &&
+      payload.type !== 'heartbeat' &&
       payload.type !== 'file' &&
       payload.type !== 'message-ack' &&
       payload.type !== 'session-terminated' &&
@@ -207,7 +214,7 @@ export class RealtimeManager {
 
   private estimatePayloadChars(payload: BroadcastPayload): number {
     // Avoid JSON.stringify for small, frequent events.
-    if (payload.type === 'typing' || payload.type === 'presence' || payload.type === 'message-ack') {
+    if (payload.type === 'typing' || payload.type === 'presence' || payload.type === 'message-ack' || payload.type === 'heartbeat') {
       return 512;
     }
 
@@ -241,6 +248,9 @@ export class RealtimeManager {
   private shouldQueuePayload(payload: BroadcastPayload): boolean {
     // Never queue termination events.
     if (payload.type === 'session-terminated') return false;
+
+    // Never queue cover-traffic heartbeats.
+    if (payload.type === 'heartbeat') return false;
 
     // Avoid queueing very large payloads in memory (e.g. file/video/voice encrypted blobs).
     const size = this.estimatePayloadChars(payload);
@@ -303,6 +313,7 @@ export class RealtimeManager {
 
         if (ok) {
           this.lastHeartbeat = Date.now();
+          this.lastOutboundAt = this.lastHeartbeat;
           return true;
         }
       } catch {
@@ -315,6 +326,50 @@ export class RealtimeManager {
     }
 
     return false;
+  }
+
+  private startCoverTraffic(): void {
+    if (this.coverTrafficTimer) return;
+
+    // Treat connection time as outbound activity so we don't immediately send a cover ping.
+    if (!this.lastOutboundAt) {
+      this.lastOutboundAt = Date.now();
+    }
+
+    this.coverTrafficTimer = setInterval(() => {
+      if (this.isDestroyed) return;
+      if (!this.channel || this.connectionState.status !== 'connected') return;
+      if (this.coverTrafficInFlight) return;
+
+      const now = Date.now();
+      if (now - this.lastOutboundAt < COVER_TRAFFIC_HEARTBEAT_INTERVAL_MS) return;
+
+      this.coverTrafficInFlight = true;
+      const payload: BroadcastPayload = {
+        type: 'heartbeat',
+        senderId: this.participantId,
+        data: {},
+        timestamp: now,
+        nonce: generateNonce()
+      };
+
+      this.sendNow(payload, 1)
+        .catch(() => {
+        })
+        .finally(() => {
+          this.coverTrafficInFlight = false;
+        });
+    }, 1000);
+  }
+
+  private stopCoverTraffic(): void {
+    if (!this.coverTrafficTimer) return;
+    try {
+      clearInterval(this.coverTrafficTimer);
+    } catch {
+    }
+    this.coverTrafficTimer = null;
+    this.coverTrafficInFlight = false;
   }
 
   private cleanupFrameBuffers(now: number): void {
@@ -456,6 +511,8 @@ export class RealtimeManager {
   async connect(): Promise<void> {
     if (this.isDestroyed) return;
 
+    this.stopCoverTraffic();
+
     const channelName = await deriveRealtimeChannelName(this.sessionId, this.capabilityToken);
     this.updateState('subscribing', 25);
 
@@ -487,6 +544,12 @@ export class RealtimeManager {
       if (payload.type === 'padded-frame') {
         if (!this.shouldAcceptIncoming(payload, { allowPaddedFrame: true, skipReplayCheck: true })) return;
         this.handleIncomingPaddedFrame(payload as BroadcastPayload);
+        return;
+      }
+
+      // Cover traffic: ignore.
+      if (payload.type === 'heartbeat') {
+        if (!this.shouldAcceptIncoming(payload, { allowPaddedFrame: false })) return;
         return;
       }
 
@@ -547,10 +610,14 @@ export class RealtimeManager {
           this.updateState('connected', 100);
           this.reconnectAttempts = 0;
           await this.flushOutbox();
+
+          this.startCoverTraffic();
           
           resolve();
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
           clearTimeout(timeout);
+
+          this.stopCoverTraffic();
           
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
             const delay = Math.max(2000, getBackoffDelay(this.reconnectAttempts));
@@ -666,6 +733,8 @@ export class RealtimeManager {
 
   async disconnect(): Promise<void> {
     this.isDestroyed = true;
+
+    this.stopCoverTraffic();
     this.outbox = [];
     this.seenIncoming.clear();
     this.partnerCount = 0;
