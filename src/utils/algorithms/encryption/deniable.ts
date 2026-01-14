@@ -305,6 +305,21 @@ export class DeniableEncryption {
     const decoyMax = innerRegionOffset - decoyPayloadOffset;
     const realMax = CONTAINER_SIZE_BYTES - realPayloadOffset;
 
+    const dummyIv = new Uint8Array(IV_SIZE);
+    const TIMING_BURN_CIPHERTEXT_BYTES = 512 * 1024 + GCM_TAG_SIZE;
+    const burnLen = Math.max(0, Math.min(TIMING_BURN_CIPHERTEXT_BYTES, Math.min(decoyMax, realMax)));
+
+    const burnDecrypt = async (payloadOffset: number): Promise<void> => {
+      try {
+        const end = payloadOffset + burnLen;
+        if (burnLen <= GCM_TAG_SIZE) return;
+        if (end > container.byteLength) return;
+        const view = container.subarray(payloadOffset, end);
+        await deps.subtle.decrypt({ name: 'AES-GCM', iv: dummyIv }, key, view);
+      } catch {
+      }
+    };
+
     const tryDecryptAt = async (
       headerOffset: number,
       payloadOffset: number,
@@ -343,11 +358,15 @@ export class DeniableEncryption {
         return { content, isDecoy };
       } catch {
         return null;
+      } finally {
+        await burnDecrypt(payloadOffset);
       }
     };
 
-      const inner = await tryDecryptAt(innerHeaderOffset, realPayloadOffset, MAGIC_INNER, false, realMax);
-      const outer = await tryDecryptAt(outerHeaderOffset, decoyPayloadOffset, MAGIC_OUTER, true, decoyMax);
+      const [inner, outer] = await Promise.all([
+        tryDecryptAt(innerHeaderOffset, realPayloadOffset, MAGIC_INNER, false, realMax),
+        tryDecryptAt(outerHeaderOffset, decoyPayloadOffset, MAGIC_OUTER, true, decoyMax)
+      ]);
 
       if (inner) return inner;
       if (outer) return outer;
