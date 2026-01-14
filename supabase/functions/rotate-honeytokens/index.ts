@@ -22,7 +22,7 @@ const ALLOWED_ORIGINS = getAllowedOrigins();
 serve(async (req: Request) => {
   const origin = req.headers.get('origin') || '';
   if (origin && !isAllowedOrigin(origin, ALLOWED_ORIGINS)) {
-    return new Response(null, { status: 403 });
+    return new Response(null, { status: 403, headers: corsHeaders(req, ALLOWED_ORIGINS) });
   }
 
   // Handle CORS preflight
@@ -30,13 +30,13 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders(req, ALLOWED_ORIGINS) });
   }
 
+  if (req.method !== 'POST') {
+    return new Response(null, { status: 405, headers: corsHeaders(req, ALLOWED_ORIGINS) });
+  }
+
   const cronAuthError = requireCronAuth(req, corsHeaders(req, ALLOWED_ORIGINS));
   if (cronAuthError) {
     return cronAuthError;
-  }
-
-  if (req.method !== 'POST') {
-    return new Response(null, { status: 405, headers: corsHeaders(req, ALLOWED_ORIGINS) });
   }
   try {
     // Get today's date for tracking
