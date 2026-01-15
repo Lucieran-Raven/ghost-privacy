@@ -24,6 +24,13 @@ interface SessionKeyData {
     lastAccessedAt: number;
 }
 
+function assertNonExtractableSensitiveKey(key: CryptoKey, label: string): void {
+    if (key.type === 'public') return;
+    if (key.extractable) {
+        throw new Error(`${label} must be non-extractable`);
+    }
+}
+
 class SecureSessionKeyManager {
     // In-memory storage ONLY - never persisted
     private keys: Map<string, SessionKeyData> = new Map();
@@ -78,6 +85,7 @@ class SecureSessionKeyManager {
      * Store encryption key for a session (IN MEMORY ONLY)
      */
     setEncryptionKey(sessionId: string, key: CryptoKey): void {
+        assertNonExtractableSensitiveKey(key, 'encryptionKey');
         const existing = this.keys.get(sessionId) || this.createEmptyKeyData(sessionId);
         existing.encryptionKey = key;
         existing.lastAccessedAt = Date.now();
@@ -100,6 +108,7 @@ class SecureSessionKeyManager {
      * Store ECDH key pair for a session (IN MEMORY ONLY)
      */
     setKeyPair(sessionId: string, keyPair: CryptoKeyPair): void {
+        assertNonExtractableSensitiveKey(keyPair.privateKey, 'keyPair.privateKey');
         const existing = this.keys.get(sessionId) || this.createEmptyKeyData(sessionId);
         existing.keyPair = keyPair;
         existing.lastAccessedAt = Date.now();
