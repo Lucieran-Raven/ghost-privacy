@@ -37,13 +37,32 @@ Ghost is a **browser-native, zero-knowledge messaging platform** where conversat
 ---
 
 
-┌─────────────────────────────────────────────────────┐
-│ CLIENT                                              │
-│ ┌───────────┐   ┌───────────┐   ┌───────────────────┐ │
-│ │ ECDH P-256│──▶│ AES-256 │──▶│ RAM-Only Storage  │ │
-│ │ Key Agree │   │ GCM     │   │ (No Persistence)  │ │
-│ └───────────┘   └───────────┘   └───────────────────┘ │
-└─────────────────────────────────────────────────────┘
+## 🔐 How Ghost Works 
+
+Here’s what happens when you send a message:
+
+1. **On Your Device**  
+   - You type → message encrypted with **AES-256-GCM**  
+   - Key derived from **ECDH P-256** (via Web Crypto API)  
+   - IV generated → unique per message  
+   - All data lives in **RAM only** — no localStorage, no disk writes  
+
+2. **To Supabase**  
+   - Only **ciphertext + metadata** sent (no plaintext, no keys)  
+   - Metadata: `session_id`, `capability_token`, `truncated_ip_hash`  
+   - **Zero message storage** — relayed then forgotten  
+
+3. **On Recipient’s Device**  
+   - Message decrypted using same key  
+   - Displayed → vanishes when session ends  
+   - No history, no logs, no trace  
+
+4. **When You Close**  
+   - `nuclearPurge()` triggers → zeroize keys, clear queues, kill workers  
+   - Session destroyed → **nothing left to find**
+
+> 🧊 **That’s it. No magic. Just math that vanishes.**
+
                           ▼
                 Supabase Edge Functions
                 (Ciphertext Relay Only)
