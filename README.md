@@ -38,20 +38,16 @@ Ghost is a **browser-native, zero-knowledge messaging platform** where conversat
 
 
 ┌─────────────────────────────────────────────────────┐
-│ CLIENT │
-
-│ ┌───────────┐ ┌───────────┐ ┌───────────────────┐ │
-│ │ ECDH P-256│──▶│ AES-256 │──▶│ RAM-Only Storage │ 
-│ │ Key Agree │ │ GCM │ │ (No Persistence) │ │
-│ └───────────┘ └───────────┘ └───────────────────┘ │
-
+│ CLIENT                                              │
+│ ┌───────────┐   ┌───────────┐   ┌───────────────────┐ │
+│ │ ECDH P-256│──▶│ AES-256 │──▶│ RAM-Only Storage  │ │
+│ │ Key Agree │   │ GCM     │   │ (No Persistence)  │ │
+│ └───────────┘   └───────────┘   └───────────────────┘ │
 └─────────────────────────────────────────────────────┘
+                          ▼
+                Supabase Edge Functions
+                (Ciphertext Relay Only)
 
----
-
-▼
-Supabase Edge Functions
-(Ciphertext Relay Only)
 
 
 - **Encryption**: AES-256-GCM + ECDH P-256 via Web Crypto API
