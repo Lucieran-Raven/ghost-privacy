@@ -1,0 +1,8 @@
+# Ignore build outputs and bundled artifacts
+/dist/
+/dist-ssr/
+/node_modules/
+/src-tauri/target/
+/android/**/build/
+/android/.gradle/
+/android/app/src/main/assets/public/
