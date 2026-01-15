@@ -88,4 +88,28 @@ public class BuildIntegrityPlugin extends Plugin {
       call.resolve(ret);
     }
   }
+
+  @PluginMethod
+  public void panicExit(PluginCall call) {
+    try {
+      try {
+        if (getActivity() != null) {
+          getActivity().finishAndRemoveTask();
+        }
+      } catch (Exception ignored) {
+      }
+
+      try {
+        android.os.Process.killProcess(android.os.Process.myPid());
+      } catch (Exception ignored) {
+      }
+
+      try {
+        System.exit(1);
+      } catch (Exception ignored) {
+      }
+    } finally {
+      call.resolve(new JSObject());
+    }
+  }
 }

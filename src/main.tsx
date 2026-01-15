@@ -3,8 +3,11 @@ import App from "./App.tsx";
 import "./index.css";
 import { isTauriRuntime, tauriInvoke } from "@/utils/runtime";
 import { runCertificatePinningCheck } from "@/utils/certPinning";
+import { enforceBuildIntegrityOrExit } from "@/utils/buildIntegrity";
 
 const enableServiceWorker = import.meta.env.VITE_ENABLE_SERVICE_WORKER === 'true';
+
+const bootstrap = () => {
 
 // Offline detection for native apps
 const setupOfflineDetection = () => {
@@ -120,3 +123,13 @@ if (enableServiceWorker && 'serviceWorker' in navigator && !isTauriRuntime() && 
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
+};
+
+void (async () => {
+  try {
+    await enforceBuildIntegrityOrExit();
+  } catch {
+    return;
+  }
+  bootstrap();
+})();

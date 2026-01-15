@@ -61,6 +61,12 @@ Result:
   - as **workflow artifacts**
   - as **GitHub Release assets** for that tag
 
+Integrity notes:
+
+- Release desktop builds must pass runtime integrity verification at startup.
+- Windows builds verify Authenticode and pin the signer certificate SHA-256 embedded at build time.
+- If code signing is missing or does not match at runtime, the app treats the build as untrusted and exits after purging sensitive state.
+
 ## Hosting the installer on your website
 
 You can distribute without the Microsoft Store:

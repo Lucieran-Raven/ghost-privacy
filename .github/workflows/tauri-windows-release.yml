@@ -45,8 +45,17 @@ jobs:
         run: cargo clippy --locked -- -D warnings
         working-directory: src-tauri
 
+      - name: Require Tauri signing cert SHA-256 (integrity anchor)
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace("${{ secrets.TAURI_EXPECTED_SIGNING_CERT_SHA256 }}")) {
+            throw "Missing secrets.TAURI_EXPECTED_SIGNING_CERT_SHA256 (required for release build integrity verification)."
+          }
+
       - name: Build Tauri bundle
         run: npm run tauri:build
+        env:
+          GHOST_EXPECTED_TAURI_SIGNING_CERT_SHA256: ${{ secrets.TAURI_EXPECTED_SIGNING_CERT_SHA256 }}
 
       - name: Collect installers + checksums
         shell: pwsh

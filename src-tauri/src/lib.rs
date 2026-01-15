@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+#[cfg(not(windows))]
 use std::{fs::File, io::Read};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -15,6 +16,24 @@ use tauri::RunEvent;
 use tauri_plugin_log::{Target, TargetKind};
 use x509_parser::prelude::{FromDer, X509Certificate};
 use zeroize::{Zeroize, Zeroizing};
+
+#[cfg(windows)]
+use std::ffi::c_void;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
+#[cfg(windows)]
+use windows_sys::core::GUID;
+#[cfg(windows)]
+use windows_sys::Win32::Security::Cryptography::{
+  CertCloseStore, CertFindCertificateInStore, CertFreeCertificateContext, CryptMsgClose,
+  CryptMsgGetParam, CryptQueryObject, CERT_FIND_SUBJECT_CERT, CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED,
+  CERT_QUERY_FORMAT_FLAG_BINARY, CERT_QUERY_OBJECT_FILE, CMSG_SIGNER_INFO, CMSG_SIGNER_INFO_PARAM, HCERTSTORE,
+};
+#[cfg(windows)]
+use windows_sys::Win32::Security::WinTrust::{
+  WinVerifyTrust, WINTRUST_DATA, WINTRUST_DATA_0, WINTRUST_FILE_INFO, WTD_CHOICE_FILE, WTD_REVOKE_NONE,
+  WTD_STATEACTION_CLOSE, WTD_STATEACTION_VERIFY, WTD_UI_NONE,
+};
 
 mod memory_lock {
   #[derive(Clone, Copy)]
@@ -229,6 +248,185 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
   out
 }
 
+#[cfg(windows)]
+fn to_wide_null(s: &std::path::Path) -> Vec<u16> {
+  let mut v: Vec<u16> = s.as_os_str().encode_wide().collect();
+  v.push(0);
+  v
+}
+
+#[cfg(windows)]
+fn wintrust_action_generic_verify_v2() -> GUID {
+  GUID {
+    data1: 0x00AAC56B,
+    data2: 0xCD44,
+    data3: 0x11D0,
+    data4: [0x8C, 0xC2, 0x00, 0xC0, 0x4F, 0xC2, 0x95, 0xEE],
+  }
+}
+
+#[cfg(windows)]
+fn verify_windows_authenticode_and_get_signer_cert_sha256(exe_path: &std::path::Path) -> Result<String, String> {
+  let exe_wide = to_wide_null(exe_path);
+
+  let mut file_info = WINTRUST_FILE_INFO {
+    cbStruct: std::mem::size_of::<WINTRUST_FILE_INFO>() as u32,
+    pcwszFilePath: exe_wide.as_ptr(),
+    hFile: std::ptr::null_mut(),
+    pgKnownSubject: std::ptr::null_mut(),
+  };
+
+  let action = wintrust_action_generic_verify_v2();
+
+  let mut trust_data: WINTRUST_DATA = unsafe { std::mem::zeroed() };
+  trust_data.cbStruct = std::mem::size_of::<WINTRUST_DATA>() as u32;
+  trust_data.dwUIChoice = WTD_UI_NONE;
+  trust_data.fdwRevocationChecks = WTD_REVOKE_NONE;
+  trust_data.dwUnionChoice = WTD_CHOICE_FILE;
+  trust_data.Anonymous = WINTRUST_DATA_0 { pFile: &mut file_info };
+  trust_data.dwStateAction = WTD_STATEACTION_VERIFY;
+
+  let status = unsafe {
+    WinVerifyTrust(
+      std::ptr::null_mut(),
+      &action as *const GUID as *mut GUID,
+      &mut trust_data as *mut WINTRUST_DATA as *mut c_void,
+    )
+  };
+  if status != 0 {
+    // best-effort close
+    trust_data.dwStateAction = WTD_STATEACTION_CLOSE;
+    unsafe {
+      WinVerifyTrust(
+        std::ptr::null_mut(),
+        &action as *const GUID as *mut GUID,
+        &mut trust_data as *mut WINTRUST_DATA as *mut c_void,
+      );
+    }
+    return Err("authenticode verification failed".to_string());
+  }
+
+  let observed = (|| {
+    let mut encoding: u32 = 0;
+    let mut content_type: u32 = 0;
+    let mut format_type: u32 = 0;
+    let mut store: HCERTSTORE = std::ptr::null_mut();
+    let mut msg: *mut c_void = std::ptr::null_mut();
+    let mut ctx: *mut c_void = std::ptr::null_mut();
+
+    let ok = unsafe {
+      CryptQueryObject(
+        CERT_QUERY_OBJECT_FILE,
+        exe_wide.as_ptr() as *const c_void,
+        CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED,
+        CERT_QUERY_FORMAT_FLAG_BINARY,
+        0,
+        &mut encoding,
+        &mut content_type,
+        &mut format_type,
+        &mut store,
+        &mut msg,
+        &mut ctx,
+      )
+    };
+    if ok == 0 {
+      return Err("CryptQueryObject failed".to_string());
+    }
+
+    let mut signer_info_len: u32 = 0;
+    let ok = unsafe {
+      CryptMsgGetParam(
+        msg,
+        CMSG_SIGNER_INFO_PARAM,
+        0,
+        std::ptr::null_mut(),
+        &mut signer_info_len,
+      )
+    };
+    if ok == 0 || signer_info_len == 0 {
+      unsafe {
+        if !store.is_null() { CertCloseStore(store, 0); }
+        if !msg.is_null() { CryptMsgClose(msg); }
+      }
+      return Err("CryptMsgGetParam size failed".to_string());
+    }
+
+    let mut signer_buf = vec![0u8; signer_info_len as usize];
+    let ok = unsafe {
+      CryptMsgGetParam(
+        msg,
+        CMSG_SIGNER_INFO_PARAM,
+        0,
+        signer_buf.as_mut_ptr() as *mut c_void,
+        &mut signer_info_len,
+      )
+    };
+    if ok == 0 {
+      unsafe {
+        if !store.is_null() { CertCloseStore(store, 0); }
+        if !msg.is_null() { CryptMsgClose(msg); }
+      }
+      return Err("CryptMsgGetParam data failed".to_string());
+    }
+
+    let signer_info = signer_buf.as_ptr() as *const CMSG_SIGNER_INFO;
+    if signer_info.is_null() {
+      unsafe {
+        if !store.is_null() { CertCloseStore(store, 0); }
+        if !msg.is_null() { CryptMsgClose(msg); }
+      }
+      return Err("signer info missing".to_string());
+    }
+
+    let mut cert_info = unsafe { std::mem::zeroed::<windows_sys::Win32::Security::Cryptography::CERT_INFO>() };
+    unsafe {
+      cert_info.Issuer = (*signer_info).Issuer;
+      cert_info.SerialNumber = (*signer_info).SerialNumber;
+    }
+
+    let cert_ctx = unsafe {
+      CertFindCertificateInStore(
+        store,
+        encoding,
+        0,
+        CERT_FIND_SUBJECT_CERT,
+        &cert_info as *const _ as *const c_void,
+        std::ptr::null(),
+      )
+    };
+    if cert_ctx.is_null() {
+      unsafe {
+        if !store.is_null() { CertCloseStore(store, 0); }
+        if !msg.is_null() { CryptMsgClose(msg); }
+      }
+      return Err("signer cert not found".to_string());
+    }
+
+    let bytes = unsafe {
+      std::slice::from_raw_parts((*cert_ctx).pbCertEncoded, (*cert_ctx).cbCertEncoded as usize)
+    };
+    let out = bytes_to_hex(Sha256::digest(bytes).as_slice());
+
+    unsafe {
+      CertFreeCertificateContext(cert_ctx);
+      if !store.is_null() { CertCloseStore(store, 0); }
+      if !msg.is_null() { CryptMsgClose(msg); }
+    }
+    Ok(out)
+  })();
+
+  trust_data.dwStateAction = WTD_STATEACTION_CLOSE;
+  unsafe {
+    WinVerifyTrust(
+      std::ptr::null_mut(),
+      &action as *const GUID as *mut GUID,
+      &mut trust_data as *mut WINTRUST_DATA as *mut c_void,
+    );
+  }
+
+  observed
+}
+
 fn hmac_sha256_hex(key: &[u8], message: &str) -> Result<String, String> {
   type HmacSha256 = Hmac<Sha256>;
   let mut mac = <HmacSha256 as Mac>::new_from_slice(key).map_err(|_| "invalid hmac key".to_string())?;
@@ -317,37 +515,72 @@ async fn verify_cert_pinning(targets: Vec<PinningTarget>) -> Result<serde_json::
 
 #[tauri::command]
 fn verify_build_integrity() -> Result<serde_json::Value, String> {
-  let expected = option_env!("GHOST_EXPECTED_TAURI_EXE_SHA256").unwrap_or("");
-  if expected.is_empty() {
-    return Ok(serde_json::json!({"status": "skipped"}));
-  }
-
-  let exe_path = std::env::current_exe().map_err(|_| "exe path unavailable".to_string())?;
-  let mut f = File::open(&exe_path).map_err(|_| "failed to open executable".to_string())?;
-
-  let mut h = Sha256::new();
-  let mut buf = [0u8; 8192];
-  loop {
-    let n = f.read(&mut buf).map_err(|_| "failed to read executable".to_string())?;
-    if n == 0 {
-      break;
+  #[cfg(windows)]
+  {
+    let expected = option_env!("GHOST_EXPECTED_TAURI_SIGNING_CERT_SHA256").unwrap_or("");
+    if expected.is_empty() {
+      return Ok(serde_json::json!({"status": "error"}));
     }
-    h.update(&buf[..n]);
+
+    let exe_path = std::env::current_exe().map_err(|_| "exe path unavailable".to_string())?;
+    let observed = match verify_windows_authenticode_and_get_signer_cert_sha256(&exe_path) {
+      Ok(v) => v,
+      Err(_) => {
+        return Ok(serde_json::json!({
+          "status": "unverified",
+          "expected": expected
+        }))
+      }
+    };
+
+    let ok = observed.eq_ignore_ascii_case(expected);
+    return Ok(serde_json::json!({
+      "status": if ok { "verified" } else { "unverified" },
+      "observed": observed,
+      "expected": expected
+    }));
   }
 
-  let observed = bytes_to_hex(h.finalize().as_slice());
-  let ok = observed.eq_ignore_ascii_case(expected);
+  #[cfg(not(windows))]
+  {
+    let expected = option_env!("GHOST_EXPECTED_TAURI_EXE_SHA256").unwrap_or("");
+    if expected.is_empty() {
+      return Ok(serde_json::json!({"status": "skipped"}));
+    }
 
-  Ok(serde_json::json!({
-    "status": if ok { "verified" } else { "unverified" },
-    "observed": observed,
-    "expected": expected
-  }))
+    let exe_path = std::env::current_exe().map_err(|_| "exe path unavailable".to_string())?;
+    let mut f = File::open(&exe_path).map_err(|_| "failed to open executable".to_string())?;
+
+    let mut h = Sha256::new();
+    let mut buf = [0u8; 8192];
+    loop {
+      let n = f.read(&mut buf).map_err(|_| "failed to read executable".to_string())?;
+      if n == 0 {
+        break;
+      }
+      h.update(&buf[..n]);
+    }
+
+    let observed = bytes_to_hex(h.finalize().as_slice());
+    let ok = observed.eq_ignore_ascii_case(expected);
+
+    Ok(serde_json::json!({
+      "status": if ok { "verified" } else { "unverified" },
+      "observed": observed,
+      "expected": expected
+    }))
+  }
 }
 
 #[tauri::command]
 fn secure_panic_wipe() {
   purge_cleanup_plan();
+}
+
+#[tauri::command]
+fn secure_panic_exit() {
+  purge_cleanup_plan();
+  std::process::exit(1);
 }
 
 #[tauri::command]
@@ -551,6 +784,7 @@ pub fn run() {
     })
     .invoke_handler(tauri::generate_handler![
       secure_panic_wipe,
+      secure_panic_exit,
       verify_cert_pinning,
       verify_build_integrity,
       vault_set_key,

@@ -2,6 +2,8 @@
 
 This document explains how to verify a downloaded release file matches the published SHA-256 hash.
 
+Release builds also enforce runtime integrity checks. If integrity verification fails at runtime, the app performs a secure purge and exits.
+
 ## What you verify
 
 - **File integrity**: The bytes you downloaded match the expected SHA-256 value.
@@ -44,6 +46,15 @@ Confirm:
 - The **SHA-256** matches exactly
 
 If the hash does not match, do not run the file.
+
+## Runtime integrity verification (release builds)
+
+Release builds must pass build integrity verification at startup.
+
+- Android verifies the APK signing certificate SHA-256 against the expected value embedded at build time.
+- Desktop verifies the installer/app code signature against the expected signer certificate SHA-256 embedded at build time.
+
+If verification is skipped or fails in a release/native build, the app treats the build as untrusted and exits after purging sensitive state.
 
 ## Integrity suite (optional)
 

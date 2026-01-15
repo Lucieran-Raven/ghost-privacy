@@ -57,6 +57,12 @@ Result:
   - as a GitHub Release asset
 - A `.sha256` checksum file is also attached to the release.
 
+Integrity notes:
+
+- Release APKs require an embedded integrity anchor: the expected APK signing certificate SHA-256.
+- CI extracts the signing certificate SHA-256 from the configured release keystore and injects it at build time.
+- If the signing cert hash is missing or does not match at runtime, the app treats the build as untrusted and exits after purging sensitive state.
+
 ## Website distribution (no Play Store)
 
 You can distribute without Google Play:
