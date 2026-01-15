@@ -36,6 +36,7 @@ Ghost is a **browser-native, zero-knowledge messaging platform** where conversat
 
 ---
 
+
 ┌─────────────────────────────────────────────────────┐
 │ CLIENT │
 │ ┌───────────┐ ┌───────────┐ ┌───────────────────┐ │
@@ -43,6 +44,9 @@ Ghost is a **browser-native, zero-knowledge messaging platform** where conversat
 │ │ Key Agree │ │ GCM │ │ (No Persistence) │ │
 │ └───────────┘ └───────────┘ └───────────────────┘ │
 └─────────────────────────────────────────────────────┘
+
+---
+
 ▼
 Supabase Edge Functions
 (Ciphertext Relay Only)
