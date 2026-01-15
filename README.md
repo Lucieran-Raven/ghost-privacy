@@ -3,158 +3,110 @@
 **Private by design. Ephemeral by default.**  
 Available on **Web (PWA)**, **Windows/macOS/Linux (Tauri Desktop)**, and **Android (APK)** — same core, same guarantees.
 
-Access Link : https://ghostprivacy.netlify.app/
+🔗 **Live App**: https://ghostprivacy.netlify.app/  
+📄 **Source Code**: https://github.com/Lucieran-Raven/ghost-privacy  
 
-**Elite Alliance of Minds. Real-World Privacy Solutions.**
-
-Ghost Privacy is born from an unprecedented collaboration between Malaysia's top university talent and the world's leading AI models. We're not building science fiction - we're solving real-world communication privacy challenges through technical excellence and practical security engineering.
-
-> [!IMPORTANT]
-> **Network Anonymity:** Ghost does not hide your IP address by default. For full network anonymity, access this application via **Tor Browser**.
->
-> **Safety Notice:** Ghost is **not designed for active conflict zones** or targeted/state-level adversaries. Read the full threat model in **SECURITY.md**.
+> [!IMPORTANT]  
+> **Network Anonymity**: Ghost does **not hide your IP address** by default. For full network anonymity, access via **Tor Browser**.  
+> **Safety Notice**: Ghost is **not designed for active conflict zones** or targeted/state-level adversaries. Read the full threat model in [`SECURITY.md`](SECURITY.md).
 
 ---
 
-## 🌟 The Ghost Alliance
+## What Ghost Is
 
-### 🎓 Academic Excellence
-Our core team represents the brightest minds from Malaysia's premier institutions:
+Ghost is a **browser-native, zero-knowledge messaging platform** where conversations exist **only in RAM** and vanish when you're done. Built for lawyers, doctors, journalists, activists, and anyone who believes some words should never persist.
 
-**Asia Pacific University (APU)** – Core frontend & cryptographic logic
-**Sunway University** – Progressive Web App architecture & user experience
-**Taylor's University** – Security audits & session protocol engineering
-**UNITEN** – Founder & system architecture (Lucieran Raven)
+### Core Guarantees
+- **End-to-end encryption** — AES-256-GCM + ECDH P-256 (Web Crypto API)
+- **RAM-only storage** — No localStorage, no IndexedDB, no disk writes
+- **Zero accounts** — No phone numbers, no emails, no identity correlation
+- **Automatic expiration** — Sessions self-destruct; no recovery possible
+- **Open source** — Full codebase available for audit
 
-### 🤖 AI-Powered Development
-We leverage 5 leading AI models as co-creators in our development process:
+### What Ghost Does NOT Do
+| Limitation | Explanation |
+|-----------|-------------|
+| **IP addresses visible** | Use Tor Browser for network anonymity |
+| **Browser memory not guaranteed** | RAM forensics possible with physical access |
+| **No protection against malware** | Keyloggers, screen capture defeat all apps |
+| **Recipient can betray you** | Screenshots, recordings are always possible |
+| **Not post-quantum secure** | ECDH P-256 will break under quantum computers |
 
-**Claude 4.5 Sonnet (Anthropic)** – Technical vulnerability assessment & cryptographic validation
-**GPT-5 (OpenAI)** – Security architecture review & threat model analysis
-**Qwen (Alibaba Cloud)** – Real-world performance testing & optimization
-**Gemini (Google)** – User experience research & interface design
-**Cascade AI** – Development process optimization & code quality assurance
-
-### 🎯 Our Philosophy
-**"Break Myths, Face Reality"** – AI models help us understand what's actually possible in modern privacy engineering, not what sounds good in theory. We build practical solutions for real-world threats, not academic exercises.
-
----
-
-## 🛡️ Core Security Pillars
-
-- **Zero-Knowledge Architecture:** Messages encrypted/decrypted only on client. Server never sees plaintext or private keys.
-- **Ephemeral-by-Design Memory:** Session data, messages, and keys are designed to remain in memory and avoid intentional persistence (no localStorage/IndexedDB for message content). OS/browser behavior (swap/pagefile/crash dumps/GC) can still create artifacts.
-- **Deniable Encryption:** Dual-password hidden volumes (real vs. decoy) provide plausible deniability under coercion.
-- **Anti-Forensic Controls (best-effort):** Automatic memory cleanup (`nuclearPurge`) triggers on tab closure, window blur, or session end where possible.
-- **Zero Identity Correlation:** No accounts, emails, or phone numbers. Sessions bound to browser fingerprints and IP hashes only.
+→ **Read the full threat model**: [`SECURITY.md`](SECURITY.md)
 
 ---
 
-## 🔧 Technical Excellence
 
-| Component | Implementation | Ghost Advantage |
-|------------|----------------|------------------|
-| **Symmetric Encryption** | AES-256-GCM | 96-bit random IVs, authenticated encryption |
-| **Key Exchange** | ECDH P-256 | Industry-standard curve, uncompressed points |
-| **Key Derivation** | PBKDF2 | SHA-256, 600,000 iterations (OWASP 2023) |
-| **Message Storage** | RAM-Only | Map-based queue with aggressive garbage collection |
-| **Infrastructure** | Supabase | Realtime ciphertext delivery, zero plaintext exposure |
+## 🔐 How Ghost Works 
 
----
+Here’s what happens when you send a message:
 
-## 🎭 What Makes Ghost Different
+1. **On Your Device**  
+   - You type → message encrypted with **AES-256-GCM**  
+   - Key derived from **ECDH P-256** (via Web Crypto API)  
+   - IV generated → unique per message  
+   - All data lives in **RAM only** — no localStorage, no disk writes  
 
-### **vs. Signal/Session/WhatsApp**
-| Feature | Signal | Session | Ghost |
-|----------|---------|---------|--------|
-| **Server Access** | Minimal metadata | Zero plaintext access |
-| **Identity Required** | Phone number | None (ephemeral) |
-| **Persistence** | Contact sync | RAM-only |
-| **Forensic Resistance** | Limited | Nuclear purge + deniable encryption |
+2. **To Supabase**  
+   - Only **ciphertext + metadata** sent (no plaintext, no keys)  
+   - Metadata: `session_id`, `capability_token`, `truncated_ip_hash`  
+   - **Zero message storage** — relayed then forgotten  
 
-### **vs. Traditional Email**
-| Feature | Email | Ghost |
-|----------|--------|--------|
-| **Server Storage** | Indefinite | 30 minutes max |
-| **Metadata** | Headers, timestamps | Minimal session binding only |
-| **Legal Compulsion** | Subpoena possible | No data to disclose |
-| **Forensic Recovery** | Easy | Designed to be difficult under normal conditions (not guaranteed) |
+3. **On Recipient’s Device**  
+   - Message decrypted using same key  
+   - Displayed → vanishes when session ends  
+   - No history, no logs, no trace  
 
----
+4. **When You Close**  
+   - `nuclearPurge()` triggers → zeroize keys, clear queues, kill workers  
+   - Session destroyed → **nothing left to find**
 
-## 📊 What We Actually Store
+> 🧊 **That’s it. No magic. Just math that vanishes.**
 
-Ghost stores minimal session metadata in Supabase (zero message content, no encryption keys):
+                          ▼
+                Supabase Edge Functions
+                (Ciphertext Relay Only)
 
-| Data Field | Purpose | Retention | Privacy Protection |
-|------------|---------|-----------|-------------------|
-| `session_id` | Session coordination | 30 minutes, auto-deleted |
-| `host_fingerprint` / `guest_fingerprint` | Session binding | SHA-256 hash, non-reversible |
-| `host_ip_hash` / `guest_ip_hash` | Hijacking prevention | HMAC-SHA256, 16-char truncated |
-| `expires_at` | Session lifecycle | Automatic cleanup |
 
-**Raw IP addresses are never stored.** For full network anonymity, use Tor Browser.
+
+- **Encryption**: AES-256-GCM + ECDH P-256 via Web Crypto API
+- **Key Derivation**: PBKDF2-SHA256, **600,000 iterations** (OWASP 2023)
+- **Session Binding**: Capability tokens + truncated IP hashes (no raw IPs stored)
+- **Infrastructure**: Supabase (realtime ciphertext delivery only — **no plaintext ever**)
 
 ---
 
-## 🎯 High-Risk Usage Guidelines
+## For High-Risk Users
 
-### For Standard Use
-- Use Ghost on a personal device you control
-- Close session when finished
-- Don't discuss Ghost usage in other channels
+Journalists, activists, and whistleblowers should:
+1. **Access via Tor Browser** — Hides your IP address
+2. **Use a dedicated device** — Not your personal phone/laptop
+3. **Verify key fingerprints** — Out-of-band confirmation prevents MITM
+4. **Assume compromise is possible** — No tool is perfect
 
-### For High-Risk Use (journalists, activists, whistleblowers)
-1. **Access via Tor Browser** – Hides physical location and IP address
-2. **Dedicated Hardware** – Clean device with no personal data
-3. **Verify Fingerprints** – Out-of-band verification of 16-character public key fingerprint
-4. **Session Hygiene** – Always use "End Session" button for immediate memory zeroization
-
-If you are operating in an **active conflict zone** or expect targeted/state-level attacks, treat Ghost as **insufficient on its own** and follow comprehensive safety planning.
-
-### For Maximum Security
-- Air-gapped device with Tails OS
-- Tor-only network access
-- One-time use sessions
-- Physical device destruction if compromised
+> 🧅 **Tor setup guide**: https://ghostprivacy.netlify.app/onion
 
 ---
 
-## 📋 Documentation Hierarchy
+## Documentation
 
-- [**SECURITY.md**](SECURITY.md) – **Authoritative security model, threat analysis, and bug bounty program**
-- [Architecture](docs/ARCHITECTURE.md)
-- [$50K Challenge Rules](docs/FORENSIC_CHALLENGE.md)
-- [**CONTRIBUTING.md**](CONTRIBUTING.md) – Technical and ethical contribution guidelines
-- [**CODE_OF_CONDUCT.md**](CODE_OF_CONDUCT.md) – Community standards
-- [**docs/COMMUNITY.md**](docs/COMMUNITY.md) – Alliance of minds community engagement
-- [**docs/COMMERCIAL_USE_POLICY.md**](docs/COMMERCIAL_USE_POLICY.md) – Business model and enterprise usage
-- [**src/ANTI_FORENSIC_GUIDE_CODE.md**](src/ANTI_FORENSIC_GUIDE_CODE.md) – Technical implementation guide
-- [**audits/**](audits/) – Historical security audit reports and assessments
+- [`SECURITY.md`](SECURITY.md) — Authoritative security model & bug bounty
+- [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) — System design
+- [`FORENSIC_CHALLENGE.md`](docs/FORENSIC_CHALLENGE.md) — $50K recovery challenge
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — How to contribute securely
+- [`INSTALL_GUIDE.md`](docs/INSTALL_GUIDE.md) — Setup instructions
 
 ---
 
-## 🚀 Why Ghost Privacy Matters
+## License & Support
 
-In an era of unprecedented surveillance, traditional messaging apps compromise user privacy through:
-
-- **Server-side data collection**
-- **Indefinite message storage**
-- **Identity requirements**
-- **Legal compulsion frameworks**
-
-Ghost Privacy represents a new paradigm: **ephemeral, zero-knowledge communication designed to minimize on-device forensic artifacts under normal operation**. For threat model and limitations (e.g., OS compromise, malicious extensions, swap/pagefile behavior), see [SECURITY.md](SECURITY.md).
+- **License**: GNU AGPL v3.0 ([`LICENSE`](LICENSE))
+- **Security Issues**: Report privately via Telegram [@ghostdeveloperadmin](https://t.me/ghostdeveloperadmin)
+- **Status**: Production-ready, forensically hardened, open for audit
 
 ---
 
-## 📞 License & Support
+**© 2026 Ghost Privacy. All rights reserved.**  
+End-to-end encrypted. No message storage. Built for those who need conversations that never existed.
 
-**License:** GNU Affero General Public License v3.0 (AGPL-3.0)
-
-**Status:** Production-ready privacy tool built by elite academic-AI alliance  
-**Security Issues:** See [SECURITY.md](SECURITY.md) for private disclosure instructions  
-**Community:** Join our [Alliance of Minds](docs/COMMUNITY.md)  
-
----
-
-** 2026 Ghost Privacy Alliance. Built by top university talent and leading AI models for real-world privacy protection.**
+## Technical Architecture
