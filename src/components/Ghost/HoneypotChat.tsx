@@ -36,7 +36,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
   
   // Core state
   const [messages, setMessages] = useState<Array<{ id: string; content: string; sender: 'me' | 'partner'; timestamp: number; read?: boolean }>>([]);
-  const [inputText, setInputText] = useState('');
+  const [canSend, setCanSend] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
   const [isDecrypting, setIsDecrypting] = useState(false);
   const [isCorrupted, setIsCorrupted] = useState(false);
@@ -67,24 +67,9 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
   const lastInputLenRef = useRef<number>(0);
   const originalTitle = useRef(typeof document !== 'undefined' ? document.title : '');
   const phantomTypingStopRef = useRef<(() => void) | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const MAX_MESSAGES = 500;
-
-  const sanitizeUserContent = (raw: string): string => {
-    const text = typeof raw === 'string' ? raw : String(raw);
-    const trimmed = text.trim().slice(0, 512);
-    if (trimmed.length === 0) return '';
-
-    // Redact obvious secrets/keys while keeping the interaction plausible.
-    if (/password\s*[:=]/i.test(trimmed)) return '[REDACTED]';
-    if (/token\s*[:=]/i.test(trimmed)) return '[REDACTED]';
-    if (/api[_-]?key\s*[:=]/i.test(trimmed)) return '[REDACTED]';
-    if (/bearer\s+[A-Za-z0-9._-]+/i.test(trimmed)) return '[REDACTED]';
-    if (/^[-A-Za-z0-9+/=]{32,}$/.test(trimmed)) return '[REDACTED]';
-    if (/^[0-9a-f]{32,}$/i.test(trimmed)) return '[REDACTED]';
-
-    return trimmed;
-  };
 
   // Initialize trap
   useEffect(() => {
@@ -227,8 +212,9 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
 
   // Keystroke logging with delay effect
   const handleInputChange = (value: string) => {
-    // Add slight delay to create "capture" feeling
-    setTimeout(() => setInputText(value), 30 + Math.random() * 50);
+    // Add slight delay to create "capture" feeling (but never store the content)
+    const isNonEmpty = value.trim().length > 0;
+    setTimeout(() => setCanSend(isNonEmpty), 30 + Math.random() * 50);
 
     if (value.length > lastInputLenRef.current) {
       trapState.recordKeystroke();
@@ -238,15 +224,12 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
   };
 
   const handleSend = () => {
-    if (!inputText.trim()) return;
+    const raw = inputRef.current?.value || '';
+    if (!raw.trim()) return;
 
     trapState.recordMessage();
 
-    const safeContent = sanitizeUserContent(inputText);
-    if (!safeContent) {
-      setInputText('');
-      return;
-    }
+    const safeContent = '[REDACTED]';
 
     // Add with "delivered" status
     const newMsg = {
@@ -260,7 +243,10 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
       const next = [...prev, newMsg];
       return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next;
     });
-    setInputText('');
+    if (inputRef.current) {
+      inputRef.current.value = '';
+    }
+    setCanSend(false);
     setUserMessageCount(prev => prev + 1);
 
     // Fake "read" receipt after delay
@@ -441,6 +427,14 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
         </div>
       </header>
 
+      <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2">
+        <div className="container mx-auto flex items-center gap-2 text-xs text-amber-700">
+          <Shield className="h-4 w-4" />
+          <span className="font-semibold">SIMULATION MODE</span>
+          <span className="text-amber-700/80">No real messages are transmitted or stored.</span>
+        </div>
+      </div>
+
       {/* Memory warning */}
       {memoryWarning && (
         <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center">
@@ -519,13 +513,13 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
           </button>
           <input
             type="text"
-            value={inputText}
+            ref={inputRef}
             onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             placeholder="Type a message..."
             className="flex-1 px-4 py-3 bg-secondary/50 border border-border/50 rounded-xl focus:outline-none focus:border-primary/50 text-sm"
           />
-          <button onClick={handleSend} disabled={!inputText.trim()} className="p-3 bg-primary text-primary-foreground rounded-xl disabled:opacity-50">
+          <button onClick={handleSend} disabled={!canSend} className="p-3 bg-primary text-primary-foreground rounded-xl disabled:opacity-50">
             <Send className="w-5 h-5" />
           </button>
         </div>
