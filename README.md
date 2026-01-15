@@ -18,7 +18,7 @@ Ghost is a **browser-native, zero-knowledge messaging platform** where conversat
 
 ### Core Guarantees
 - **End-to-end encryption** — AES-256-GCM + ECDH P-256 (Web Crypto API)
-- **RAM-only storage** — No localStorage, no IndexedDB, no disk writes
+- **RAM-only storage** — No disk-backed browser storage, no disk writes
 - **Zero accounts** — No phone numbers, no emails, no identity correlation
 - **Automatic expiration** — Sessions self-destruct; no recovery possible
 - **Open source** — Full codebase available for audit
@@ -45,7 +45,7 @@ Here’s what happens when you send a message:
    - You type → message encrypted with **AES-256-GCM**  
    - Key derived from **ECDH P-256** (via Web Crypto API)  
    - IV generated → unique per message  
-   - All data lives in **RAM only** — no localStorage, no disk writes  
+   - All data lives in **RAM only** — no disk writes  
 
 2. **To Supabase**  
    - Only **ciphertext + metadata** sent (no plaintext, no keys)  

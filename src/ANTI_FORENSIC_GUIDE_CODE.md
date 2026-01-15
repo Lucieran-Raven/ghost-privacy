@@ -4,8 +4,7 @@
  * Transparent, Ethical Memory Cleanup & Escalation
  * -----------------------------------------------
  * 
- * This guide explains how to integrate and use the new anti-forensic
- * features added to Ghost decoy sessions.
+ * This document is a code-facing checklist to minimize browser forensic artifacts (disk-backed storage, caches, service workers).
  */
 
 // ---------------------------------------------------------------------------
@@ -54,7 +53,7 @@ function EscalationHandler() {
  * Cleanup Functions:
  * 
  * 1. cleanupKeys(): Promise<CleanupMetrics>
- *    - Overwrites sessionStorage entries with random noise
+ *    - Overwrites sensitive data with random noise
  *    - Signals crypto subsystem to discard temp keys
  *    - Clears trap timestamps
  *    - Returns metrics: { keysZeroed, storageCleared, timestampCleared }
@@ -67,7 +66,7 @@ function EscalationHandler() {
  * 3. cleanupOnEscalation(): Promise<void>
  *    - Combines both above operations
  *    - Logs warnings about simulation
- *    - Sets quarantine mode in sessionStorage
+ *    - Sets quarantine mode
  *    - Safe to call before redirect
  * 
  * 4. getMetrics(): CleanupMetrics
@@ -100,7 +99,7 @@ async function handleDeepTrapDetection() {
 /**
  * What escalateToQuarantine() does:
  * 1. Sets escalationLevel to 3
- * 2. Marks session as quarantined in sessionStorage
+ * 2. Marks session as quarantined
  * 3. Records quarantine timestamp
  * 4. Logs transparent warnings
  * 5. Returns immediately (non-blocking)
@@ -203,7 +202,7 @@ function DecoyComponent() {
  * ✓ No fake network activity
  *   - No fake API calls to external systems
  *   - No fake encryption handshakes
- *   - Only sessionStorage manipulation
+ *   - Only data manipulation
  * 
  * ✓ No DevTools disabling
  *   - Users can always inspect code
@@ -228,9 +227,9 @@ function DecoyComponent() {
 /**
  * Memory Cleanup Mechanics:
  * 
- * 1. SessionStorage Overwriting:
+ * 1. Data Overwriting:
  *    - Each entry overwritten with random noise matching original length
- *    - Then removed from storage
+ *    - Then removed
  *    - Prevents carving attacks
  * 
  * 2. Crypto API Cleanup:
@@ -296,7 +295,7 @@ function DecoyComponent() {
  *    - Real encryption keys preserved
  *    - Real messages never touched
  * 
- * 4. Ethical Anti-Forensic Features
+ * 4. Ethical Anti-Forensic Guide (Code)
  *    - Strengthen actual memory hygiene practices
  *    - Educational for security researchers
  *    - Demonstrate proper cleanup techniques

@@ -2,10 +2,6 @@
  * GHOST PRIVACY - SECURE IN-MEMORY SESSION KEY MANAGER
  * 
  * SECURITY GUARANTEE: Keys exist ONLY in JavaScript heap memory
- * - NO localStorage
- * - NO sessionStorage  
- * - NO IndexedDB
- * - NO cookies
  * - NO disk persistence
  * 
  * Implements aggressive cleanup on:
@@ -52,7 +48,14 @@ class SecureSessionKeyManager {
         }
 
         // Cleanup on browser close
-        window.addEventListener('beforeunload', () => {
+        window.addEventListener('beforeunload', (e) => {
+            try {
+                const hasPrompt = typeof (e as any)?.returnValue === 'string' && (e as any).returnValue.length > 0;
+                if (hasPrompt) {
+                    return;
+                }
+            } catch {
+            }
             this.nuclearPurge();
         });
 

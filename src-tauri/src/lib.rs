@@ -737,7 +737,7 @@ fn derive_realtime_channel_name(session_id: String, capability_token: String) ->
     .get(0..32)
     .ok_or_else(|| "invalid hmac output".to_string())?;
 
-  Ok(format!("ghost-session-{}-{}", session_id, tag))
+  Ok(format!("ghost-session-{}", tag))
 }
 
 #[cfg(test)]

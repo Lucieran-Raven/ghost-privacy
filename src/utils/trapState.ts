@@ -2,7 +2,7 @@
  * GHOST MIRAGE: Trap State Management
  * 
  * Client-side only trap state tracking.
- * Uses sessionStorage - cleared when browser closes.
+ * Client-only state tracking.
  * No server-side storage, no fingerprinting, no persistence.
  */
 
@@ -50,7 +50,14 @@ class InMemoryTrapState {
     }
 
     // Nuclear purge on browser close
-    window.addEventListener('beforeunload', () => {
+    window.addEventListener('beforeunload', (e) => {
+      try {
+        const hasPrompt = typeof (e as any)?.returnValue === 'string' && (e as any).returnValue.length > 0;
+        if (hasPrompt) {
+          return;
+        }
+      } catch {
+      }
       this.nuclearPurge();
     });
 
@@ -78,13 +85,11 @@ class InMemoryTrapState {
   }
 
   private load(): TrapState {
-    // CRITICAL SECURITY FIX: NO sessionStorage loading
     // Always start with fresh state to prevent forensic artifacts
     return createDefaultTrapState({ now: () => Date.now() });
   }
 
   private save() {
-    // CRITICAL SECURITY FIX: NO sessionStorage persistence
     // State exists ONLY in JavaScript heap memory
     this.state.lastActivityTime = Date.now();
   }

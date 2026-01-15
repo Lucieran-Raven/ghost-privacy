@@ -36,7 +36,7 @@ const Session = () => {
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
-      e.returnValue = 'Leave Ghost session? Messages will be preserved until you click "End Session".';
+      e.returnValue = 'Leave Ghost session? RAM-only session data will be destroyed.';
       return e.returnValue;
     };
 

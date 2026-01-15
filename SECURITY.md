@@ -6,7 +6,7 @@ Last updated: 2026-01-11 | Version: 2.1
 ## 🎯 What We Guarantee
 
 ### Core Promises
-- **Messages are kept in RAM only** — never written to disk, localStorage, or server.
+- **Messages are kept in RAM only** — never written to disk or server.
 - **Post-session recoverability is minimized** — memory zeroization reduces forensic artifacts under normal conditions.
 - **Deniable encryption** — dual-password hidden volumes (real vs. decoy) for coercion resistance.
 - **Zero server-side message storage** — servers never receive or store plaintext.
@@ -14,7 +14,7 @@ Last updated: 2026-01-11 | Version: 2.1
 ### Technical Guarantees
 | Guarantee | Implementation | Verification |
 |----------|----------------|--------------|
-| Ephemeral Messages | RAM-only `Map`, `nuclearPurge()` on close | DevTools memory inspection |
+| Ephemeral Key Exchange | RAM-only `Map`, `nuclearPurge()` on close | DevTools memory inspection |
 | Forward Secrecy | Per-session ECDH key exchange | Cryptographic analysis |
 | Server Blindness | Ciphertext-only delivery | Code audit, server logs |
 | Anti-Forensic | Zeroization of keys/buffers | $50K Forensic Challenge |
@@ -136,7 +136,7 @@ If any research telemetry is introduced in the future, it must be:
 - **Client-side only**: Keys never leave browser
 - **Per-session**: New key pair for each session
 - **Ephemeral**: Automatic destruction on session end
-- **No persistence**: Never stored in localStorage/indexedDB
+- **No persistence**: Never stored in disk-backed browser storage
 
 ### Implementation Security
 - **Web Crypto API**: Native browser implementation

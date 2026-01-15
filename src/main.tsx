@@ -4,10 +4,14 @@ import "./index.css";
 import { isTauriRuntime, tauriInvoke } from "@/utils/runtime";
 import { runCertificatePinningCheck } from "@/utils/certPinning";
 import { enforceBuildIntegrityOrExit } from "@/utils/buildIntegrity";
+import { installMemoryLifecycleHandlers } from "@/utils/memory/lifecycle";
 
 const enableServiceWorker = import.meta.env.VITE_ENABLE_SERVICE_WORKER === 'true';
 
 const bootstrap = () => {
+
+// Install memory lifecycle handlers early
+installMemoryLifecycleHandlers();
 
 // Offline detection for native apps
 const setupOfflineDetection = () => {

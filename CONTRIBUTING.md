@@ -4,7 +4,7 @@ Thank you for your interest in contributing to Ghost Privacy — an open-source,
 
 ## 🛡️ Core Principles
 
-- **No persistence**: Never store messages, keys, or session secrets to disk (localStorage, IndexedDB, files).
+- **No persistence**: Never store messages, keys, or session secrets to disk (browser storage, files).
 - **No telemetry**: Never add analytics, logs, or data collection.
 - **Layer 0 purity**: Keep `src/utils/algorithms/**` platform-agnostic and side-effect free.
 - **Fail-closed**: All security checks must default to `false` on error or ambiguity.

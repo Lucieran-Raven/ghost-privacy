@@ -142,41 +142,6 @@ public class MainActivity extends BridgeActivity {
     }
   }
 
-  private void clearDomStorageBestEffort() {
-    try {
-      if (getBridge() == null) {
-        return;
-      }
-
-      getBridge().eval(
-        "(async () => {\n" +
-          "try { localStorage.clear(); } catch (_) {}\n" +
-          "try { sessionStorage.clear(); } catch (_) {}\n" +
-          "try {\n" +
-            "if (typeof indexedDB !== 'undefined' && indexedDB.databases) {\n" +
-              "const dbs = await indexedDB.databases();\n" +
-              "for (const db of dbs) { if (db && db.name) indexedDB.deleteDatabase(db.name); }\n" +
-            "}\n" +
-          "} catch (_) {}\n" +
-          "try {\n" +
-            "if (typeof caches !== 'undefined' && caches.keys) {\n" +
-              "const keys = await caches.keys();\n" +
-              "for (const k of keys) { await caches.delete(k); }\n" +
-            "}\n" +
-          "} catch (_) {}\n" +
-          "try {\n" +
-            "if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {\n" +
-              "const regs = await navigator.serviceWorker.getRegistrations();\n" +
-              "for (const r of regs) { await r.unregister(); }\n" +
-            "}\n" +
-          "} catch (_) {}\n" +
-        "})();",
-        null
-      );
-    } catch (Exception e) {
-    }
-  }
-
   public void clearWebViewData() {
     try {
       WebView webView = null;
@@ -191,11 +156,6 @@ public class MainActivity extends BridgeActivity {
         try {
           webView.onPause();
           webView.pauseTimers();
-        } catch (Exception e) {
-        }
-
-        try {
-          clearDomStorageBestEffort();
         } catch (Exception e) {
         }
 

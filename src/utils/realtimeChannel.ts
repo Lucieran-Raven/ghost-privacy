@@ -10,7 +10,7 @@ export async function deriveRealtimeChannelName(sessionId: string, capabilityTok
       });
       if (
         typeof name === 'string' &&
-        /^ghost-session-GHOST-[A-Z0-9]{4}-[A-Z0-9]{4}-[a-f0-9]{32}$/.test(name)
+        /^ghost-session-[a-f0-9]{32}$/.test(name)
       ) {
         return name;
       }

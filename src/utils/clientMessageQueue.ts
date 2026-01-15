@@ -3,7 +3,7 @@
  * 
  * SECURITY GUARANTEES:
  * - Messages exist ONLY in browser RAM
- * - NEVER writes to localStorage, sessionStorage, IndexedDB, or cookies
+ * - NEVER writes to disk-backed browser storage
  * - Complete destruction when session ends
  * - No forensic traces on disk
  */

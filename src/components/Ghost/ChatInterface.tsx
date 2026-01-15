@@ -1316,11 +1316,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       verified: false
     });
 
-    // SECURITY FIX: Removed localStorage usage - keys now stored ONLY in memory
-    // No disk persistence - true RAM-only storage
-    // Previous code (REMOVED):
-    // localStorage removeItem(`ghost_session_${sessionId}`);
-    // localStorage removeItem(`ghost_keys_${sessionId}`);
+    // SECURITY FIX: Removed disk-backed browser storage usage - keys now stored ONLY in memory
 
     if (typeof (window as any).gc === 'function') {
       try {

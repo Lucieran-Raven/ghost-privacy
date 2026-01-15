@@ -16,7 +16,7 @@ import { createDeleteSessionInvokeRequest } from '@/utils/algorithms/session/rev
  * All database operations are performed server-side via service_role.
  * 
  * CRITICAL SECURITY FIX: Memory-only validation cache
- * - NO sessionStorage usage (eliminates forensic artifacts)
+ * - No disk-backed browser storage usage (eliminates forensic artifacts)
  * - Cache exists ONLY in JavaScript heap memory
  * - Complete destruction on browser close
  */
@@ -37,7 +37,16 @@ class MemoryValidationCache {
       this.cleanupInterval = setInterval(() => this.cleanup(), 5 * 60 * 1000);
 
       // Nuclear purge on browser close
-      window.addEventListener('beforeunload', () => this.nuclearPurge());
+      window.addEventListener('beforeunload', (e) => {
+        try {
+          const hasPrompt = typeof (e as any)?.returnValue === 'string' && (e as any).returnValue.length > 0;
+          if (hasPrompt) {
+            return;
+          }
+        } catch {
+        }
+        this.nuclearPurge();
+      });
       window.addEventListener('unload', () => this.nuclearPurge());
     }
   }

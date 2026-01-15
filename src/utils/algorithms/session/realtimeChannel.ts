@@ -33,5 +33,5 @@ export async function deriveRealtimeChannelName(deps: RealtimeChannelDeps, sessi
   const mac = await hmacSha256Hex(deps, keyBytes, sessionId);
   keyBytes.fill(0);
   const tag = mac.slice(0, 32);
-  return `ghost-session-${sessionId}-${tag}`;
+  return `ghost-session-${tag}`;
 }

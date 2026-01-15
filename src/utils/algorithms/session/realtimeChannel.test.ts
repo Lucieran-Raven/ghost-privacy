@@ -22,8 +22,10 @@ describe('deriveRealtimeChannelName', () => {
     expect(a).not.toBe(b);
   });
 
-  it('includes the sessionId for debuggability while still being unguessable', async () => {
+  it('does not embed the sessionId (metadata leak prevention)', async () => {
     const name = await deriveRealtimeChannelName(deps, 'GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaa');
-    expect(name.startsWith('ghost-session-GHOST-ABCD-1234-')).toBe(true);
+    expect(name.startsWith('ghost-session-')).toBe(true);
+    expect(/^ghost-session-[a-f0-9]{32}$/.test(name)).toBe(true);
+    expect(name.includes('GHOST-')).toBe(false);
   });
 });
