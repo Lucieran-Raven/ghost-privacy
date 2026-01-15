@@ -12,6 +12,20 @@
  import { useMemoryCleanup } from '@/hooks/useMemoryCleanup';
  import { trapState } from '@/utils/trapState';
 
+const delayMs = (ms: number) =>
+  new Promise<void>((resolve) => {
+    const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const tick = () => {
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (now - start >= ms) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+
 export const SimpleEscalationHandler = () => {
   const { cleanupOnEscalation } = useMemoryCleanup();
 
@@ -91,7 +105,9 @@ export const DecoyRouteWrapper = ({
       };
       
       // Small delay to show content briefly
-      setTimeout(escalate, 1000);
+      void delayMs(1000).then(() => {
+        void escalate();
+      });
     }
   }, []);
 
@@ -126,9 +142,8 @@ export const EscalationWithFeedback = () => {
       setMetrics(cleanupMetrics);
       
       // Wait a moment then redirect
-      setTimeout(() => {
-        window.location.href = '/decoy?mode=quarantine';
-      }, 500);
+      await delayMs(500);
+      window.location.href = '/decoy?mode=quarantine';
     } catch (error) {
       void error;
       // Redirect anyway
@@ -338,9 +353,8 @@ export const EscalationWithFeedback = () => {
       await cleanupOnEscalation();
       setStatus('redirect');
       
-      setTimeout(() => {
-        window.location.href = '/decoy?mode=quarantine';
-      }, 500);
+      await delayMs(500);
+      window.location.href = '/decoy?mode=quarantine';
     } catch (error) {
       void error;
       window.location.href = '/decoy?mode=quarantine';
