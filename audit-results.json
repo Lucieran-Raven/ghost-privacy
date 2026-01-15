@@ -2,6 +2,8 @@
     "audit_version": "1.0",
     "project": "ghost-privacy",
     "project_version": "2.0.0",
+    "cvss_score": 2.8,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
     "scan_date": "2026-01-02",
     "verified_against_commit": "4c81ea89113da44031a1ce48e46695d7c73a6c46",
     "verification_date": "2026-01-13",
