@@ -41,9 +41,10 @@ Ghost is a **browser-native, zero-knowledge messaging platform** where conversat
 │ CLIENT │
 
 │ ┌───────────┐ ┌───────────┐ ┌───────────────────┐ │
-│ │ ECDH P-256│──▶│ AES-256 │──▶│ RAM-Only Storage │ │
+│ │ ECDH P-256│──▶│ AES-256 │──▶│ RAM-Only Storage │ 
 │ │ Key Agree │ │ GCM │ │ (No Persistence) │ │
 │ └───────────┘ └───────────┘ └───────────────────┘ │
+
 └─────────────────────────────────────────────────────┘
 
 ---
