@@ -6,10 +6,10 @@ Last updated: 2026-01-11 | Version: 2.1
 ## 🎯 What We Guarantee
 
 ### Core Promises
-- **Messages are kept in RAM only** — never written to disk or server.
-- **Post-session recoverability is minimized** — memory zeroization reduces forensic artifacts under normal conditions.
-- **Deniable encryption** — dual-password hidden volumes (real vs. decoy) for coercion resistance.
-- **Zero server-side message storage** — servers never receive or store plaintext.
+- **No intentional plaintext persistence** — Ghost does not intentionally write plaintext messages or raw keys to disk or to the server; encryption/decryption is performed in memory.
+- **Best-effort post-session cleanup** — in-app zeroization reduces recoverability under normal conditions; OS/browser behavior can still create artifacts outside application control.
+- **Plausible deniability (UI/decoy modes)** — optional decoy/simulation features may reduce immediate suspicion, but Ghost does not claim cryptographic deniable encryption.
+- **Zero server-side plaintext** — servers never receive or store plaintext messages or private keys.
 
 ### Technical Guarantees
 | Guarantee | Implementation | Verification |
@@ -17,8 +17,8 @@ Last updated: 2026-01-11 | Version: 2.1
 | Ephemeral Key Exchange | RAM-only `Map`, `nuclearPurge()` on close | DevTools memory inspection |
 | Forward Secrecy | Per-session ECDH key exchange | Cryptographic analysis |
 | Server Blindness | Ciphertext-only delivery | Code audit, server logs |
-| Anti-Forensic | Zeroization of keys/buffers | $50K Forensic Challenge |
-| Plausible Deniability | Decoy content + fake UI | Coercion scenario testing |
+| Anti-Forensic | Best-effort zeroization of keys/buffers + regression tests against disk persistence primitives | Code audit + `src/test/forensicArtifacts.test.ts` |
+| Plausible Deniability | Optional decoy/simulation UI (when enabled) | Coercion scenario testing |
 
 ### Platform Parity
 Ghost delivers identical security across all platforms:
@@ -62,12 +62,51 @@ Pinned in-memory: Partner public-key fingerprints (TOFU) used to detect key chan
 
 ## 🎭 Threat Model
 
+### Threat actors
+- **Law enforcement (LEO) / legal compulsion**: subpoenas, warrants, device seizure.
+- **Cloud provider / platform operator**: hosting/CDN/Supabase operators and their logs.
+- **Network attacker**: passive metadata collection and active MITM attempts.
+- **Malware / compromised client**: keyloggers, screen capture, memory inspection.
+- **Insider**: malicious maintainer, compromised build pipeline, dependency supply chain.
+- **User error**: sharing access codes, failing to verify fingerprints, unsafe device practices.
+- **Counterparty risk**: recipient screenshots/recording/social engineering.
+
+### Deniable vs verifiable
+- **Verifiable properties (we can meaningfully audit)**:
+  - Server-side plaintext is not required for operation, and Ghost is designed for ciphertext-only delivery.
+  - The application avoids intentional persistence of plaintext and raw keys (see disk rules below).
+  - Security-critical claims are mapped to code and tests (see `auditor/SECURITY_CONTROLS.md`).
+- **Deniability scope (limited)**:
+  - Ghost does not claim cryptographic deniable encryption.
+  - Any decoy/simulation behavior is optional and documented (see `docs/ETHICS_OPTOUT.md`).
+
+### Cryptographic trust boundaries
+- **Client device is the trust anchor**: keys are generated and used on the client.
+- **Server is untrusted for confidentiality**: it may be observed/compromised without revealing plaintext.
+- **First-contact key exchange is the main integrity risk**: if fingerprints are not verified out-of-band, a network attacker can attempt a MITM.
+
+### What must never hit disk (by design)
+Ghost treats the following as **must not be intentionally persisted** (no logs, no browser storage, no filesystem writes, no analytics payloads):
+- Plaintext messages.
+- Raw session keys / shared secrets / private keys.
+- Capability tokens / access codes.
+
+This is enforced by policy and by regression tests that fail the build if disk persistence primitives are reintroduced (see `src/test/forensicArtifacts.test.ts`).
+
+### Failure policy (fail-closed vs fail-open)
+- **Fail-closed**:
+  - Session create/join/extend/delete without a valid capability token.
+  - Encryption/decryption errors (do not send; do not display corrupted plaintext).
+  - Rate limiting enforcement failures (prefer blocking over bypass).
+- **Fail-open (best-effort)**:
+  - Memory cleanup/zeroization routines: the session should still terminate even if cleanup is partial; limitations are documented.
+
 ### ✅ Protected Against
 - **Forensic message recovery** (RAM-only design)
 - **Session hijacking** (unguessable capability token + unguessable channel name)
 - **MITM** (when fingerprints are verified or pinned)
 - **Server compromise** (no plaintext stored)
-- **Legal subpoena** (nothing to disclose)
+- **Legal subpoena for message content** (no message content to disclose from Ghost servers)
 
 > ⚠️ **High-risk conversations:** Always verify fingerprints out-of-band (phone/in-person). Pinning detects later changes during the session, but first contact is only as safe as your verification.
 
@@ -229,7 +268,7 @@ If any research telemetry is introduced in the future, it must be:
 - Metadata leaks (IP addresses, session IDs, timing)
 - MITM in key exchange or fingerprint verification
 - PWA/session termination logic flaws
-- IP binding bypass or session hijacking across different IPs
+- Session hijacking (including cases triggered by network changes)
 - Server-side logging or CORS bypasses
 - Rate-limit race conditions or TOCTOU bypasses
 

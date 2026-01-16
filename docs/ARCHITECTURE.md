@@ -35,7 +35,7 @@ graph LR
   A -->|Session create/join\n(capability token + fingerprint)| F
   D -->|Session join/extend/delete\n(capability token + fingerprint)| F
 
-  F -->|Enforces:\n- capability token hash\n- fingerprint binding\n- IP-hash binding (HMAC-SHA256, truncated)| DB
+  F -->|Enforces:\n- capability token hash\n- fingerprint binding\n- rate limiting keyed by IP hash (HMAC-SHA256, truncated)| DB
 ```
 
 ## Key boundaries
@@ -45,8 +45,9 @@ graph LR
   - The server never receives plaintext or private keys.
 
 - **Server sees ciphertext + minimal session metadata only**
-  - Stored metadata is limited to session coordination and anti-hijacking enforcement (e.g. `session_id`, `capability_hash`, `ip_hash`, `expires_at`).
+  - Stored metadata is limited to session coordination and anti-abuse enforcement (e.g. `session_id`, `capability_hash`, `ip_hash`, `expires_at`).
 
 - **Best-effort cleanup on session end**
   - `nuclearPurge()` is designed to wipe in-app state and teardown keys.
   - OS/browser behavior (swap/pagefile, crash dumps, GC, extensions) can create artifacts outside application control.
+

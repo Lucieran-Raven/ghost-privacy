@@ -29,7 +29,7 @@ Message channels are unguessable without the capability token.
 **Test coverage**:  
 - `src/utils/algorithms/session/realtimeChannel.test.ts`
 
-## IP Binding (Anti-Hijacking)
+## IP Hashing (Rate Limiting / Anti-Abuse)
 Ghost uses client IP hashing for rate limiting. Session authorization is enforced via the capability token.
 
 **Shared primitives**:  
