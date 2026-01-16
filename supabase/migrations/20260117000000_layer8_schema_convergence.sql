@@ -28,9 +28,16 @@ BEGIN
     END IF;
 
     -- Backfill capability_hash if needed (defense-in-depth)
-    UPDATE public.ghost_sessions
-    SET capability_hash = gen_random_bytes(32)
-    WHERE capability_hash IS NULL;
+    BEGIN
+      UPDATE public.ghost_sessions
+      SET capability_hash = extensions.gen_random_bytes(32)
+      WHERE capability_hash IS NULL;
+    EXCEPTION
+      WHEN undefined_function THEN
+        UPDATE public.ghost_sessions
+        SET capability_hash = gen_random_bytes(32)
+        WHERE capability_hash IS NULL;
+    END;
 
     BEGIN
       ALTER TABLE public.ghost_sessions ALTER COLUMN capability_hash SET NOT NULL;
