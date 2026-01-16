@@ -10,6 +10,7 @@
 ```bash
 npm ci
 npm test
+npm run integrity
 npm run lint
 npm run build
 ```
@@ -19,6 +20,7 @@ npm run build
 - Unit/security tests (Vitest):
   - `src/utils/algorithms/session/accessCode.test.ts`
   - `src/utils/algorithms/session/realtimeChannel.test.ts`
+  - `src/test/layer9Verification.test.ts`
   - `src/test/forensicArtifacts.test.ts`
 
 - Standalone cryptographic integrity suite:

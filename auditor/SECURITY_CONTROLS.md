@@ -34,9 +34,17 @@ Ghost uses client IP hashing for rate limiting. Session authorization is enforce
 
 **Shared primitives**:  
 - `supabase/functions/_shared/security.ts` → `getClientIpHashHex`
+ - `supabase/functions/_shared/security.ts` → `getRateLimitKeyHex` (deterministic per-window key)
 
 **Enforcement**:  
 - `supabase/functions/create-session/index.ts` → calls `increment_rate_limit` with `p_ip_hash`
+ - `supabase/functions/validate-session/index.ts` → rate-limited validation (generic invalid on throttle)
+ - `supabase/functions/extend-session/index.ts` → rate-limited extension (generic NOT_FOUND on throttle)
+ - `supabase/functions/delete-session/index.ts` → rate-limited revocation (generic NOT_FOUND on throttle)
+ - `supabase/functions/detect-honeypot/index.ts` → rate-limited honeypot checks (generic non-honeypot on throttle)
+
+**Test coverage**:
+- `src/test/layer9Verification.test.ts` (static invariants for timing-safe compares)
 
 ## Desktop CSP Hardening
 Tauri desktop app prevents script injection escalation.
