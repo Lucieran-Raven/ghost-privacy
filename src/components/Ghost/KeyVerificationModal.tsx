@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Shield, CheckCircle, XCircle, AlertTriangle, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { writeEphemeralClipboard } from '@/utils/ephemeralClipboard';
 
 interface KeyVerificationModalProps {
   localFingerprint: string;
@@ -21,20 +22,10 @@ const KeyVerificationModal = ({
   const [copiedRemote, setCopiedRemote] = useState(false);
 
   const copyToClipboard = async (text: string, type: 'local' | 'remote') => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
+    const ok = await writeEphemeralClipboard(text, 30000);
+    if (!ok) {
       return;
     }
-
-    // Best-effort: clear clipboard shortly after copy to reduce persistence.
-    // (User can still paste immediately; this is a strict-mode hygiene measure.)
-    setTimeout(() => {
-      try {
-        void navigator.clipboard.writeText('');
-      } catch {
-      }
-    }, 30000);
     if (type === 'local') {
       setCopiedLocal(true);
       setTimeout(() => setCopiedLocal(false), 2000);

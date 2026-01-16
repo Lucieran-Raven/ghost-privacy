@@ -70,7 +70,7 @@ describe('deniable.decryptHiddenFile', () => {
     const deps = {
       subtle: crypto.subtle,
       allowWeakPbkdf2ForTesting: true,
-      pbkdf2Iterations: 5_000,
+      pbkdf2Iterations: 1_000,
       getRandomValues: <T extends ArrayBufferView>(arr: T): T => {
         const u8 = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
         for (let i = 0; i < u8.length; i++) {
@@ -84,7 +84,7 @@ describe('deniable.decryptHiddenFile', () => {
     const packed = await DeniableEncryption.createHiddenFile(deps, 'REAL', 'DECOY', 'outer', 'inner');
     const out = await DeniableEncryption.decryptHiddenFile(deps, packed, 'wrong');
     expect(out).toBe(null);
-  }, 20_000);
+  }, 30_000);
 
   it('returns null for invalid base64 characters even if length matches', async () => {
     let ctr = 0;

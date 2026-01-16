@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import Navbar from '@/components/Ghost/Navbar';
 import Footer from '@/components/Ghost/Footer';
 import PageTransition from '@/components/Ghost/PageTransition';
+import { writeEphemeralClipboard } from '@/utils/ephemeralClipboard';
 
 const ETH_ADDRESS = '0x0e1a7422cccfd114502bdd7aa0514f28651a8d38';
 const BTC_ADDRESS = 'bc1qasazdqwd83y8fq4utgfakv3pfcrdkpg7gfchg0';
@@ -13,7 +14,11 @@ const Contribute = () => {
 
   const copyToClipboard = async (address: string, label: string) => {
     try {
-      await navigator.clipboard.writeText(address);
+      const ok = await writeEphemeralClipboard(address, 30000);
+      if (!ok) {
+        toast.error('Copy failed');
+        return;
+      }
       setCopiedAddress(label);
       toast.success('Copied');
       setTimeout(() => setCopiedAddress(null), 1500);

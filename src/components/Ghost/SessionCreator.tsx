@@ -7,6 +7,7 @@ import { SessionService } from '@/lib/sessionService';
 import { HoneypotService } from '@/lib/honeypotService';
 import { parseAccessCode } from '@/utils/algorithms/session/accessCode';
 import { getResearchFeaturesState, setResearchFeaturesEnabled } from '@/utils/researchFeatures';
+import { writeEphemeralClipboard } from '@/utils/ephemeralClipboard';
 import { cn } from '@/lib/utils';
 import ParticleField from './ParticleField';
 import { Switch } from '@/components/ui/switch';
@@ -72,14 +73,11 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
   };
 
   const handleCopyId = async () => {
-    await navigator.clipboard.writeText(ghostId);
-
-    setTimeout(() => {
-      try {
-        void navigator.clipboard.writeText('');
-      } catch {
-      }
-    }, 30000);
+    const ok = await writeEphemeralClipboard(ghostId, 30000);
+    if (!ok) {
+      toast.error('Copy failed');
+      return;
+    }
     setIsCopied(true);
     toast.success('Access code copied');
     setTimeout(() => setIsCopied(false), 2000);
@@ -96,6 +94,15 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
 
   const handleJoinSession = async () => {
     if (isLoading) return;
+
+    const start = Date.now();
+    const ensureMinDelay = async () => {
+      const elapsed = Date.now() - start;
+      const min = 350;
+      if (elapsed < min) {
+        await new Promise<void>((resolve) => setTimeout(resolve, min - elapsed));
+      }
+    };
     
     const trimmedId = joinId.trim();
     const rawSessionId = (trimmedId.split('.', 1)[0] || '').trim().toUpperCase();
@@ -106,12 +113,14 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
     
     if (!isStandardFormat && !isHoneypotFormat) {
       setError('Invalid access code format');
+      await ensureMinDelay();
       return;
     }
 
     const parsed = isStandardFormat ? parseAccessCode(trimmedId) : null;
     if (isStandardFormat && !parsed) {
       setError('Invalid access code (missing capability token)');
+      await ensureMinDelay();
       return;
     }
 
@@ -132,6 +141,7 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
         // Handle honeypot format
         if (!researchEnabled) {
           setError('Invalid access code format');
+          await ensureMinDelay();
           return;
         }
         const fingerprint = await SecurityManager.generateFingerprint();

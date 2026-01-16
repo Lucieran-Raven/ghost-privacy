@@ -11,7 +11,7 @@ import { getMessageQueue, QueuedMessage } from '@/utils/clientMessageQueue';
 import { cn } from '@/lib/utils';
 import { generatePlausibleTimestamp, isTimestampObfuscationEnabled } from '@/utils/plausibleTimestamp';
 import { useMemoryCleanup } from '@/hooks/useMemoryCleanup';
-import { isTauriRuntime, tauriInvoke } from '@/utils/runtime';
+import { isTauriRuntime, setTauriContentProtected, tauriInvoke } from '@/utils/runtime';
 import { base64ToBytes, bytesToBase64 } from '@/utils/algorithms/encoding/base64';
 import { secureZeroUint8Array } from '@/utils/algorithms/memory/zeroization';
 import { getReplayProtection, destroyReplayProtection } from '@/utils/replayProtection';
@@ -238,10 +238,14 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     const handleVisibilityChange = () => {
       if (typeof document === 'undefined') return;
       setIsWindowVisible(!document.hidden);
+      if (document.hidden) {
+        setInputText('');
+      }
     };
 
     const handleBlur = () => {
       setIsWindowVisible(false);
+      setInputText('');
     };
 
     const handleFocus = () => {
@@ -264,6 +268,13 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         window.removeEventListener('blur', handleBlur);
         window.removeEventListener('focus', handleFocus);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    void setTauriContentProtected(true);
+    return () => {
+      void setTauriContentProtected(false);
     };
   }, []);
 
@@ -1521,6 +1532,15 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       />
 
       <div className="chat-container-mobile h-[100dvh] flex flex-col bg-background">
+
+        {!isWindowVisible && (
+          <div
+            className="fixed inset-0 z-[200] bg-background/95 backdrop-blur-xl"
+            onClick={() => setIsWindowVisible(true)}
+            role="button"
+            tabIndex={0}
+          />
+        )}
 
         <header className={cn(
           "mobile-header fixed left-0 right-0 z-50 glass border-b border-border/30 h-14 md:h-16",

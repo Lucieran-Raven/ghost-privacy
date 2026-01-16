@@ -20,3 +20,16 @@ export async function tauriInvoke<T = unknown>(cmd: string, args?: Record<string
   const mod = await import('@tauri-apps/api/core');
   return mod.invoke<T>(cmd, args);
 }
+
+export async function setTauriContentProtected(enabled: boolean): Promise<void> {
+  if (!isTauriRuntime()) return;
+
+  try {
+    const winMod = await import('@tauri-apps/api/window');
+    const candidate = (winMod as any).getCurrent ? (winMod as any).getCurrent() : (winMod as any).appWindow;
+    if (candidate && typeof candidate.setContentProtected === 'function') {
+      await candidate.setContentProtected(Boolean(enabled));
+    }
+  } catch {
+  }
+}

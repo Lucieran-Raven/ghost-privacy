@@ -5,6 +5,7 @@ import {
   Lock, Globe, Server, X 
 } from 'lucide-react';
 import { trapAudio } from '@/utils/trapAudio';
+import { writeEphemeralClipboard } from '@/utils/ephemeralClipboard';
 
 interface FakeApiDocsProps {
   isOpen: boolean;
@@ -137,18 +138,7 @@ const FakeApiDocs = ({ isOpen, onClose }: FakeApiDocsProps) => {
   const [copied, setCopied] = useState<string | null>(null);
 
   const handleCopy = (text: string, id: string) => {
-    try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        void navigator.clipboard.writeText(text);
-        setTimeout(() => {
-          try {
-            void navigator.clipboard.writeText('');
-          } catch {
-          }
-        }, 30000);
-      }
-    } catch {
-    }
+    void writeEphemeralClipboard(text, 30000);
     setCopied(id);
     trapAudio.playTick();
     setTimeout(() => setCopied(null), 2000);
