@@ -104,9 +104,21 @@ jobs:
 
       - name: Integrity suite
         run: npm run integrity
+
+      - name: Typecheck security-critical code (strict)
+        run: npx --no-install tsc -p tsconfig.security.json --noEmit
       
       - name: Build production bundle
         run: npm run build
+
+      - name: Ensure production build has no sourcemaps
+        run: |
+          set -euo pipefail
+          if find dist -type f -name '*.map' | grep -q .; then
+            echo "❌ SECURITY: sourcemap files found in dist/ (must not ship source maps in production)"
+            find dist -type f -name '*.map' -maxdepth 5 -print
+            exit 1
+          fi
       
       - name: Verify build output
         run: |

@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => ({
     strictPort: true,
     cors: false,
   },
+  esbuild: mode === 'production' ? { drop: ['console', 'debugger'] } : undefined,
   plugins: [
     react(),
   ].filter(Boolean),
@@ -19,6 +20,9 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
+    target: 'es2020',
+    sourcemap: false,
+    minify: 'esbuild',
     // Ensure content hashes in filenames for cache busting
     rollupOptions: {
       output: {
