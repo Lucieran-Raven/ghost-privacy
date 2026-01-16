@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   aesGcmDecryptString,
   aesGcmEncryptString,
+  deriveSharedSecretKeyBytesHkdf,
   deriveSharedSecretBytes,
   exportAesKeyRawBase64,
   exportEcdhPublicKeySpkiBase64,
@@ -84,6 +85,39 @@ describe('ephemeral.ECDH shared secret', () => {
     const ab2 = new Uint8Array(await deriveSharedSecretBytes(deps, a.privateKey, b2Pub));
 
     expect(Array.from(ab1)).not.toEqual(Array.from(ab2));
+  });
+});
+
+describe('ephemeral.HKDF domain-separated shared secret', () => {
+  it('derives identical OKM for both parties with same context', async () => {
+    const deps = { subtle: crypto.subtle, getRandomValues: crypto.getRandomValues.bind(crypto) };
+    const a = await generateEcdhKeyPair(deps);
+    const b = await generateEcdhKeyPair(deps);
+
+    const aPub = await importEcdhPublicKeySpkiBase64(deps, await exportEcdhPublicKeySpkiBase64(deps, a.publicKey));
+    const bPub = await importEcdhPublicKeySpkiBase64(deps, await exportEcdhPublicKeySpkiBase64(deps, b.publicKey));
+
+    const context = 'session:GHOST-AAAA-BBBB';
+
+    const ab = new Uint8Array(await deriveSharedSecretKeyBytesHkdf(deps, a.privateKey, bPub, context));
+    const ba = new Uint8Array(await deriveSharedSecretKeyBytesHkdf(deps, b.privateKey, aPub, context));
+
+    expect(ab.byteLength).toBe(32);
+    expect(ba.byteLength).toBe(32);
+    expect(Array.from(ab)).toEqual(Array.from(ba));
+  });
+
+  it('produces different OKM for different contexts', async () => {
+    const deps = { subtle: crypto.subtle, getRandomValues: crypto.getRandomValues.bind(crypto) };
+    const a = await generateEcdhKeyPair(deps);
+    const b = await generateEcdhKeyPair(deps);
+
+    const bPub = await importEcdhPublicKeySpkiBase64(deps, await exportEcdhPublicKeySpkiBase64(deps, b.publicKey));
+
+    const k1 = new Uint8Array(await deriveSharedSecretKeyBytesHkdf(deps, a.privateKey, bPub, 'ctx-1'));
+    const k2 = new Uint8Array(await deriveSharedSecretKeyBytesHkdf(deps, a.privateKey, bPub, 'ctx-2'));
+
+    expect(Array.from(k1)).not.toEqual(Array.from(k2));
   });
 });
 

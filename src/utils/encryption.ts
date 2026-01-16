@@ -8,6 +8,7 @@ import {
   aesGcmEncryptString,
   deriveSharedSecretAesGcmKey,
   deriveSharedSecretBytes,
+  deriveSharedSecretKeyBytesHkdf,
   exportAesKeyRawBase64,
   exportEcdhPublicKeySpkiBase64,
   generateAesGcmKey,
@@ -149,9 +150,18 @@ export class KeyExchange {
 
   static async deriveSharedSecret(
     privateKey: CryptoKey,
-    publicKey: CryptoKey
+    publicKey: CryptoKey,
+    context: string = ''
   ): Promise<CryptoKey> {
-    return deriveSharedSecretAesGcmKey(deps, privateKey, publicKey);
+    return deriveSharedSecretAesGcmKey(deps, privateKey, publicKey, context);
+  }
+
+  static async deriveSharedSecretKeyBytes(
+    privateKey: CryptoKey,
+    publicKey: CryptoKey,
+    context: string = ''
+  ): Promise<ArrayBuffer> {
+    return deriveSharedSecretKeyBytesHkdf(deps, privateKey, publicKey, context);
   }
 
   static async deriveSharedSecretBytes(

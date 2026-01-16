@@ -14,6 +14,7 @@ import { useMemoryCleanup } from '@/hooks/useMemoryCleanup';
 import { isTauriRuntime, tauriInvoke } from '@/utils/runtime';
 import { base64ToBytes, bytesToBase64 } from '@/utils/algorithms/encoding/base64';
 import { secureZeroUint8Array } from '@/utils/algorithms/memory/zeroization';
+import { getReplayProtection, destroyReplayProtection } from '@/utils/replayProtection';
 import KeyVerificationModal from './KeyVerificationModal';
 import VoiceRecorder from './VoiceRecorder';
 import VoiceMessage from './VoiceMessage';
@@ -93,6 +94,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   const verificationShownRef = useRef(false);
   const systemMessagesShownRef = useRef<Set<string>>(new Set());
   const lastTerminationRef = useRef<number>(0);
+
+  const replayProtectionRef = useRef(getReplayProtection());
 
   const lastPublicKeySendRef = useRef<number>(0);
   const publicKeyResendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -368,6 +371,11 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       participantIdRef.current = await SecurityManager.generateFingerprint();
       encryptionEngineRef.current = new EncryptionEngine();
 
+      try {
+        replayProtectionRef.current.resetSession(participantIdRef.current);
+      } catch {
+      }
+
       setConnectionState({ status: 'connecting', progress: 30 });
 
       keyPairRef.current = await KeyExchange.generateKeyPair();
@@ -586,6 +594,13 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
     manager.onMessage('key-exchange', async (payload) => {
       try {
+        const seq = Number(payload.data?.sequence);
+        const rp = replayProtectionRef.current;
+        const replayRes = rp.validateMessage(payload.senderId, payload.nonce, seq, payload.timestamp);
+        if (!replayRes.valid) {
+          return;
+        }
+
         let remoteFingerprint = '';
         try {
           const pkB64 = String(payload.data?.publicKey || '');
@@ -629,9 +644,10 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
         if (keyPairRef.current) {
           if (isTauriRuntime()) {
-            const sharedSecretBytes = await KeyExchange.deriveSharedSecretBytes(
+            const sharedSecretBytes = await KeyExchange.deriveSharedSecretKeyBytes(
               keyPairRef.current.privateKey,
-              partnerPublicKey
+              partnerPublicKey,
+              sessionId
             );
 
             const bytes = new Uint8Array(sharedSecretBytes);
@@ -643,7 +659,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             } catch {
               const sharedSecret = await KeyExchange.deriveSharedSecret(
                 keyPairRef.current.privateKey,
-                partnerPublicKey
+                partnerPublicKey,
+                sessionId
               );
               sessionKeyRef.current = sharedSecret;
               await encryptionEngineRef.current?.setKey(sharedSecret);
@@ -656,7 +673,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           } else {
             const sharedSecret = await KeyExchange.deriveSharedSecret(
               keyPairRef.current.privateKey,
-              partnerPublicKey
+              partnerPublicKey,
+              sessionId
             );
 
             sessionKeyRef.current = sharedSecret;
@@ -702,6 +720,13 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       try {
         markActivity();
         if (!encryptionEngineRef.current) return;
+
+        const seq = Number(payload.data?.sequence);
+        const rp = replayProtectionRef.current;
+        const replayRes = rp.validateMessage(payload.senderId, payload.nonce, seq, payload.timestamp);
+        if (!replayRes.valid) {
+          return;
+        }
 
         if (payload.data.type === 'file') {
           const MAX_SINGLE_FILE_ENCRYPTED_CHARS = 60000;
@@ -784,6 +809,13 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         markActivity();
         if (!encryptionEngineRef.current) return;
 
+        const seq = Number(payload.data?.sequence);
+        const rp = replayProtectionRef.current;
+        const replayRes = rp.validateMessage(payload.senderId, payload.nonce, seq, payload.timestamp);
+        if (!replayRes.valid) {
+          return;
+        }
+
         const decrypted = await encryptionEngineRef.current.decryptBytes(
           payload.data.encrypted,
           payload.data.iv
@@ -858,7 +890,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
     localFingerprintRef.current = await KeyExchange.generateFingerprint(keyPairRef.current.publicKey);
     const publicKeyExport = await KeyExchange.exportPublicKey(keyPairRef.current.publicKey);
-    await realtimeManagerRef.current.send('key-exchange', { publicKey: publicKeyExport });
+    const seq = replayProtectionRef.current.getNextSequence(participantIdRef.current);
+    await realtimeManagerRef.current.send('key-exchange', { publicKey: publicKeyExport, sequence: seq });
   };
 
   const handleVerificationConfirmed = () => {
@@ -938,7 +971,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         encrypted,
         iv,
         duration,
-        messageId
+        messageId,
+        sequence: replayProtectionRef.current.getNextSequence(participantIdRef.current)
       });
 
       if (!sent) {
@@ -1034,7 +1068,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         encrypted,
         iv,
         type: 'text',
-        messageId
+        messageId,
+        sequence: replayProtectionRef.current.getNextSequence(participantIdRef.current)
       });
 
       if (!sent) {
@@ -1144,13 +1179,15 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
         // If the peer is legacy and this fits in one chunk, use the old `chat-message` file path.
         if (sent && legacyPeer && totalChunks <= 1) {
+          const seq = replayProtectionRef.current.getNextSequence(participantIdRef.current);
           sent = (await realtimeManagerRef.current?.send('chat-message', {
             encrypted,
             iv,
             type: 'file',
             fileName: sanitizedName,
             fileType: file.type,
-            messageId
+            messageId,
+            sequence: seq
           })) ?? false;
         }
 
@@ -1279,6 +1316,12 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
     pendingFileAcksRef.current.clear();
 
+    try {
+      destroyReplayProtection();
+      replayProtectionRef.current = getReplayProtection();
+    } catch {
+    }
+
     if (encryptionEngineRef.current) {
       encryptionEngineRef.current = null;
     }
@@ -1370,6 +1413,12 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     encryptionEngineRef.current = null;
     keyPairRef.current = null;
     partnerPublicKeyRef.current = null;
+
+    try {
+      destroyReplayProtection();
+      replayProtectionRef.current = getReplayProtection();
+    } catch {
+    }
   };
 
   /**

@@ -24,14 +24,69 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return bytesToBase64(new Uint8Array(buffer));
 }
 
+function sliceToArrayBuffer(view: Uint8Array<ArrayBufferLike>): ArrayBuffer {
+  return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as unknown as ArrayBuffer;
+}
+
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const bytes = base64ToBytes(base64);
   try {
     // slice() copies into a new ArrayBuffer, allowing us to wipe the decode buffer.
-    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    return sliceToArrayBuffer(bytes);
   } finally {
     try {
       bytes.fill(0);
+    } catch {
+      // Ignore
+    }
+  }
+}
+
+async function hkdfSha256(
+  deps: EphemeralCryptoDeps,
+  ikm: Uint8Array,
+  params: { salt: Uint8Array; info: Uint8Array; length: number }
+): Promise<Uint8Array> {
+  const keyMaterial = await deps.subtle.importKey('raw', sliceToArrayBuffer(ikm), 'HKDF', false, ['deriveBits']);
+  const bits = await deps.subtle.deriveBits(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: sliceToArrayBuffer(params.salt),
+      info: sliceToArrayBuffer(params.info)
+    },
+    keyMaterial,
+    params.length * 8
+  );
+  return new Uint8Array(bits);
+}
+
+export async function deriveSharedSecretKeyBytesHkdf(
+  deps: EphemeralCryptoDeps,
+  privateKey: CryptoKey,
+  publicKey: CryptoKey,
+  context: string = ''
+): Promise<ArrayBuffer> {
+  const ecdhBits = await deriveSharedSecretBytes(deps, privateKey, publicKey);
+  const ikm = new Uint8Array(ecdhBits as ArrayBuffer);
+  const encoder = new TextEncoder();
+  const salt = encoder.encode('ghost-privacy:ecdh-hkdf-salt:v1');
+  const info = encoder.encode(`ghost-privacy:aes-gcm-session-key:v1:${context}`);
+
+  try {
+    const okm = await hkdfSha256(deps, ikm, { salt, info, length: 32 });
+    try {
+      return sliceToArrayBuffer(okm);
+    } finally {
+      try {
+        okm.fill(0);
+      } catch {
+        // Ignore
+      }
+    }
+  } finally {
+    try {
+      ikm.fill(0);
     } catch {
       // Ignore
     }
@@ -261,15 +316,19 @@ export async function importEcdhPublicKeySpkiBase64(deps: EphemeralCryptoDeps, p
 export async function deriveSharedSecretAesGcmKey(
   deps: EphemeralCryptoDeps,
   privateKey: CryptoKey,
-  publicKey: CryptoKey
+  publicKey: CryptoKey,
+  context: string = ''
 ): Promise<CryptoKey> {
-  return deps.subtle.deriveKey(
-    { name: 'ECDH', public: publicKey },
-    privateKey,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  );
+  const okmBytes = new Uint8Array(await deriveSharedSecretKeyBytesHkdf(deps, privateKey, publicKey, context));
+  try {
+    return await deps.subtle.importKey('raw', okmBytes, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  } finally {
+    try {
+      okmBytes.fill(0);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export async function deriveSharedSecretBytes(
