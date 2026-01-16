@@ -11,6 +11,8 @@
  * - Window blur
  */
 
+import { isValidSessionId } from '@/utils/algorithms/session/binding';
+
 interface SessionKeyData {
     encryptionKey: CryptoKey | null;
     keyPair: CryptoKeyPair | null;
@@ -32,6 +34,14 @@ class SecureSessionKeyManager {
     private keys: Map<string, SessionKeyData> = new Map();
     private cleanupHandlersRegistered = false;
 
+    private handlers?: {
+        beforeUnload: (e: BeforeUnloadEvent) => void;
+        unload: () => void;
+        pageHide: () => void;
+        visibilityChange: () => void;
+        blur: () => void;
+    };
+
     constructor() {
         this.registerCleanupHandlers();
     }
@@ -47,47 +57,95 @@ class SecureSessionKeyManager {
             return;
         }
 
-        // Cleanup on browser close
-        window.addEventListener('beforeunload', (e) => {
-            try {
-                const hasPrompt = typeof (e as any)?.returnValue === 'string' && (e as any).returnValue.length > 0;
-                if (hasPrompt) {
-                    return;
+        if (!this.handlers) {
+            this.handlers = {
+                beforeUnload: (e: BeforeUnloadEvent) => {
+                    try {
+                        const hasPrompt = typeof (e as any)?.returnValue === 'string' && (e as any).returnValue.length > 0;
+                        if (hasPrompt) {
+                            return;
+                        }
+                    } catch {
+                    }
+                    this.nuclearPurge();
+                },
+                unload: () => {
+                    this.nuclearPurge();
+                },
+                pageHide: () => {
+                    this.nuclearPurge();
+                },
+                visibilityChange: () => {
+                    if (document.hidden) {
+                        // Optional: aggressive cleanup when tab is hidden
+                        // this.nuclearPurge();
+                    }
+                },
+                blur: () => {
+                    // Optional: cleanup on window blur
+                    // this.nuclearPurge();
                 }
-            } catch {
-            }
-            this.nuclearPurge();
-        });
+            };
+        }
+
+        // Cleanup on browser close
+        window.addEventListener('beforeunload', this.handlers.beforeUnload);
 
         // Cleanup on tab visibility change (user switches tabs)
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                // Optional: aggressive cleanup when tab is hidden
-                // this.nuclearPurge();
-            }
-        });
+        document.addEventListener('visibilitychange', this.handlers.visibilityChange);
 
         // Cleanup on window blur (user switches windows)
-        window.addEventListener('blur', () => {
-            // Optional: cleanup on window blur
-            // this.nuclearPurge();
-        });
+        window.addEventListener('blur', this.handlers.blur);
 
         // Cleanup on page unload
-        window.addEventListener('unload', () => {
-            this.nuclearPurge();
-        });
+        window.addEventListener('unload', this.handlers.unload);
 
         // Cleanup on page hide (mobile/PWA)
-        window.addEventListener('pagehide', () => {
-            this.nuclearPurge();
-        });
+        window.addEventListener('pagehide', this.handlers.pageHide);
+    }
+
+    dispose(): void {
+        if (!this.cleanupHandlersRegistered) return;
+        if (typeof window === 'undefined' || typeof document === 'undefined') {
+            this.cleanupHandlersRegistered = false;
+            return;
+        }
+        if (!this.handlers) {
+            this.cleanupHandlersRegistered = false;
+            return;
+        }
+
+        try {
+            window.removeEventListener('beforeunload', this.handlers.beforeUnload);
+        } catch {
+        }
+        try {
+            document.removeEventListener('visibilitychange', this.handlers.visibilityChange);
+        } catch {
+        }
+        try {
+            window.removeEventListener('blur', this.handlers.blur);
+        } catch {
+        }
+        try {
+            window.removeEventListener('unload', this.handlers.unload);
+        } catch {
+        }
+        try {
+            window.removeEventListener('pagehide', this.handlers.pageHide);
+        } catch {
+        }
+
+        this.cleanupHandlersRegistered = false;
     }
 
     /**
      * Store encryption key for a session (IN MEMORY ONLY)
      */
     setEncryptionKey(sessionId: string, key: CryptoKey): void {
+        if (!isValidSessionId(sessionId)) {
+            throw new Error('invalid session id');
+        }
         assertNonExtractableSensitiveKey(key, 'encryptionKey');
         const existing = this.keys.get(sessionId) || this.createEmptyKeyData(sessionId);
         existing.encryptionKey = key;
@@ -99,6 +157,9 @@ class SecureSessionKeyManager {
      * Get encryption key for a session
      */
     getEncryptionKey(sessionId: string): CryptoKey | null {
+        if (!isValidSessionId(sessionId)) {
+            return null;
+        }
         const data = this.keys.get(sessionId);
         if (data) {
             data.lastAccessedAt = Date.now();
@@ -111,6 +172,9 @@ class SecureSessionKeyManager {
      * Store ECDH key pair for a session (IN MEMORY ONLY)
      */
     setKeyPair(sessionId: string, keyPair: CryptoKeyPair): void {
+        if (!isValidSessionId(sessionId)) {
+            throw new Error('invalid session id');
+        }
         assertNonExtractableSensitiveKey(keyPair.privateKey, 'keyPair.privateKey');
         const existing = this.keys.get(sessionId) || this.createEmptyKeyData(sessionId);
         existing.keyPair = keyPair;
@@ -122,6 +186,9 @@ class SecureSessionKeyManager {
      * Get ECDH key pair for a session
      */
     getKeyPair(sessionId: string): CryptoKeyPair | null {
+        if (!isValidSessionId(sessionId)) {
+            return null;
+        }
         const data = this.keys.get(sessionId);
         if (data) {
             data.lastAccessedAt = Date.now();
@@ -134,6 +201,9 @@ class SecureSessionKeyManager {
      * Store partner's public key (IN MEMORY ONLY)
      */
     setPartnerPublicKey(sessionId: string, publicKey: CryptoKey): void {
+        if (!isValidSessionId(sessionId)) {
+            throw new Error('invalid session id');
+        }
         const existing = this.keys.get(sessionId) || this.createEmptyKeyData(sessionId);
         existing.partnerPublicKey = publicKey;
         existing.lastAccessedAt = Date.now();
@@ -144,6 +214,9 @@ class SecureSessionKeyManager {
      * Get partner's public key
      */
     getPartnerPublicKey(sessionId: string): CryptoKey | null {
+        if (!isValidSessionId(sessionId)) {
+            return null;
+        }
         const data = this.keys.get(sessionId);
         if (data) {
             data.lastAccessedAt = Date.now();
@@ -156,6 +229,9 @@ class SecureSessionKeyManager {
      * Check if session has keys
      */
     hasSession(sessionId: string): boolean {
+        if (!isValidSessionId(sessionId)) {
+            return false;
+        }
         return this.keys.has(sessionId);
     }
 
@@ -170,6 +246,9 @@ class SecureSessionKeyManager {
      * Destroy a single session - complete memory wipe
      */
     destroySession(sessionId: string): void {
+        if (!isValidSessionId(sessionId)) {
+            return;
+        }
         const data = this.keys.get(sessionId);
         if (!data) return;
 
@@ -289,6 +368,10 @@ export const getSessionKeyManager = (): SecureSessionKeyManager => {
 export const destroySessionKeyManager = (): void => {
     if (keyManagerInstance) {
         keyManagerInstance.nuclearPurge();
+        try {
+            keyManagerInstance.dispose();
+        } catch {
+        }
         keyManagerInstance = null;
     }
 

@@ -1,5 +1,7 @@
 // Security Manager - Fingerprinting and MITM Protection
 
+import { isValidCapabilityToken, isValidSessionId } from '@/utils/algorithms/session/binding';
+
 export class SecurityManager {
   private static sessionCapabilityTokens: Map<string, string> = new Map();
 
@@ -10,6 +12,18 @@ export class SecurityManager {
   }
 
   static setCapabilityToken(sessionId: string, capabilityToken: string): void {
+    if (!isValidSessionId(sessionId)) {
+      throw new Error('invalid session id');
+    }
+    if (!isValidCapabilityToken(capabilityToken)) {
+      throw new Error('invalid capability token');
+    }
+
+    const existing = this.sessionCapabilityTokens.get(sessionId);
+    if (existing && existing !== capabilityToken) {
+      throw new Error('capability token already set');
+    }
+
     this.sessionCapabilityTokens.set(sessionId, capabilityToken);
   }
 

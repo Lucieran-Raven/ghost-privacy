@@ -59,7 +59,7 @@ serve(async (req: Request) => {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 
-    if (!capabilityToken || typeof capabilityToken !== 'string' || capabilityToken.length < 16 || capabilityToken.length > 64) {
+    if (!capabilityToken || typeof capabilityToken !== 'string' || capabilityToken.length !== 22) {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 

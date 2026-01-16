@@ -5,25 +5,25 @@ const deps = { subtle: crypto.subtle };
 
 describe('deriveRealtimeChannelName', () => {
   it('is deterministic for same inputs', async () => {
-    const a = await deriveRealtimeChannelName(deps, 'GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaa');
-    const b = await deriveRealtimeChannelName(deps, 'GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaa');
+    const a = await deriveRealtimeChannelName(deps, 'GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaaaaaaaa');
+    const b = await deriveRealtimeChannelName(deps, 'GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaaaaaaaa');
     expect(a).toBe(b);
   });
 
   it('changes when token changes', async () => {
-    const a = await deriveRealtimeChannelName(deps, 'GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaa');
-    const b = await deriveRealtimeChannelName(deps, 'GHOST-ABCD-1234', 'bbbbbbbbbbbbbbbb');
+    const a = await deriveRealtimeChannelName(deps, 'GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaaaaaaaa');
+    const b = await deriveRealtimeChannelName(deps, 'GHOST-ABCD-1234', 'bbbbbbbbbbbbbbbbbbbbbb');
     expect(a).not.toBe(b);
   });
 
   it('changes when sessionId changes', async () => {
-    const a = await deriveRealtimeChannelName(deps, 'GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaa');
-    const b = await deriveRealtimeChannelName(deps, 'GHOST-EEEE-9999', 'aaaaaaaaaaaaaaaa');
+    const a = await deriveRealtimeChannelName(deps, 'GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaaaaaaaa');
+    const b = await deriveRealtimeChannelName(deps, 'GHOST-EEEE-9999', 'aaaaaaaaaaaaaaaaaaaaaa');
     expect(a).not.toBe(b);
   });
 
   it('does not embed the sessionId (metadata leak prevention)', async () => {
-    const name = await deriveRealtimeChannelName(deps, 'GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaa');
+    const name = await deriveRealtimeChannelName(deps, 'GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaaaaaaaa');
     expect(name.startsWith('ghost-session-')).toBe(true);
     expect(/^ghost-session-[a-f0-9]{32}$/.test(name)).toBe(true);
     expect(name.includes('GHOST-')).toBe(false);

@@ -3,7 +3,7 @@ import { RealtimeManager } from './realtimeManager';
 
 describe('RealtimeManager replay suppression', () => {
   it('rejects duplicate (senderId, nonce) within TTL window', () => {
-    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaa', 'me');
+    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaaaaaaaa', 'me');
 
     const payload = {
       type: 'chat-message',
@@ -18,7 +18,7 @@ describe('RealtimeManager replay suppression', () => {
   });
 
   it('accepts same (senderId, nonce) after TTL expiry', () => {
-    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaa', 'me');
+    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaaaaaaaa', 'me');
 
     const baseTime = 1_700_000_000_000;
     const nowSpy = vi.spyOn(Date, 'now');
@@ -43,7 +43,7 @@ describe('RealtimeManager replay suppression', () => {
   });
 
   it('accepts same nonce from different senderId', () => {
-    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaa', 'me');
+    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaaaaaaaa', 'me');
 
     const p1 = { type: 'chat-message', senderId: 'peerA', data: {}, timestamp: Date.now(), nonce: 'n1' };
     const p2 = { type: 'chat-message', senderId: 'peerB', data: {}, timestamp: Date.now(), nonce: 'n1' };
@@ -53,7 +53,7 @@ describe('RealtimeManager replay suppression', () => {
   });
 
   it('rejects malformed nonce inputs (whitespace / oversized)', () => {
-    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaa', 'me');
+    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaaaaaaaa', 'me');
     const baseTime = Date.now();
 
     const payloadBase = {
@@ -70,7 +70,7 @@ describe('RealtimeManager replay suppression', () => {
   });
 
   it('rejects payloads with timestamps too far in the past/future', () => {
-    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaa', 'me');
+    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaaaaaaaa', 'me');
     const baseTime = 1_700_000_000_000;
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(baseTime);
 
@@ -90,7 +90,7 @@ describe('RealtimeManager replay suppression', () => {
   });
 
   it('rejects oversized incoming payloads (DoS prevention)', () => {
-    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaa', 'me');
+    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaaaaaaaa', 'me');
     const baseTime = Date.now();
 
     const huge = 'x'.repeat(300_000);
@@ -106,7 +106,7 @@ describe('RealtimeManager replay suppression', () => {
   });
 
   it('rejects non-stringifiable payloads for non-chat types', () => {
-    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaa', 'me');
+    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaaaaaaaa', 'me');
     const baseTime = Date.now();
 
     const circular: any = { a: 1 };
@@ -124,7 +124,7 @@ describe('RealtimeManager replay suppression', () => {
   });
 
   it('caps replay-cache size (attack simulation: many unique nonces)', () => {
-    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaa', 'me');
+    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaaaaaaaa', 'me');
     const baseTime = 1_700_000_000_000;
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(baseTime);
 

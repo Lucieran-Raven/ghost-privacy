@@ -139,6 +139,12 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
       }
     } catch {
       setError('Failed to join session. Please retry.');
+      try {
+        if (parsed?.sessionId) {
+          SecurityManager.clearCapabilityToken(parsed.sessionId);
+        }
+      } catch {
+      }
     } finally {
       setIsLoading(false);
     }

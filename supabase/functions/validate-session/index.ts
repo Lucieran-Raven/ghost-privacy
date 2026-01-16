@@ -55,8 +55,7 @@ serve(async (req: Request) => {
     if (
       !capabilityToken ||
       typeof capabilityToken !== 'string' ||
-      capabilityToken.length < 16 ||
-      capabilityToken.length > 64 ||
+      capabilityToken.length !== 22 ||
       !/^[A-Za-z0-9_-]+$/.test(capabilityToken)
     ) {
       await new Promise(r => setTimeout(r, 50));

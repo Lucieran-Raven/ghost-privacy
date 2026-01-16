@@ -727,10 +727,11 @@ fn derive_realtime_channel_name(session_id: String, capability_token: String) ->
     return Err("token too large".to_string());
   }
 
-  let key_bytes = Zeroizing::new(match decode_b64url_like_browser(&capability_token) {
-    Ok(b) => b,
-    Err(_) => capability_token.as_bytes().to_vec(),
-  });
+  if capability_token.len() != 22 {
+    return Err("invalid token".to_string());
+  }
+
+  let key_bytes = Zeroizing::new(decode_b64url_like_browser(&capability_token).map_err(|_| "invalid token".to_string())?);
 
   let mac_hex = hmac_sha256_hex(key_bytes.as_slice(), &session_id)?;
   let tag = mac_hex

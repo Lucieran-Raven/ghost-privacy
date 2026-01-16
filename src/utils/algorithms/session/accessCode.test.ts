@@ -8,7 +8,7 @@ describe('parseAccessCode', () => {
   });
 
   it('normalizes sessionId to uppercase', () => {
-    const parsed = parseAccessCode('ghost-abcd-1234.aaaaaaaaaaaaaaaa');
+    const parsed = parseAccessCode('ghost-abcd-1234.aaaaaaaaaaaaaaaaaaaaaa');
     expect(parsed).not.toBeNull();
     expect(parsed!.sessionId).toBe('GHOST-ABCD-1234');
   });

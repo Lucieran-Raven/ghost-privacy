@@ -41,6 +41,9 @@ class ReplayProtection {
         sequence: number,
         timestamp: number
     ): { valid: boolean; reason?: string } {
+        if (typeof sessionId !== 'string' || sessionId.length === 0 || sessionId.length > 128) {
+            return { valid: false, reason: 'Invalid session' };
+        }
         const now = Date.now();
         const { state, result } = validateMessageAlgorithm(
             this.state,
@@ -55,6 +58,9 @@ class ReplayProtection {
      * Generate next sequence number for outgoing message
      */
     getNextSequence(sessionId: string): number {
+        if (typeof sessionId !== 'string' || sessionId.length === 0 || sessionId.length > 128) {
+            return 0;
+        }
         const { state, sequence } = getNextSequenceAlgorithm(this.state, sessionId);
         this.state = state;
         return sequence;
@@ -64,6 +70,9 @@ class ReplayProtection {
      * Reset session (on session end)
      */
     resetSession(sessionId: string): void {
+        if (typeof sessionId !== 'string' || sessionId.length === 0 || sessionId.length > 128) {
+            return;
+        }
         this.state = resetSessionAlgorithm(this.state, sessionId);
     }
 

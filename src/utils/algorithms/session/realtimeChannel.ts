@@ -1,4 +1,5 @@
 import { base64UrlToBytes } from '@/utils/algorithms/encoding/base64';
+import { isValidCapabilityToken, isValidSessionId } from './binding';
 
 export interface RealtimeChannelDeps {
   subtle: SubtleCrypto;
@@ -23,12 +24,13 @@ async function hmacSha256Hex(deps: RealtimeChannelDeps, keyBytes: Uint8Array, me
 }
 
 export async function deriveRealtimeChannelName(deps: RealtimeChannelDeps, sessionId: string, capabilityToken: string): Promise<string> {
-  let keyBytes: Uint8Array;
-  try {
-    keyBytes = base64UrlToBytes(capabilityToken);
-  } catch {
-    keyBytes = new TextEncoder().encode(capabilityToken);
+  if (!isValidSessionId(sessionId)) {
+    throw new Error('invalid session id');
   }
+  if (!isValidCapabilityToken(capabilityToken)) {
+    throw new Error('invalid capability token');
+  }
+  const keyBytes = base64UrlToBytes(capabilityToken);
 
   const mac = await hmacSha256Hex(deps, keyBytes, sessionId);
   keyBytes.fill(0);

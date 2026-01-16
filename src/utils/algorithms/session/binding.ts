@@ -13,9 +13,9 @@ export function isValidSessionId(sessionId: string): boolean {
 }
 
 export function isValidCapabilityToken(token: string): boolean {
-  if (token.length < 16 || token.length > 64) return false;
-  // Capability tokens are base64url (no padding) in production.
-  // We validate the character set to fail fast on malformed inputs.
+  // Canonical capability tokens are base64url (no padding) of 16 random bytes.
+  // 16 bytes => 22 base64url chars (unpadded).
+  if (token.length !== 22) return false;
   return /^[A-Za-z0-9_-]+$/.test(token);
 }
 
