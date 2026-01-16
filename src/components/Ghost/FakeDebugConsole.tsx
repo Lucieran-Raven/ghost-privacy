@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Terminal, X } from 'lucide-react';
 import { trapState } from '@/utils/trapState';
 import { trapAudio } from '@/utils/trapAudio';
+import { secureRandomInt } from '@/utils/secureRng';
 
 interface FakeDebugConsoleProps {
   isOpen: boolean;
@@ -106,9 +107,9 @@ tcp        0    284 10.0.1.10:443           89.123.45.67:52847      ESTABLISHED
 tcp        0      0 10.0.1.10:443           12.34.56.78:48291       TIME_WAIT`,
 
   'uptime': () => {
-    const days = Math.floor(Math.random() * 30) + 1;
-    const hours = Math.floor(Math.random() * 24);
-    const mins = Math.floor(Math.random() * 60);
+    const days = secureRandomInt(30) + 1;
+    const hours = secureRandomInt(24);
+    const mins = secureRandomInt(60);
     return ` 08:35:47 up ${days} days, ${hours}:${mins.toString().padStart(2, '0')},  1 user,  load average: 0.42, 0.38, 0.35`;
   },
 

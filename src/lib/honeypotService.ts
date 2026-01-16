@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/publicClient';
 import { isResearchFeaturesEnabled } from '@/utils/researchFeatures';
+import { fillRandomBytes } from '@/utils/secureRng';
 
 /**
  * GHOST MIRAGE: Honeypot Detection Service
@@ -80,15 +81,7 @@ export class HoneypotService {
   static generateHoneytoken(prefix: 'TRAP' | 'DECOY' = 'TRAP'): string {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     const bytes = new Uint8Array(12);
-    try {
-      if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-        crypto.getRandomValues(bytes);
-      } else {
-        for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
-      }
-    } catch {
-      for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
-    }
+    fillRandomBytes(bytes);
 
     let suffix = '';
     for (let i = 0; i < bytes.length; i++) {

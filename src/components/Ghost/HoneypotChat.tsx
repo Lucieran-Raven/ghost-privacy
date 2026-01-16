@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { trapState } from '@/utils/trapState';
 import { trapAudio } from '@/utils/trapAudio';
 import { getDecoyScenario, getRandomPhantomUser } from '@/utils/decoyContent';
+import { secureRandomInt } from '@/utils/secureRng';
 import FakeTwoFactorModal from './FakeTwoFactorModal';
 import FakeFileUpload from './FakeFileUpload';
 import FakeAdminPanel from './FakeAdminPanel';
@@ -54,7 +55,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
   
   // Psychological pressure state
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
-  const [activeSessionCount, setActiveSessionCount] = useState(Math.floor(Math.random() * 30) + 20);
+  const [activeSessionCount, setActiveSessionCount] = useState(secureRandomInt(30) + 20);
   const [isQuarantined, setIsQuarantined] = useState(false);
   const [memoryWarning, setMemoryWarning] = useState(false);
   
@@ -132,13 +133,13 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
         setIsPartnerTyping(false);
         phantomTypingStopRef.current?.();
         phantomTypingStopRef.current = null;
-      }, 3000 + Math.random() * 7000);
+      }, 3000 + secureRandomInt(7001));
     };
 
     // Start typing indicator randomly
     const interval = setInterval(() => {
-      if (Math.random() > 0.5) typingLoop();
-    }, 15000 + Math.random() * 30000);
+      if (secureRandomInt(2) === 1) typingLoop();
+    }, 15000 + secureRandomInt(30001));
 
     const initial = setTimeout(typingLoop, 10000);
 
@@ -154,7 +155,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveSessionCount(prev => {
-        const change = Math.floor(Math.random() * 5) - 2;
+        const change = secureRandomInt(5) - 2;
         return Math.max(15, prev + change);
       });
     }, 10000);
@@ -178,7 +179,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
           clearInterval(progressInterval);
           return 85;
         }
-        return prev + Math.random() * 3;
+        return prev + secureRandomInt(301) / 100;
       });
     }, 200);
 
@@ -210,11 +211,12 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
     });
   };
 
+
   // Keystroke logging with delay effect
   const handleInputChange = (value: string) => {
     // Add slight delay to create "capture" feeling (but never store the content)
     const isNonEmpty = value.trim().length > 0;
-    setTimeout(() => setCanSend(isNonEmpty), 30 + Math.random() * 50);
+    setTimeout(() => setCanSend(isNonEmpty), 30 + secureRandomInt(51));
 
     if (value.length > lastInputLenRef.current) {
       trapState.recordKeystroke();
@@ -252,7 +254,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
     // Fake "read" receipt after delay
     setTimeout(() => {
       setMessages(prev => prev.map(m => m.id === newMsg.id ? { ...m, read: true } : m));
-    }, 2000 + Math.random() * 3000);
+    }, 2000 + secureRandomInt(3001));
 
     // Trigger connection lost after 2 messages
     if (userMessageCount >= 1) {
@@ -278,13 +280,13 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
   const handleReconnect = () => {
     trapState.recordReconnect();
     setReconnectAttempts(prev => prev + 1);
-    setIsConnectionLost(false);
     setIsConnecting(true);
     
-    setTimeout(() => {
+    const triggerConnectionLost = () => {
       setIsConnecting(false);
       setIsConnectionLost(true);
-    }, 5000 + Math.random() * 3000);
+    };
+    setTimeout(triggerConnectionLost, 5000 + secureRandomInt(3001));
   };
 
   // Infinite pagination trap
@@ -308,7 +310,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
         });
       });
       setIsLoadingMore(false);
-    }, 2000 + Math.random() * 2000);
+    }, 2000 + secureRandomInt(2001));
   };
 
   // Check for admin panel escalation
@@ -430,8 +432,8 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
       <div className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2">
         <div className="container mx-auto flex items-center gap-2 text-xs text-amber-700">
           <Shield className="h-4 w-4" />
-          <span className="font-semibold">SIMULATION MODE</span>
-          <span className="text-amber-700/80">No real messages are transmitted or stored.</span>
+          <span className="font-semibold">Diagnostic interface</span>
+          <span className="text-amber-700/80">Enhanced integrity checks active.</span>
         </div>
       </div>
 

@@ -1,6 +1,8 @@
 // Plausible Timestamps - Generate fake timestamps to break timing correlation
 // Messages appear sent at random times within a configurable window
 
+import { secureRandomInt } from '@/utils/secureRng';
+
 export interface TimestampConfig {
   enabled: boolean;
   windowMinutes: number; // ±window from real time
@@ -43,22 +45,23 @@ export function generatePlausibleTimestamp(realTimestamp: number = Date.now()): 
   }
   
   const windowMs = currentConfig.windowMinutes * 60 * 1000;
+  const safeWindowMs = Number.isFinite(windowMs) && windowMs > 0 ? Math.floor(windowMs) : 0;
   let offset: number;
   
   switch (currentConfig.mode) {
     case 'random':
       // Random offset within ±window
-      offset = Math.floor(Math.random() * windowMs * 2) - windowMs;
+      offset = safeWindowMs > 0 ? secureRandomInt(safeWindowMs * 2 + 1) - safeWindowMs : 0;
       break;
       
     case 'delayed':
       // Always show as sent earlier (past)
-      offset = -Math.floor(Math.random() * windowMs);
+      offset = safeWindowMs > 0 ? -secureRandomInt(safeWindowMs + 1) : 0;
       break;
       
     case 'advanced':
       // Always show as sent later (future)
-      offset = Math.floor(Math.random() * windowMs);
+      offset = safeWindowMs > 0 ? secureRandomInt(safeWindowMs + 1) : 0;
       break;
       
     default:
@@ -139,7 +142,7 @@ export function generateBatchTimestamps(
     const { displayTimestamp } = generatePlausibleTimestamp(currentTime);
     timestamps.push(displayTimestamp);
     // Advance real time by 1-5 minutes randomly
-    currentTime += Math.floor(Math.random() * 240000) + 60000;
+    currentTime += secureRandomInt(240000) + 60000;
   }
   
   // Sort to maintain rough chronological order

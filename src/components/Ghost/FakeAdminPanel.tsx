@@ -8,6 +8,7 @@ import {
 import { getAdminStats, generateFakeErrorLogs } from '@/utils/decoyContent';
 import { trapState } from '@/utils/trapState';
 import { trapAudio } from '@/utils/trapAudio';
+import { secureRandomInt } from '@/utils/secureRng';
 
 interface FakeAdminPanelProps {
   onTimeout: () => void;
@@ -62,10 +63,10 @@ const FakeAdminPanel = ({ onTimeout }: FakeAdminPanelProps) => {
     const interval = setInterval(() => {
       setStats(prev => ({
         ...prev,
-        activeUsers: prev.activeUsers + Math.floor(Math.random() * 3) - 1,
-        messagesTotal: prev.messagesTotal + Math.floor(Math.random() * 10),
-        cpuUsage: Math.min(95, Math.max(30, prev.cpuUsage + Math.floor(Math.random() * 6) - 3)),
-        memoryUsage: Math.min(90, Math.max(50, prev.memoryUsage + Math.floor(Math.random() * 4) - 2)),
+        activeUsers: prev.activeUsers + secureRandomInt(3) - 1,
+        messagesTotal: prev.messagesTotal + secureRandomInt(10),
+        cpuUsage: Math.min(95, Math.max(30, prev.cpuUsage + secureRandomInt(6) - 3)),
+        memoryUsage: Math.min(90, Math.max(50, prev.memoryUsage + secureRandomInt(4) - 2)),
       }));
     }, 3000);
 
@@ -233,10 +234,10 @@ const FakeAdminPanel = ({ onTimeout }: FakeAdminPanelProps) => {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-foreground font-mono">
-                        anon_{Math.random().toString(36).slice(2, 8)}
+                        anon_{(secureRandomInt(0x1000000) + 0x1000000).toString(36).slice(1)}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Last seen: {Math.floor(Math.random() * 60)}m ago
+                        Last seen: {secureRandomInt(60)}m ago
                       </p>
                     </div>
                   </div>

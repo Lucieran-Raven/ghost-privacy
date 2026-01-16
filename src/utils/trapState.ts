@@ -30,6 +30,8 @@ import {
   type TrapState
 } from '@/utils/algorithms/deception/honeypot';
 
+import { secureRandomInt } from '@/utils/secureRng';
+
 class InMemoryTrapState {
   private state: TrapState = createDefaultTrapState({ now: () => Date.now() });
   private cleanupHandlersRegistered = false;
@@ -192,7 +194,7 @@ class InMemoryTrapState {
   generateSessionReference(): string {
     return generateSessionReferenceAlgorithm({
       now: () => Date.now(),
-      randomInt: (maxExclusive) => Math.floor(Math.random() * maxExclusive)
+      randomInt: (maxExclusive) => secureRandomInt(maxExclusive)
     });
   }
 
@@ -201,7 +203,7 @@ class InMemoryTrapState {
    */
   nuclearPurge(): void {
     // Overwrite all state with random data first
-    const randomData = Array.from({ length: 100 }, () => Math.random().toString(36));
+    const randomData = Array.from({ length: 100 }, () => secureRandomInt(0x1000000).toString(36));
     void randomData;
     
     // Clear all references

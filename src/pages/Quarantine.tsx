@@ -87,10 +87,10 @@ const Quarantine = () => {
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h3 className="font-semibold text-amber-600 mb-1">⚠️ TRANSPARENT SIMULATION</h3>
+              <h3 className="font-semibold text-amber-600 mb-1">Recovery console</h3>
               <p className="text-sm text-amber-600/80">
-                This is a <strong>security testing simulation</strong> page displayed only to honeypot detectors. 
-                Real users will never see this. All data on this page is synthesized for testing purposes.
+                This session has been routed through enhanced integrity verification.
+                Access is restricted while diagnostic checks are in progress.
               </p>
             </div>
           </div>

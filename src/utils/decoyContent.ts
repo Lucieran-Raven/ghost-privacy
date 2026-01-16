@@ -6,6 +6,8 @@
  * Creates illusion of accessing sensitive information.
  */
 
+import { pickRandom, secureRandomInt } from '@/utils/secureRng';
+
 type ContentTheme = 'legal' | 'medical' | 'financial' | 'diplomatic' | 'military' | 'journalistic';
 
 interface DecoyMessage {
@@ -24,32 +26,6 @@ interface DecoyScenario {
     messagesTotal: number;
     regionsActive: string[];
   };
-}
-
-// Detect browser locale
-function detectLocale(): string {
-  try {
-    return navigator.language?.split('-')[0] || 'en';
-  } catch {
-    return 'en';
-  }
-}
-
-// Get content theme based on locale
-function getThemeForLocale(locale: string): ContentTheme {
-  const themeMap: Record<string, ContentTheme> = {
-    'en': 'legal',
-    'ru': 'military',
-    'zh': 'financial',
-    'ar': 'diplomatic',
-    'es': 'journalistic',
-    'fr': 'diplomatic',
-    'de': 'financial',
-    'ja': 'financial',
-    'ko': 'financial',
-    'pt': 'journalistic',
-  };
-  return themeMap[locale] || 'legal';
 }
 
 // Legal theme (English default)
@@ -166,41 +142,42 @@ const MEDICAL_SCENARIO: DecoyScenario = {
   },
 };
 
-// Get scenario for current locale
+const SCENARIOS: readonly DecoyScenario[] = [
+  LEGAL_SCENARIO,
+  MILITARY_SCENARIO,
+  FINANCIAL_SCENARIO,
+  DIPLOMATIC_SCENARIO,
+  JOURNALISTIC_SCENARIO,
+  MEDICAL_SCENARIO
+];
+
+let scenarioCache: DecoyScenario | null = null;
+
+// Get scenario for current run
 export function getDecoyScenario(): DecoyScenario {
-  const locale = detectLocale();
-  const theme = getThemeForLocale(locale);
-  
-  switch (theme) {
-    case 'military':
-      return MILITARY_SCENARIO;
-    case 'financial':
-      return FINANCIAL_SCENARIO;
-    case 'diplomatic':
-      return DIPLOMATIC_SCENARIO;
-    case 'journalistic':
-      return JOURNALISTIC_SCENARIO;
-    case 'medical':
-      return MEDICAL_SCENARIO;
-    case 'legal':
-    default:
-      return LEGAL_SCENARIO;
-  }
+  if (scenarioCache) return scenarioCache;
+  scenarioCache = pickRandom(SCENARIOS);
+  return scenarioCache;
 }
 
 // Get random fake filename
 export function getRandomFakeFile(): string {
   const scenario = getDecoyScenario();
-  return scenario.fakeFiles[Math.floor(Math.random() * scenario.fakeFiles.length)];
+  return scenario.fakeFiles[secureRandomInt(scenario.fakeFiles.length)];
 }
 
 // Get random fake username for phantom presence
 export function getRandomPhantomUser(): string {
   const scenario = getDecoyScenario();
   const baseUsers = scenario.fakeUsers;
-  const genericUsers = ['anon_' + Math.floor(Math.random() * 9999), 'ghost_reviewer', 'sys_monitor', 'audit_' + Math.floor(Math.random() * 99)];
+  const genericUsers = [
+    'anon_' + secureRandomInt(10000),
+    'ghost_reviewer',
+    'sys_monitor',
+    'audit_' + secureRandomInt(100)
+  ];
   const allUsers = [...baseUsers, ...genericUsers];
-  return allUsers[Math.floor(Math.random() * allUsers.length)];
+  return allUsers[secureRandomInt(allUsers.length)];
 }
 
 // Generate fake error log entries
@@ -222,11 +199,11 @@ export function generateFakeErrorLogs(count: number = 50): string[] {
   const now = Date.now();
   
   for (let i = 0; i < count; i++) {
-    const timestamp = new Date(now - Math.random() * 86400000).toISOString();
-    let log = errors[Math.floor(Math.random() * errors.length)];
-    log = log.replace('{IP}', `${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`);
-    log = log.replace('{N}', String(Math.floor(Math.random() * 1000)));
-    log = log.replace('{REGION}', ['US-East', 'EU-West', 'APAC', 'Unknown'][Math.floor(Math.random() * 4)]);
+    const timestamp = new Date(now - secureRandomInt(86400000)).toISOString();
+    let log = errors[secureRandomInt(errors.length)];
+    log = log.replace('{IP}', `${secureRandomInt(256)}.${secureRandomInt(256)}.${secureRandomInt(256)}.${secureRandomInt(256)}`);
+    log = log.replace('{N}', String(secureRandomInt(1000)));
+    log = log.replace('{REGION}', ['US-East', 'EU-West', 'APAC', 'Unknown'][secureRandomInt(4)]);
     logs.push(`${timestamp} ${log}`);
   }
   
@@ -276,12 +253,12 @@ export function getAdminStats() {
   return {
     ...scenario.adminStats,
     // Add some randomization
-    activeUsers: scenario.adminStats.activeUsers + Math.floor(Math.random() * 10) - 5,
-    messagesTotal: scenario.adminStats.messagesTotal + Math.floor(Math.random() * 100),
-    sessionsActive: Math.floor(Math.random() * 50) + 10,
-    cpuUsage: Math.floor(Math.random() * 30) + 40,
-    memoryUsage: Math.floor(Math.random() * 20) + 60,
-    uptime: `${Math.floor(Math.random() * 30) + 1}d ${Math.floor(Math.random() * 24)}h`,
+    activeUsers: scenario.adminStats.activeUsers + secureRandomInt(10) - 5,
+    messagesTotal: scenario.adminStats.messagesTotal + secureRandomInt(100),
+    sessionsActive: secureRandomInt(50) + 10,
+    cpuUsage: secureRandomInt(30) + 40,
+    memoryUsage: secureRandomInt(20) + 60,
+    uptime: `${secureRandomInt(30) + 1}d ${secureRandomInt(24)}h`,
   };
 }
 
