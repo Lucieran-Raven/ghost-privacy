@@ -9,27 +9,35 @@ on:
     # Run security audit weekly
     - cron: '0 0 * * 0'
 
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
   security-audit:
     name: NPM Security Audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 1
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '20.11.1'
           cache: 'npm'
       
       - name: Install dependencies
         run: npm ci
+
+      - name: Integrity suite
+        run: npm run integrity
       
       - name: Audit (fail on high/critical)
         run: |
@@ -39,11 +47,13 @@ jobs:
 
   semgrep:
     name: Semgrep SAST
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Run Semgrep SAST
         uses: returntocorp/semgrep-action@v1
@@ -52,16 +62,18 @@ jobs:
 
   lint:
     name: ESLint Security Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 1
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '20.11.1'
           cache: 'npm'
       
       - name: Install dependencies
@@ -72,21 +84,26 @@ jobs:
 
   build:
     name: Build Verification
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
     needs: [security-audit, semgrep, lint]
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 1
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '20.11.1'
           cache: 'npm'
       
       - name: Install dependencies
         run: npm ci
+
+      - name: Integrity suite
+        run: npm run integrity
       
       - name: Build production bundle
         run: npm run build
@@ -107,11 +124,13 @@ jobs:
 
   csp-validation:
     name: Content Security Policy Validation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 1
       
       - name: Validate CSP headers
         run: |
@@ -157,11 +176,13 @@ jobs:
 
   env-check:
     name: Environment Variables Security Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 1
       
       - name: Check for .env file in repository
         run: |
@@ -175,12 +196,17 @@ jobs:
 
   dependency-review:
     name: Dependency License & Security Review
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 1
       
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
@@ -190,13 +216,15 @@ jobs:
 
   post-deploy-verification:
     name: Post-Deploy Security Verification
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: [security-audit, lint, build, csp-validation, env-check]
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 1
       
       - name: Verify deployment security
         run: |

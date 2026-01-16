@@ -5,22 +5,30 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: release-windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 1
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 20.11.1
           cache: npm
 
       - name: Install dependencies
@@ -78,6 +86,14 @@ jobs:
             $hash = (Get-FileHash -Algorithm SHA256 -Path $f.FullName).Hash.ToLower()
             "$hash  $($f.Name)" | Out-File -FilePath $checksumPath -Append -Encoding ascii
           }
+
+      - name: Attest build provenance (Windows release artifacts)
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: |
+            ghost-privacy-windows-installers/*
+            ghost-privacy-windows.sha256
+            integrity-attestation-windows.txt
 
       - name: Upload installers (workflow artifacts)
         uses: actions/upload-artifact@v4
