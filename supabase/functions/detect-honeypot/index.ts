@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors.ts";
-import { jsonError } from "../_shared/security.ts";
+import { getRateLimitKeyHex, jsonError } from "../_shared/security.ts";
+import { getSupabaseServiceClient } from "../_shared/client.ts";
 
 declare const Deno: {
   env: {
@@ -31,6 +32,8 @@ serve(async (req) => {
   }
 
   try {
+    const supabase = getSupabaseServiceClient();
+
     let body: { sessionId?: string; accessorFingerprint?: string };
     try {
       body = await req.json();
@@ -43,6 +46,34 @@ serve(async (req) => {
 
     const sessionId = (body.sessionId || '').toString();
     if (!sessionId) {
+      return new Response(
+        JSON.stringify({ isHoneypot: false, trapType: null }),
+        { headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const windowMs = 60 * 60 * 1000;
+    const windowStart = new Date(Math.floor(Date.now() / windowMs) * windowMs);
+    const windowStartIso = windowStart.toISOString();
+
+    let rateKey: string;
+    try {
+      rateKey = await getRateLimitKeyHex(req, windowStartIso);
+    } catch {
+      return new Response(
+        JSON.stringify({ isHoneypot: false, trapType: null }),
+        { headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { data: rateOk, error: rateErr } = await supabase.rpc('increment_rate_limit', {
+      p_ip_hash: rateKey,
+      p_action: 'detect_honeypot',
+      p_window_start: windowStartIso,
+      p_max_count: 400
+    });
+
+    if (rateErr || rateOk === false) {
       return new Response(
         JSON.stringify({ isHoneypot: false, trapType: null }),
         { headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' } }

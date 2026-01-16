@@ -117,6 +117,38 @@ function isValidIpFormat(ip: string): boolean {
   return looksLikeIpv4 || looksLikeIpv6;
 }
 
+let cachedHmacKey: CryptoKey | null = null;
+
+async function getIpHashHmacKey(): Promise<CryptoKey> {
+  if (cachedHmacKey) return cachedHmacKey;
+
+  const env = Deno.env.get('ENVIRONMENT') || 'development';
+  const envSalt = Deno.env.get('IP_HASH_SALT');
+  const fallbackSalt = 'development-salt-32-chars-long-0000';
+  const salt = envSalt || (env === 'production' ? '' : fallbackSalt);
+
+  if (!salt || salt.length < 32) {
+    throw new Error('IP_HASH_SALT missing or too short (min 32 bytes)');
+  }
+
+  const encoder = new TextEncoder();
+  cachedHmacKey = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(salt),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  return cachedHmacKey;
+}
+
+async function hmacSha256Hex(message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await getIpHashHmacKey();
+  const hash = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
+  return arrayBufferToHex(hash);
+}
+
 export async function getClientIpHashHex(req: Request): Promise<string> {
   const rawIp = extractClientIp(req);
 
@@ -138,25 +170,31 @@ export async function getClientIpHashHex(req: Request): Promise<string> {
   } else if (!isValidIpFormat(finalIp)) {
     throw new Error('Client IP unavailable (invalid ip)');
   }
-  const envSalt = Deno.env.get('IP_HASH_SALT');
-  const fallbackSalt = 'development-salt-32-chars-long-0000';
-  const salt = envSalt || (env === 'production' ? '' : fallbackSalt);
+  return await hmacSha256Hex(finalIp);
+}
 
-  if (!salt || salt.length < 32) {
-    throw new Error('IP_HASH_SALT missing or too short (min 32 bytes)');
+/**
+ * Deterministic per-window rate-limit key.
+ *
+ * Prevents correlating clients across windows: the same IP will hash differently
+ * for each stable window_start value.
+ */
+export async function getRateLimitKeyHex(req: Request, windowStartIso: string): Promise<string> {
+  const rawIp = extractClientIp(req);
+  const env = Deno.env.get('ENVIRONMENT') || 'development';
+
+  if (env === 'production' && !rawIp) {
+    throw new Error('Client IP unavailable');
   }
 
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(salt),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
+  const finalIp = rawIp || '127.0.0.1';
+  if (finalIp !== '127.0.0.1' || rawIp) {
+    if (!isValidIpFormat(finalIp)) {
+      throw new Error('Client IP unavailable (invalid ip)');
+    }
+  }
 
-  const hash = await crypto.subtle.sign('HMAC', key, encoder.encode(finalIp));
-  return arrayBufferToHex(hash);
+  return await hmacSha256Hex(`${windowStartIso}|${finalIp}`);
 }
 
 export function hexToBytea(hex: string): string {

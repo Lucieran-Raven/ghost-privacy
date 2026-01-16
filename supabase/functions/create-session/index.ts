@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors.ts";
 import {
   generateCapabilityToken,
-  getClientIpHashHex,
+  getRateLimitKeyHex,
   hashCapabilityTokenToBytea,
   jsonError
 } from "../_shared/security.ts";
@@ -54,13 +54,6 @@ serve(async (req: Request) => {
 
     const { sessionId } = body;
 
-    let clientIpHashHex: string;
-    try {
-      clientIpHashHex = await getClientIpHashHex(req);
-    } catch {
-      return errorResponse(req, 400, 'IP_UNAVAILABLE');
-    }
-
     // Strict input validation - no details leaked
     if (!sessionId || typeof sessionId !== 'string' || !/^GHOST-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(sessionId)) {
       return errorResponse(req, 400, 'INVALID_REQUEST');
@@ -70,12 +63,20 @@ serve(async (req: Request) => {
     // IMPORTANT: window_start must be stable within the window, otherwise the UPSERT never conflicts.
     const windowMs = RATE_LIMIT_WINDOW_MINUTES * 60 * 1000;
     const windowStart = new Date(Math.floor(Date.now() / windowMs) * windowMs);
+    const windowStartIso = windowStart.toISOString();
+
+    let rateKey: string;
+    try {
+      rateKey = await getRateLimitKeyHex(req, windowStartIso);
+    } catch {
+      return errorResponse(req, 400, 'IP_UNAVAILABLE');
+    }
 
     // Atomic increment using PostgreSQL ON CONFLICT
     const { data: rateResult, error: rateError } = await supabase.rpc('increment_rate_limit', {
-      p_ip_hash: clientIpHashHex,
+      p_ip_hash: rateKey,
       p_action: 'create_session',
-      p_window_start: windowStart.toISOString(),
+      p_window_start: windowStartIso,
       p_max_count: RATE_LIMIT_MAX_SESSIONS
     });
 

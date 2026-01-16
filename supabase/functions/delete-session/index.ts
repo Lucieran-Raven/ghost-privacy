@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors.ts";
 import {
   generateCapabilityToken,
+  getRateLimitKeyHex,
   hashCapabilityTokenToBytea,
   jsonError,
 } from "../_shared/security.ts";
@@ -65,6 +66,28 @@ serve(async (req: Request) => {
 
     if (!/^[A-Za-z0-9_-]+$/.test(capabilityToken)) {
       return errorResponse(req, 400, 'INVALID_REQUEST');
+    }
+
+    const windowMs = 60 * 60 * 1000;
+    const windowStart = new Date(Math.floor(Date.now() / windowMs) * windowMs);
+    const windowStartIso = windowStart.toISOString();
+
+    let rateKey: string;
+    try {
+      rateKey = await getRateLimitKeyHex(req, windowStartIso);
+    } catch {
+      return errorResponse(req, 404, 'NOT_FOUND');
+    }
+
+    const { data: rateOk, error: rateErr } = await supabase.rpc('increment_rate_limit', {
+      p_ip_hash: rateKey,
+      p_action: 'delete_session',
+      p_window_start: windowStartIso,
+      p_max_count: 120
+    });
+
+    if (rateErr || rateOk === false) {
+      return errorResponse(req, 404, 'NOT_FOUND');
     }
 
     let capabilityHashBytea: string;

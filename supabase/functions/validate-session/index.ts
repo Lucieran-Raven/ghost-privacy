@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors.ts";
 import {
   jsonError,
+  getRateLimitKeyHex,
   verifyCapabilityHash
 } from "../_shared/security.ts";
 import { getSupabaseServiceClient } from "../_shared/client.ts";
@@ -64,6 +65,30 @@ serve(async (req: Request) => {
 
     const normalizedRole = role === 'host' || role === 'guest' ? role : null;
     if (!normalizedRole) {
+      await new Promise(r => setTimeout(r, 50));
+      return invalidResponse(req);
+    }
+
+    const windowMs = 60 * 60 * 1000;
+    const windowStart = new Date(Math.floor(Date.now() / windowMs) * windowMs);
+    const windowStartIso = windowStart.toISOString();
+
+    let rateKey: string;
+    try {
+      rateKey = await getRateLimitKeyHex(req, windowStartIso);
+    } catch {
+      await new Promise(r => setTimeout(r, 50));
+      return invalidResponse(req);
+    }
+
+    const { data: rateOk, error: rateErr } = await supabase.rpc('increment_rate_limit', {
+      p_ip_hash: rateKey,
+      p_action: 'validate_session',
+      p_window_start: windowStartIso,
+      p_max_count: 200
+    });
+
+    if (rateErr || rateOk === false) {
       await new Promise(r => setTimeout(r, 50));
       return invalidResponse(req);
     }
