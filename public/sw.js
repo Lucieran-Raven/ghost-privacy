@@ -4,8 +4,7 @@
 const CACHE_NAME = 'ghost-pwa-v5';
 const STATIC_ASSETS = [
   '/icon-192.png',
-  '/icon-512.png',
-  '/manifest.json'
+  '/icon-512.png'
 ];
 
 // Critical app shell assets - cached on install
@@ -71,7 +70,6 @@ self.addEventListener('fetch', (event) => {
   const isSupabase = url.hostname.endsWith('.supabase.co');
   const isSameOrigin = url.origin === self.location.origin;
   const isStaticAllowlist = isSameOrigin && STATIC_ASSETS.includes(url.pathname);
-  const isHashedAsset = isSameOrigin && url.pathname.startsWith('/assets/');
 
   const isSessionRoute = url.origin === self.location.origin && url.pathname.startsWith('/session');
   const isBundleAsset = url.origin === self.location.origin && url.pathname.startsWith('/assets/') && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname.endsWith('.map'));
@@ -90,7 +88,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (isStaticAllowlist || isHashedAsset) {
+  if (isStaticAllowlist) {
     event.respondWith((async () => {
       try {
         const cache = await caches.open(CACHE_NAME);

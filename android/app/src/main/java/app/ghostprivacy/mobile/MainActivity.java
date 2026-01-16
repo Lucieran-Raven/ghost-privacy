@@ -1,13 +1,21 @@
 package app.ghostprivacy.mobile;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.ApplicationInfo;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
+import android.webkit.ServiceWorkerController;
+import android.webkit.ServiceWorkerWebSettings;
 import android.webkit.WebSettings;
 import android.webkit.WebStorage;
 import android.webkit.WebView;
 import java.io.File;
+import java.security.MessageDigest;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -16,25 +24,134 @@ public class MainActivity extends BridgeActivity {
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     try {
+      getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
+    } catch (Exception e) {
+    }
+
+    enforceRuntimeIntegrityBestEffort();
+    try {
       registerPlugin(AppSettingsPlugin.class);
       registerPlugin(CertPinningPlugin.class);
       registerPlugin(WebViewCleanupPlugin.class);
       registerPlugin(BuildIntegrityPlugin.class);
+      registerPlugin(AndroidKeystorePlugin.class);
     } catch (Exception e) {
     }
     hardenWebView();
   }
 
   @Override
+  public void onPause() {
+    super.onPause();
+    clearClipboardBestEffort();
+  }
+
+  @Override
   public void onStop() {
     super.onStop();
+    clearClipboardBestEffort();
     clearWebViewData();
   }
 
   @Override
   public void onDestroy() {
     super.onDestroy();
+    clearClipboardBestEffort();
     clearWebViewData();
+  }
+
+  private void clearClipboardBestEffort() {
+    try {
+      ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+      if (cm == null) return;
+      cm.setPrimaryClip(ClipData.newPlainText("", ""));
+    } catch (Exception e) {
+    }
+  }
+
+  private static String bytesToHex(byte[] bytes) {
+    StringBuilder sb = new StringBuilder(bytes.length * 2);
+    for (byte b : bytes) {
+      sb.append(String.format("%02x", b));
+    }
+    return sb.toString();
+  }
+
+  private static String sha256Hex(byte[] data) throws Exception {
+    MessageDigest md = MessageDigest.getInstance("SHA-256");
+    byte[] digest = md.digest(data);
+    return bytesToHex(digest);
+  }
+
+  private void enforceRuntimeIntegrityBestEffort() {
+    try {
+      String expected = "";
+      try {
+        expected = BuildConfig.EXPECTED_SIGNING_CERT_SHA256;
+      } catch (Exception e) {
+        expected = "";
+      }
+
+      if (expected == null || expected.length() == 0) {
+        return;
+      }
+
+      PackageManager pm = getPackageManager();
+      String pkg = getPackageName();
+
+      byte[] certBytes = null;
+
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        PackageInfo pi = pm.getPackageInfo(pkg, PackageManager.GET_SIGNING_CERTIFICATES);
+        if (pi.signingInfo != null) {
+          if (pi.signingInfo.hasMultipleSigners()) {
+            if (pi.signingInfo.getApkContentsSigners() != null && pi.signingInfo.getApkContentsSigners().length > 0) {
+              certBytes = pi.signingInfo.getApkContentsSigners()[0].toByteArray();
+            }
+          } else {
+            if (pi.signingInfo.getSigningCertificateHistory() != null && pi.signingInfo.getSigningCertificateHistory().length > 0) {
+              certBytes = pi.signingInfo.getSigningCertificateHistory()[0].toByteArray();
+            }
+          }
+        }
+      } else {
+        PackageInfo pi = pm.getPackageInfo(pkg, PackageManager.GET_SIGNATURES);
+        if (pi.signatures != null && pi.signatures.length > 0) {
+          certBytes = pi.signatures[0].toByteArray();
+        }
+      }
+
+      if (certBytes == null || certBytes.length == 0) {
+        panicExitBestEffort();
+        return;
+      }
+
+      String observed = sha256Hex(certBytes);
+      boolean ok = observed.equalsIgnoreCase(expected);
+      if (!ok) {
+        panicExitBestEffort();
+      }
+    } catch (Exception e) {
+      panicExitBestEffort();
+    }
+  }
+
+  private void panicExitBestEffort() {
+    try {
+      try {
+        finishAndRemoveTask();
+      } catch (Exception ignored) {
+      }
+      try {
+        android.os.Process.killProcess(android.os.Process.myPid());
+      } catch (Exception ignored) {
+      }
+      try {
+        System.exit(1);
+      } catch (Exception ignored) {
+      }
+    } catch (Exception ignored) {
+    }
   }
 
   private void hardenWebView() {
@@ -69,8 +186,17 @@ public class MainActivity extends BridgeActivity {
       settings.setAllowFileAccess(false);
       settings.setAllowContentAccess(false);
       settings.setSaveFormData(false);
+      try {
+        settings.setSavePassword(false);
+      } catch (Exception e) {
+      }
       settings.setJavaScriptCanOpenWindowsAutomatically(false);
       settings.setSupportMultipleWindows(false);
+      settings.setSupportZoom(false);
+      settings.setBuiltInZoomControls(false);
+      settings.setDisplayZoomControls(false);
+      settings.setGeolocationEnabled(false);
+      settings.setMediaPlaybackRequiresUserGesture(true);
 
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -92,6 +218,16 @@ public class MainActivity extends BridgeActivity {
       cookies.setAcceptCookie(false);
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
         cookies.setAcceptThirdPartyCookies(webView, false);
+      }
+
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        try {
+          ServiceWorkerWebSettings sw = ServiceWorkerController.getInstance().getServiceWorkerWebSettings();
+          sw.setCacheMode(WebSettings.LOAD_NO_CACHE);
+          sw.setAllowContentAccess(false);
+          sw.setAllowFileAccess(false);
+        } catch (Exception e) {
+        }
       }
     } catch (Exception e) {
     }

@@ -6,7 +6,7 @@
     </trust-anchors>
   </base-config>
 
-  <domain-config cleartextTrafficPermitted="false">
+  <domain-config cleartextTrafficPermitted="false" hstsEnforced="true">
     <domain includeSubdomains="true">ghostprivacy.netlify.app</domain>
     <domain includeSubdomains="true">muirdvibzicpedfmqdrf.supabase.co</domain>
   </domain-config>

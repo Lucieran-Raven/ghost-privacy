@@ -6,7 +6,12 @@
     "main"
   ],
   "permissions": [
-    "core:default",
+    "core:path:default",
+    "core:event:default",
+    "core:window:default",
+    "core:webview:default",
+    "core:app:default",
+    "core:resources:default",
     "core:webview:deny-internal-toggle-devtools"
   ]
 }
