@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
-import { isTauriRuntime, tauriInvoke } from "@/utils/runtime";
+import { isTauriRuntime, setTauriContentProtected, tauriInvoke } from "@/utils/runtime";
 import { runCertificatePinningCheck } from "@/utils/certPinning";
 import { enforceBuildIntegrityOrExit } from "@/utils/buildIntegrity";
 import { installMemoryLifecycleHandlers } from "@/utils/memory/lifecycle";
@@ -12,6 +12,13 @@ const bootstrap = () => {
 
 // Install memory lifecycle handlers early
 installMemoryLifecycleHandlers();
+
+try {
+  if (isTauriRuntime()) {
+    void setTauriContentProtected(true);
+  }
+} catch {
+}
 
 // Offline detection for native apps
 const setupOfflineDetection = () => {

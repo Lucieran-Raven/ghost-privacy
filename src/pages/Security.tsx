@@ -157,6 +157,32 @@ const Security = () => {
                           )}
                         </div>
                       ) : null}
+
+                      {threatStatus && (threatStatus.platform === 'tauri' || threatStatus.platform === 'android') ? (
+                        <div className="border border-[rgba(255,10,42,0.14)] p-3 bg-black/40 font-mono text-[12px] leading-relaxed text-white/70 space-y-1">
+                          <div>
+                            {threatStatus.status === 'ok'
+                              ? '[✓] PLATFORM THREAT STATUS: OK'
+                              : threatStatus.status === 'warn'
+                                ? '[!] PLATFORM THREAT STATUS: WARN'
+                                : threatStatus.status === 'error'
+                                  ? '[!] PLATFORM THREAT STATUS: ERROR'
+                                  : '[!] PLATFORM THREAT STATUS: SKIPPED'}
+                          </div>
+                          {threatStatus.platform === 'tauri' ? (
+                            <>
+                              {typeof threatStatus.debugBuild === 'boolean' ? <div>[→] DEBUG BUILD: {threatStatus.debugBuild ? 'YES' : 'NO'}</div> : null}
+                            </>
+                          ) : (
+                            <>
+                              {typeof threatStatus.debuggable === 'boolean' ? <div>[→] DEBUGGABLE: {threatStatus.debuggable ? 'YES' : 'NO'}</div> : null}
+                              {typeof threatStatus.debuggerAttached === 'boolean' ? <div>[→] DEBUGGER ATTACHED: {threatStatus.debuggerAttached ? 'YES' : 'NO'}</div> : null}
+                              {typeof threatStatus.emulatorLikely === 'boolean' ? <div>[→] EMULATOR LIKELY: {threatStatus.emulatorLikely ? 'YES' : 'NO'}</div> : null}
+                              {typeof threatStatus.rootLikely === 'boolean' ? <div>[→] ROOT LIKELY: {threatStatus.rootLikely ? 'YES' : 'NO'}</div> : null}
+                            </>
+                          )}
+                        </div>
+                      ) : null}
                       <a
                         href={repoUrl}
                         target="_blank"

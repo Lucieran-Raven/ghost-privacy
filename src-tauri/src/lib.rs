@@ -106,6 +106,7 @@ mod memory_lock {
 
 static KEY_VAULT: OnceLock<KeyVault> = OnceLock::new();
 static MLOCK_WARNED: AtomicBool = AtomicBool::new(false);
+static VAULT_CAP_TAGS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 
 const MAX_SESSION_ID_LEN: usize = 32;
 const MAX_CAPABILITY_TOKEN_LEN: usize = 256;
@@ -196,9 +197,47 @@ impl KeyVault {
     keys.clear();
   }
 }
+
 fn purge_cleanup_plan() {
   if let Some(vault) = KEY_VAULT.get() {
     vault.purge();
+  }
+
+  if let Some(tags) = VAULT_CAP_TAGS.get() {
+    let mut t = tags.lock().unwrap_or_else(|e| e.into_inner());
+    t.clear();
+  }
+}
+
+fn compute_cap_tag(session_id: &str, capability_token: &str) -> Result<String, String> {
+  if capability_token.is_empty() {
+    return Err("empty token".to_string());
+  }
+  if capability_token.len() > MAX_CAPABILITY_TOKEN_LEN {
+    return Err("token too large".to_string());
+  }
+  if capability_token.len() != 22 {
+    return Err("invalid token".to_string());
+  }
+
+  let key_bytes = Zeroizing::new(decode_b64url_like_browser(capability_token).map_err(|_| "invalid token".to_string())?);
+  let mac_hex = hmac_sha256_hex(key_bytes.as_slice(), session_id)?;
+  let tag = mac_hex
+    .get(0..32)
+    .ok_or_else(|| "invalid hmac output".to_string())?;
+
+  Ok(tag.to_string())
+}
+
+fn require_vault_capability(session_id: &str, capability_token: &str) -> Result<(), String> {
+  let expected = compute_cap_tag(session_id, capability_token)?;
+  let tags = VAULT_CAP_TAGS.get_or_init(|| Mutex::new(HashMap::new()));
+  let tags = tags.lock().unwrap_or_else(|e| e.into_inner());
+  let bound = tags.get(session_id).ok_or_else(|| "capability not bound".to_string())?;
+  if bound == &expected {
+    Ok(())
+  } else {
+    Err("capability denied".to_string())
   }
 }
 
@@ -278,6 +317,15 @@ fn get_version_guard(app: tauri::AppHandle) -> Result<serde_json::Value, String>
   }))
 }
 
+#[tauri::command]
+fn get_threat_status() -> Result<serde_json::Value, String> {
+  let debug_build = cfg!(debug_assertions);
+  Ok(serde_json::json!({
+    "status": if debug_build { "warn" } else { "ok" },
+    "debugBuild": debug_build
+  }))
+}
+
 fn decode_b64(s: &str) -> Result<Vec<u8>, String> {
   BASE64.decode(s.as_bytes()).map_err(|_| "invalid base64".to_string())
 }
@@ -309,7 +357,7 @@ fn decode_b64url_like_browser(s: &str) -> Result<Vec<u8>, String> {
   }
   // Mirrors TS behavior:
   // value.replace(/-/g, '+').replace(/_/g, '/').padEnd(..., '='); atob(padded)
-  let mut normalized = s.replace('-', "+").replace('_', "/");
+  let mut normalized = s.replace('-', "+").replace("_", "/");
   let rem = normalized.len() % 4;
   if rem != 0 {
     normalized.extend(std::iter::repeat_n('=', 4 - rem));
@@ -491,7 +539,7 @@ fn verify_windows_authenticode_and_get_signer_cert_sha256(exe_path: &std::path::
       if !msg.is_null() { CryptMsgClose(msg); }
     }
     Ok(out)
-  })();
+  })()?;
 
   trust_data.dwStateAction = WTD_STATEACTION_CLOSE;
   unsafe {
@@ -502,7 +550,7 @@ fn verify_windows_authenticode_and_get_signer_cert_sha256(exe_path: &std::path::
     );
   }
 
-  observed
+  Ok(observed)
 }
 
 fn hmac_sha256_hex(key: &[u8], message: &str) -> Result<String, String> {
@@ -662,8 +710,25 @@ fn secure_panic_exit() {
 }
 
 #[tauri::command]
-fn vault_set_key(session_id: String, key_base64: String) -> Result<(), String> {
+fn vault_bind_capability(session_id: String, capability_token: String) -> Result<(), String> {
   validate_session_id(&session_id)?;
+  let tag = compute_cap_tag(&session_id, &capability_token)?;
+  let tags = VAULT_CAP_TAGS.get_or_init(|| Mutex::new(HashMap::new()));
+  let mut tags = tags.lock().unwrap_or_else(|e| e.into_inner());
+  if let Some(existing) = tags.get(&session_id) {
+    if existing != &tag {
+      return Err("capability mismatch".to_string());
+    }
+    return Ok(());
+  }
+  tags.insert(session_id, tag);
+  Ok(())
+}
+
+#[tauri::command]
+fn vault_set_key(session_id: String, capability_token: String, key_base64: String) -> Result<(), String> {
+  validate_session_id(&session_id)?;
+  require_vault_capability(&session_id, &capability_token)?;
 
   if key_base64.len() > 128 {
     return Err("key payload too large".to_string());
@@ -683,8 +748,9 @@ fn vault_set_key(session_id: String, key_base64: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn vault_encrypt(session_id: String, plaintext_base64: String) -> Result<serde_json::Value, String> {
+fn vault_encrypt(session_id: String, capability_token: String, plaintext_base64: String) -> Result<serde_json::Value, String> {
   validate_session_id(&session_id)?;
+  require_vault_capability(&session_id, &capability_token)?;
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
   vault.with_key(&session_id, |key_bytes| {
@@ -707,8 +773,9 @@ fn vault_encrypt(session_id: String, plaintext_base64: String) -> Result<serde_j
 }
 
 #[tauri::command]
-fn vault_encrypt_utf8(session_id: String, plaintext: String) -> Result<serde_json::Value, String> {
+fn vault_encrypt_utf8(session_id: String, capability_token: String, plaintext: String) -> Result<serde_json::Value, String> {
   validate_session_id(&session_id)?;
+  require_vault_capability(&session_id, &capability_token)?;
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
 
@@ -736,8 +803,9 @@ fn vault_encrypt_utf8(session_id: String, plaintext: String) -> Result<serde_jso
 }
 
 #[tauri::command]
-fn vault_decrypt(session_id: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
+fn vault_decrypt(session_id: String, capability_token: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
   validate_session_id(&session_id)?;
+  require_vault_capability(&session_id, &capability_token)?;
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
   if iv_base64.len() > 64 {
@@ -765,8 +833,9 @@ fn vault_decrypt(session_id: String, ciphertext_base64: String, iv_base64: Strin
 }
 
 #[tauri::command]
-fn vault_decrypt_utf8(session_id: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
+fn vault_decrypt_utf8(session_id: String, capability_token: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
   validate_session_id(&session_id)?;
+  require_vault_capability(&session_id, &capability_token)?;
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
   if iv_base64.len() > 64 {
@@ -868,6 +937,8 @@ pub fn run() {
       verify_cert_pinning,
       verify_build_integrity,
       get_version_guard,
+      get_threat_status,
+      vault_bind_capability,
       vault_set_key,
       vault_encrypt,
       vault_encrypt_utf8,

@@ -13,8 +13,8 @@ export async function deriveRealtimeChannelName(sessionId: string, capabilityTok
   if (isTauriRuntime()) {
     try {
       const name = await tauriInvoke<string>('derive_realtime_channel_name', {
-        sessionId,
-        capabilityToken
+        session_id: sessionId,
+        capability_token: capabilityToken
       });
       if (
         typeof name === 'string' &&

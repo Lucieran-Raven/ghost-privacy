@@ -32,6 +32,7 @@ const deps: EphemeralCryptoDeps = {
 export class EncryptionEngine {
   private key: CryptoKey | null = null;
   private tauriSessionId: string | null = null;
+  private tauriCapabilityToken: string | null = null;
 
   static async generateKey(): Promise<CryptoKey> {
     return generateAesGcmKey(deps);
@@ -45,15 +46,17 @@ export class EncryptionEngine {
     this.key = key;
   }
 
-  enableTauriVault(sessionId: string): void {
+  enableTauriVault(sessionId: string, capabilityToken: string): void {
     this.tauriSessionId = sessionId;
+    this.tauriCapabilityToken = capabilityToken;
   }
 
   async encryptMessage(message: string): Promise<{ encrypted: string; iv: string }> {
-    if (this.tauriSessionId && isTauriRuntime()) {
+    if (this.tauriSessionId && this.tauriCapabilityToken && isTauriRuntime()) {
       try {
         const res = await tauriInvoke<{ ciphertext: string; iv: string }>('vault_encrypt_utf8', {
           session_id: this.tauriSessionId,
+          capability_token: this.tauriCapabilityToken,
           plaintext: message
         });
         return { encrypted: res.ciphertext, iv: res.iv };
@@ -62,6 +65,7 @@ export class EncryptionEngine {
         const plaintextBase64 = bytesToBase64(bytes);
         const res = await tauriInvoke<{ ciphertext: string; iv: string }>('vault_encrypt', {
           session_id: this.tauriSessionId,
+          capability_token: this.tauriCapabilityToken,
           plaintext_base64: plaintextBase64
         });
         return { encrypted: res.ciphertext, iv: res.iv };
@@ -73,11 +77,12 @@ export class EncryptionEngine {
   }
 
   async encryptBytes(plaintext: ArrayBuffer): Promise<{ encrypted: string; iv: string }> {
-    if (this.tauriSessionId && isTauriRuntime()) {
+    if (this.tauriSessionId && this.tauriCapabilityToken && isTauriRuntime()) {
       const bytes = new Uint8Array(plaintext);
       const plaintextBase64 = bytesToBase64(bytes);
       const res = await tauriInvoke<{ ciphertext: string; iv: string }>('vault_encrypt', {
         session_id: this.tauriSessionId,
+        capability_token: this.tauriCapabilityToken,
         plaintext_base64: plaintextBase64
       });
       return { encrypted: res.ciphertext, iv: res.iv };
@@ -88,16 +93,18 @@ export class EncryptionEngine {
   }
 
   async decryptMessage(encryptedBase64: string, ivBase64: string): Promise<string> {
-    if (this.tauriSessionId && isTauriRuntime()) {
+    if (this.tauriSessionId && this.tauriCapabilityToken && isTauriRuntime()) {
       try {
         return await tauriInvoke<string>('vault_decrypt_utf8', {
           session_id: this.tauriSessionId,
+          capability_token: this.tauriCapabilityToken,
           ciphertext_base64: encryptedBase64,
           iv_base64: ivBase64
         });
       } catch {
         const plaintextBase64 = await tauriInvoke<string>('vault_decrypt', {
           session_id: this.tauriSessionId,
+          capability_token: this.tauriCapabilityToken,
           ciphertext_base64: encryptedBase64,
           iv_base64: ivBase64
         });
@@ -111,9 +118,10 @@ export class EncryptionEngine {
   }
 
   async decryptBytes(encryptedBase64: string, ivBase64: string): Promise<ArrayBuffer> {
-    if (this.tauriSessionId && isTauriRuntime()) {
+    if (this.tauriSessionId && this.tauriCapabilityToken && isTauriRuntime()) {
       const plaintextBase64 = await tauriInvoke<string>('vault_decrypt', {
         session_id: this.tauriSessionId,
+        capability_token: this.tauriCapabilityToken,
         ciphertext_base64: encryptedBase64,
         iv_base64: ivBase64
       });

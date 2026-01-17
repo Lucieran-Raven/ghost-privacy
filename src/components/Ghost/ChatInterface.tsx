@@ -665,8 +665,9 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             const keyBase64 = bytesToBase64(bytes);
 
             try {
-              await tauriInvoke('vault_set_key', { session_id: sessionId, key_base64: keyBase64 });
-              encryptionEngineRef.current?.enableTauriVault(sessionId);
+              await tauriInvoke('vault_bind_capability', { session_id: sessionId, capability_token: capabilityToken });
+              await tauriInvoke('vault_set_key', { session_id: sessionId, capability_token: capabilityToken, key_base64: keyBase64 });
+              encryptionEngineRef.current?.enableTauriVault(sessionId, capabilityToken);
             } catch {
               const sharedSecret = await KeyExchange.deriveSharedSecret(
                 keyPairRef.current.privateKey,
