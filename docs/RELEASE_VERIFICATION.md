@@ -47,6 +47,27 @@ Confirm:
 
 If the hash does not match, do not run the file.
 
+## Build provenance verification (recommended)
+
+Release artifacts are produced by GitHub Actions release workflows and include a signed build provenance attestation.
+
+Verify that the artifact you downloaded was built by the official repository workflow for the tag.
+
+Prerequisite:
+
+- Install GitHub CLI (`gh`).
+
+Example (verify an installer / APK file):
+
+```bash
+gh attestation verify <PATH_TO_FILE> --repo Lucieran-Raven/ghost-privacy
+```
+
+Notes:
+
+- This checks that GitHub has a provenance attestation for the file and that it matches the repository.
+- Do this before (or alongside) SHA-256 verification.
+
 ## Runtime integrity verification (release builds)
 
 Release builds must pass build integrity verification at startup.

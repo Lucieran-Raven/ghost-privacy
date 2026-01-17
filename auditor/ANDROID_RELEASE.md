@@ -56,6 +56,13 @@ Result:
   - as a workflow artifact
   - as a GitHub Release asset
 - A `.sha256` checksum file is also attached to the release.
+- A GitHub build provenance attestation is created for the release artifacts.
+
+Recommended verification order:
+
+- Verify build provenance attestation (see `docs/RELEASE_VERIFICATION.md`).
+- Verify the `.sha256` checksum.
+- Install.
 
 Integrity notes:
 

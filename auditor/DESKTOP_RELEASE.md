@@ -60,6 +60,13 @@ Result:
 - The `.msi` / `.exe` are uploaded:
   - as **workflow artifacts**
   - as **GitHub Release assets** for that tag
+- A GitHub build provenance attestation is created for the release artifacts.
+
+Recommended verification order:
+
+- Verify build provenance attestation (see `docs/RELEASE_VERIFICATION.md`).
+- Verify the published SHA-256 checksum.
+- Install.
 
 Integrity notes:
 
