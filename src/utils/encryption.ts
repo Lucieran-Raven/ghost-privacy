@@ -53,23 +53,14 @@ export class EncryptionEngine {
 
   async encryptMessage(message: string): Promise<{ encrypted: string; iv: string }> {
     if (this.tauriSessionId && this.tauriCapabilityToken && isTauriRuntime()) {
-      try {
-        const res = await tauriInvoke<{ ciphertext: string; iv: string }>('vault_encrypt_utf8', {
-          session_id: this.tauriSessionId,
-          capability_token: this.tauriCapabilityToken,
-          plaintext: message
-        });
-        return { encrypted: res.ciphertext, iv: res.iv };
-      } catch {
-        const bytes = new TextEncoder().encode(message);
-        const plaintextBase64 = bytesToBase64(bytes);
-        const res = await tauriInvoke<{ ciphertext: string; iv: string }>('vault_encrypt', {
-          session_id: this.tauriSessionId,
-          capability_token: this.tauriCapabilityToken,
-          plaintext_base64: plaintextBase64
-        });
-        return { encrypted: res.ciphertext, iv: res.iv };
-      }
+      const bytes = new TextEncoder().encode(message);
+      const plaintextBase64 = bytesToBase64(bytes);
+      const res = await tauriInvoke<{ ciphertext: string; iv: string }>('vault_encrypt', {
+        session_id: this.tauriSessionId,
+        capability_token: this.tauriCapabilityToken,
+        plaintext_base64: plaintextBase64
+      });
+      return { encrypted: res.ciphertext, iv: res.iv };
     }
 
     if (!this.key) throw new Error('Encryption key not initialized');
@@ -94,23 +85,14 @@ export class EncryptionEngine {
 
   async decryptMessage(encryptedBase64: string, ivBase64: string): Promise<string> {
     if (this.tauriSessionId && this.tauriCapabilityToken && isTauriRuntime()) {
-      try {
-        return await tauriInvoke<string>('vault_decrypt_utf8', {
-          session_id: this.tauriSessionId,
-          capability_token: this.tauriCapabilityToken,
-          ciphertext_base64: encryptedBase64,
-          iv_base64: ivBase64
-        });
-      } catch {
-        const plaintextBase64 = await tauriInvoke<string>('vault_decrypt', {
-          session_id: this.tauriSessionId,
-          capability_token: this.tauriCapabilityToken,
-          ciphertext_base64: encryptedBase64,
-          iv_base64: ivBase64
-        });
-        const bytes = base64ToBytes(plaintextBase64);
-        return new TextDecoder().decode(bytes);
-      }
+      const plaintextBase64 = await tauriInvoke<string>('vault_decrypt', {
+        session_id: this.tauriSessionId,
+        capability_token: this.tauriCapabilityToken,
+        ciphertext_base64: encryptedBase64,
+        iv_base64: ivBase64
+      });
+      const bytes = base64ToBytes(plaintextBase64);
+      return new TextDecoder().decode(bytes);
     }
 
     if (!this.key) throw new Error('Encryption key not initialized');

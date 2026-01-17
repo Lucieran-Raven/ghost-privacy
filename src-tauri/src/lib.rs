@@ -187,7 +187,7 @@ impl KeyVault {
 
   fn with_key<T>(&self, session_id: &str, f: impl FnOnce(&[u8; 32]) -> Result<T, String>) -> Result<T, String> {
     let keys = self.keys.lock().unwrap_or_else(|e| e.into_inner());
-    let locked = keys.get(session_id).ok_or_else(|| "missing session key".to_string())?;
+    let locked = keys.get(session_id).ok_or_else(|| "operation denied".to_string())?;
     let key_ref: &[u8; 32] = &locked.key;
     f(key_ref)
   }
@@ -229,16 +229,49 @@ fn compute_cap_tag(session_id: &str, capability_token: &str) -> Result<String, S
   Ok(tag.to_string())
 }
 
+fn constant_time_eq(a: &str, b: &str) -> bool {
+  let ab = a.as_bytes();
+  let bb = b.as_bytes();
+  let mut diff: u8 = 0;
+  let max = std::cmp::max(ab.len(), bb.len());
+  for i in 0..max {
+    let x = if i < ab.len() { ab[i] } else { 0 };
+    let y = if i < bb.len() { bb[i] } else { 0 };
+    diff |= x ^ y;
+  }
+  diff == 0 && ab.len() == bb.len()
+}
+
 fn require_vault_capability(session_id: &str, capability_token: &str) -> Result<(), String> {
-  let expected = compute_cap_tag(session_id, capability_token)?;
+  let expected = compute_cap_tag(session_id, capability_token).map_err(|_| "capability denied".to_string())?;
   let tags = VAULT_CAP_TAGS.get_or_init(|| Mutex::new(HashMap::new()));
   let tags = tags.lock().unwrap_or_else(|e| e.into_inner());
-  let bound = tags.get(session_id).ok_or_else(|| "capability not bound".to_string())?;
-  if bound == &expected {
-    Ok(())
-  } else {
-    Err("capability denied".to_string())
+  let bound = match tags.get(session_id) {
+    Some(v) => v,
+    None => return Err("capability denied".to_string()),
+  };
+  let bound_tag = bound.trim_end_matches("|k");
+  if constant_time_eq(bound_tag, &expected) { Ok(()) } else { Err("capability denied".to_string()) }
+}
+
+fn require_vault_state(session_id: &str, capability_token: &str, require_key: bool) -> Result<(), String> {
+  // Intentionally uniform error surface.
+  require_vault_capability(session_id, capability_token).map_err(|_| "operation denied".to_string())?;
+
+  let tags = VAULT_CAP_TAGS.get_or_init(|| Mutex::new(HashMap::new()));
+  let tags = tags.lock().unwrap_or_else(|e| e.into_inner());
+  let tag = match tags.get(session_id) {
+    Some(v) => v,
+    None => return Err("operation denied".to_string()),
+  };
+
+  // We store state under a separate namespace using the same OnceLock/Mutex so we don't add new globals.
+  // Encode state as: tag|k (k = 1 means key_set).
+  let encoded = tag;
+  if require_key && !encoded.ends_with("|k") {
+    return Err("operation denied".to_string());
   }
+  Ok(())
 }
 
 fn parse_version_triplet(s: &str) -> Option<(u32, u32, u32)> {
@@ -712,12 +745,14 @@ fn secure_panic_exit() {
 #[tauri::command]
 fn vault_bind_capability(session_id: String, capability_token: String) -> Result<(), String> {
   validate_session_id(&session_id)?;
-  let tag = compute_cap_tag(&session_id, &capability_token)?;
+  let tag = compute_cap_tag(&session_id, &capability_token).map_err(|_| "capability denied".to_string())?;
   let tags = VAULT_CAP_TAGS.get_or_init(|| Mutex::new(HashMap::new()));
   let mut tags = tags.lock().unwrap_or_else(|e| e.into_inner());
   if let Some(existing) = tags.get(&session_id) {
-    if existing != &tag {
-      return Err("capability mismatch".to_string());
+    // Allow idempotent rebind (same token), deny others.
+    let existing_tag = existing.trim_end_matches("|k");
+    if !constant_time_eq(existing_tag, &tag) {
+      return Err("capability denied".to_string());
     }
     return Ok(());
   }
@@ -728,7 +763,7 @@ fn vault_bind_capability(session_id: String, capability_token: String) -> Result
 #[tauri::command]
 fn vault_set_key(session_id: String, capability_token: String, key_base64: String) -> Result<(), String> {
   validate_session_id(&session_id)?;
-  require_vault_capability(&session_id, &capability_token)?;
+  require_vault_capability(&session_id, &capability_token).map_err(|_| "operation denied".to_string())?;
 
   if key_base64.len() > 128 {
     return Err("key payload too large".to_string());
@@ -743,14 +778,27 @@ fn vault_set_key(session_id: String, capability_token: String, key_base64: Strin
   key.copy_from_slice(raw.as_slice());
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
+  let sid = session_id.clone();
   vault.set_key(session_id, key)?;
+
+  // Mark key_set in state (idempotent).
+  if let Some(tags) = VAULT_CAP_TAGS.get() {
+    let mut tags = tags.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(t) = tags.get_mut(&sid) {
+      if !t.ends_with("|k") {
+        let mut s = t.clone();
+        s.push_str("|k");
+        *t = s;
+      }
+    }
+  }
   Ok(())
 }
 
 #[tauri::command]
 fn vault_encrypt(session_id: String, capability_token: String, plaintext_base64: String) -> Result<serde_json::Value, String> {
   validate_session_id(&session_id)?;
-  require_vault_capability(&session_id, &capability_token)?;
+  require_vault_state(&session_id, &capability_token, true)?;
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
   vault.with_key(&session_id, |key_bytes| {
@@ -775,7 +823,7 @@ fn vault_encrypt(session_id: String, capability_token: String, plaintext_base64:
 #[tauri::command]
 fn vault_encrypt_utf8(session_id: String, capability_token: String, plaintext: String) -> Result<serde_json::Value, String> {
   validate_session_id(&session_id)?;
-  require_vault_capability(&session_id, &capability_token)?;
+  require_vault_state(&session_id, &capability_token, true)?;
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
 
@@ -805,7 +853,7 @@ fn vault_encrypt_utf8(session_id: String, capability_token: String, plaintext: S
 #[tauri::command]
 fn vault_decrypt(session_id: String, capability_token: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
   validate_session_id(&session_id)?;
-  require_vault_capability(&session_id, &capability_token)?;
+  require_vault_state(&session_id, &capability_token, true)?;
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
   if iv_base64.len() > 64 {
@@ -835,7 +883,7 @@ fn vault_decrypt(session_id: String, capability_token: String, ciphertext_base64
 #[tauri::command]
 fn vault_decrypt_utf8(session_id: String, capability_token: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
   validate_session_id(&session_id)?;
-  require_vault_capability(&session_id, &capability_token)?;
+  require_vault_state(&session_id, &capability_token, true)?;
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
   if iv_base64.len() > 64 {
