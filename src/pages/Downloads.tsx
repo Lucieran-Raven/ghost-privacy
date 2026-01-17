@@ -1,8 +1,45 @@
 import Navbar from '@/components/Ghost/Navbar';
 import Footer from '@/components/Ghost/Footer';
 import PageTransition from '@/components/Ghost/PageTransition';
+import { useEffect, useMemo, useState } from 'react';
 
 const Downloads = () => {
+  const [hashesText, setHashesText] = useState<string>('');
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/releases/hashes.txt', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.text() : ''))
+      .then((t) => {
+        if (!alive) return;
+        setHashesText(t || '');
+      })
+      .catch(() => {
+        if (!alive) return;
+        setHashesText('');
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const hashes = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const line of hashesText.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const parts = trimmed.split(/\s+/);
+      if (parts.length < 2) continue;
+      const sha = parts[0];
+      const file = parts.slice(1).join(' ');
+      if (sha && file) map.set(file, sha);
+    }
+    return map;
+  }, [hashesText]);
+
+  const windowsExe = 'Ghost.Privacy_0.1.0_x64-setup.exe';
+  const androidApk = 'app-debug.apk';
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Navbar />
@@ -39,10 +76,18 @@ const Downloads = () => {
                         DOWNLOAD
                         <span className="text-white/50">.EXE</span>
                       </a>
+                      {hashes.get(windowsExe) ? (
+                        <div className="font-mono text-[11px] leading-relaxed text-white/60">
+                          Pinned SHA-256:
+                          <div className="mt-2 border border-[rgba(255,10,42,0.14)] bg-black/50 p-3 text-white/80 overflow-x-auto">
+                            {hashes.get(windowsExe)}
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="font-mono text-[11px] leading-relaxed text-white/60">
                         Verify SHA-256 in PowerShell:
                         <div className="mt-2 border border-[rgba(255,10,42,0.14)] bg-black/50 p-3 text-white/80 overflow-x-auto">
-                          Get-FileHash .\\Ghost.Privacy_0.1.0_x64-setup.exe -Algorithm SHA256
+                          {`Get-FileHash .\\${windowsExe} -Algorithm SHA256`}
                         </div>
                       </div>
                     </div>
@@ -63,10 +108,18 @@ const Downloads = () => {
                         DOWNLOAD
                         <span className="text-white/50">.APK</span>
                       </a>
+                      {hashes.get(androidApk) ? (
+                        <div className="font-mono text-[11px] leading-relaxed text-white/60">
+                          Pinned SHA-256:
+                          <div className="mt-2 border border-[rgba(255,10,42,0.14)] bg-black/50 p-3 text-white/80 overflow-x-auto">
+                            {hashes.get(androidApk)}
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="font-mono text-[11px] leading-relaxed text-white/60">
                         Verify SHA-256 on a computer:
                         <div className="mt-2 border border-[rgba(255,10,42,0.14)] bg-black/50 p-3 text-white/80 overflow-x-auto">
-                          sha256sum app-debug.apk
+                          {`sha256sum ${androidApk}`}
                         </div>
                       </div>
                     </div>

@@ -4,5 +4,7 @@
 #
 # Current (GitHub releases)
 fcb4c9636e7a67d45528d9f5269d2256799845be11d438bf8bc703a71dcf2636  app-debug.apk
+a3a7d8dbba7d33aa599c31c7439c43d9ed8b1653a37d3a5c433610c1ac8846ef  GhostPrivacy-Setup.exe
+fcb4c9636e7a67d45528d9f5269d2256799845be11d438bf8bc703a71dcf2636  GhostPrivacy.apk
 a3a7d8dbba7d33aa599c31c7439c43d9ed8b1653a37d3a5c433610c1ac8846ef  Ghost.Privacy_0.1.0_x64-setup.exe
 e4342e165aab137de2c218c57f4f0c66d8b8e23e41d4aa182582ca026097e294  Ghost.Privacy_0.1.0_x64_en-US.msi

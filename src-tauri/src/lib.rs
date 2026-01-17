@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 #[cfg(not(windows))]
 use std::{fs::File, io::Read};
+use std::fs as ghostfs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -13,6 +14,7 @@ use hmac::{Hmac, Mac};
 use reqwest::redirect::Policy;
 use sha2::{Digest, Sha256};
 use tauri::RunEvent;
+use tauri::Manager;
 use tauri_plugin_log::{Target, TargetKind};
 use x509_parser::prelude::{FromDer, X509Certificate};
 use zeroize::{Zeroize, Zeroizing};
@@ -164,7 +166,7 @@ impl KeyVault {
     let key_box: Box<Zeroizing<[u8; 32]>> = Box::new(Zeroizing::new(key));
     key.zeroize();
 
-    let key_bytes: &[u8; 32] = &*key_box;
+    let key_bytes: &[u8; 32] = &key_box;
     let lock = match memory_lock::LockedRegion::lock(key_bytes.as_ptr(), 32) {
       Ok(l) => Some(l),
       Err(_) => {
@@ -185,7 +187,7 @@ impl KeyVault {
   fn with_key<T>(&self, session_id: &str, f: impl FnOnce(&[u8; 32]) -> Result<T, String>) -> Result<T, String> {
     let keys = self.keys.lock().unwrap_or_else(|e| e.into_inner());
     let locked = keys.get(session_id).ok_or_else(|| "missing session key".to_string())?;
-    let key_ref: &[u8; 32] = &*locked.key;
+    let key_ref: &[u8; 32] = &locked.key;
     f(key_ref)
   }
 
@@ -198,6 +200,82 @@ fn purge_cleanup_plan() {
   if let Some(vault) = KEY_VAULT.get() {
     vault.purge();
   }
+}
+
+fn parse_version_triplet(s: &str) -> Option<(u32, u32, u32)> {
+  let mut parts = s.split('.');
+  let major = parts.next()?.parse::<u32>().ok()?;
+  let minor = parts.next().unwrap_or("0").parse::<u32>().ok()?;
+  let patch = parts.next().unwrap_or("0").split('-').next().unwrap_or("0").parse::<u32>().ok()?;
+  Some((major, minor, patch))
+}
+
+fn enforce_version_monotonicity_best_effort(app: &tauri::AppHandle) {
+  let current = app.package_info().version.to_string();
+  let current_v = match parse_version_triplet(&current) {
+    Some(v) => v,
+    None => return,
+  };
+
+  let path = match app
+    .path()
+    .resolve("max_version.txt", tauri::path::BaseDirectory::AppData)
+  {
+    Ok(p) => p,
+    Err(_) => return,
+  };
+
+  let prev = ghostfs::read_to_string(&path).ok();
+  if let Some(prev_str) = prev.as_deref() {
+    if let Some(prev_v) = parse_version_triplet(prev_str.trim()) {
+      if current_v < prev_v {
+        purge_cleanup_plan();
+        std::process::exit(1);
+      }
+    }
+  }
+
+  let _ = ghostfs::write(&path, format!("{}\n", current));
+}
+
+#[tauri::command]
+fn get_version_guard(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+  let current = app.package_info().version.to_string();
+  let current_v = match parse_version_triplet(&current) {
+    Some(v) => v,
+    None => {
+      return Ok(serde_json::json!({
+        "status": "error",
+        "currentVersion": current
+      }))
+    }
+  };
+
+  let path = match app
+    .path()
+    .resolve("max_version.txt", tauri::path::BaseDirectory::AppData)
+  {
+    Ok(p) => p,
+    Err(_) => {
+      return Ok(serde_json::json!({
+        "status": "error",
+        "currentVersion": current
+      }))
+    }
+  };
+
+  let prev_str = ghostfs::read_to_string(&path).ok().map(|s| s.trim().to_string());
+  let prev_v = prev_str
+    .as_deref()
+    .and_then(parse_version_triplet);
+
+  let downgraded = prev_v.map(|pv| current_v < pv).unwrap_or(false);
+
+  Ok(serde_json::json!({
+    "status": if downgraded { "downgraded" } else { "ok" },
+    "currentVersion": current,
+    "maxSeenVersion": prev_str.unwrap_or(current.clone())
+  }))
 }
 
 fn decode_b64(s: &str) -> Result<Vec<u8>, String> {
@@ -234,7 +312,7 @@ fn decode_b64url_like_browser(s: &str) -> Result<Vec<u8>, String> {
   let mut normalized = s.replace('-', "+").replace('_', "/");
   let rem = normalized.len() % 4;
   if rem != 0 {
-    normalized.extend(std::iter::repeat('=').take(4 - rem));
+    normalized.extend(std::iter::repeat_n('=', 4 - rem));
   }
 
   decode_b64(&normalized)
@@ -534,11 +612,11 @@ fn verify_build_integrity() -> Result<serde_json::Value, String> {
     };
 
     let ok = observed.eq_ignore_ascii_case(expected);
-    return Ok(serde_json::json!({
+    Ok(serde_json::json!({
       "status": if ok { "verified" } else { "unverified" },
       "observed": observed,
       "expected": expected
-    }));
+    }))
   }
 
   #[cfg(not(windows))]
@@ -767,6 +845,7 @@ pub fn run() {
 
   let app = tauri::Builder::default()
     .setup(|app| {
+      enforce_version_monotonicity_best_effort(app.handle());
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::new()
@@ -788,6 +867,7 @@ pub fn run() {
       secure_panic_exit,
       verify_cert_pinning,
       verify_build_integrity,
+      get_version_guard,
       vault_set_key,
       vault_encrypt,
       vault_encrypt_utf8,

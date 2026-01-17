@@ -19,19 +19,19 @@ Download the file from the official downloads page (or directly from `/releases/
 ### Windows (PowerShell)
 
 ```powershell
-Get-FileHash .\GhostPrivacy-Setup.exe -Algorithm SHA256
+Get-FileHash .\<DOWNLOADED_FILENAME> -Algorithm SHA256
 ```
 
 ### macOS
 
 ```bash
-shasum -a 256 GhostPrivacy-Setup.exe
+shasum -a 256 <DOWNLOADED_FILENAME>
 ```
 
 ### Linux
 
 ```bash
-sha256sum GhostPrivacy-Setup.exe
+sha256sum <DOWNLOADED_FILENAME>
 ```
 
 ## Step 3: Compare with published hashes

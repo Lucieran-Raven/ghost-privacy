@@ -5,6 +5,8 @@ import android.content.ClipboardManager;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ApplicationInfo;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.WindowManager;
@@ -16,6 +18,9 @@ import android.webkit.WebStorage;
 import android.webkit.WebView;
 import java.io.File;
 import java.security.MessageDigest;
+import java.security.KeyStore;
+import java.util.Enumeration;
+import javax.crypto.KeyGenerator;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -28,12 +33,14 @@ public class MainActivity extends BridgeActivity {
     } catch (Exception e) {
     }
 
+    enforceVersionMonotonicityBestEffort();
     enforceRuntimeIntegrityBestEffort();
     try {
       registerPlugin(AppSettingsPlugin.class);
       registerPlugin(CertPinningPlugin.class);
       registerPlugin(WebViewCleanupPlugin.class);
       registerPlugin(BuildIntegrityPlugin.class);
+      registerPlugin(VersionGuardPlugin.class);
       registerPlugin(AndroidKeystorePlugin.class);
     } catch (Exception e) {
     }
@@ -81,6 +88,85 @@ public class MainActivity extends BridgeActivity {
     MessageDigest md = MessageDigest.getInstance("SHA-256");
     byte[] digest = md.digest(data);
     return bytesToHex(digest);
+  }
+
+  private void enforceVersionMonotonicityBestEffort() {
+    try {
+      long current = 0L;
+      try {
+        PackageManager pm = getPackageManager();
+        String pkg = getPackageName();
+        PackageInfo pi = pm.getPackageInfo(pkg, 0);
+        if (pi != null) {
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            current = pi.getLongVersionCode();
+          } else {
+            current = pi.versionCode;
+          }
+        }
+      } catch (Exception e) {
+        current = 0L;
+      }
+
+      if (current <= 0L) {
+        return;
+      }
+
+      final String prefix = "ghost_privacy_max_version_";
+      long maxSeen = 0L;
+      String maxAlias = null;
+
+      try {
+        KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
+        ks.load(null);
+        Enumeration<String> aliases = ks.aliases();
+        while (aliases.hasMoreElements()) {
+          String a = aliases.nextElement();
+          if (a == null || !a.startsWith(prefix)) continue;
+          String suf = a.substring(prefix.length());
+          try {
+            long v = Long.parseLong(suf);
+            if (v > maxSeen) {
+              maxSeen = v;
+              maxAlias = a;
+            }
+          } catch (Exception e) {
+          }
+        }
+
+        if (maxSeen > 0L && current < maxSeen) {
+          panicExitBestEffort();
+          return;
+        }
+
+        if (current > maxSeen) {
+          if (maxAlias != null) {
+            try {
+              ks.deleteEntry(maxAlias);
+            } catch (Exception e) {
+            }
+          }
+
+          String alias = prefix + Long.toString(current);
+          try {
+            KeyGenerator kg = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
+            KeyGenParameterSpec spec = new KeyGenParameterSpec.Builder(
+              alias,
+              KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT
+            )
+              .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+              .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+              .setUserAuthenticationRequired(false)
+              .build();
+            kg.init(spec);
+            kg.generateKey();
+          } catch (Exception e) {
+          }
+        }
+      } catch (Exception e) {
+      }
+    } catch (Exception e) {
+    }
   }
 
   private void enforceRuntimeIntegrityBestEffort() {

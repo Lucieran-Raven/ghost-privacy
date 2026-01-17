@@ -1,13 +1,48 @@
 import Navbar from '@/components/Ghost/Navbar';
 import Footer from '@/components/Ghost/Footer';
 import PageTransition from '@/components/Ghost/PageTransition';
+import { useEffect, useState } from 'react';
 import { isTauriRuntime } from '@/utils/runtime';
+import { checkBuildIntegrity, type BuildIntegrityResult } from '@/utils/buildIntegrity';
+import { checkVersionGuard, type VersionGuardResult } from '@/utils/versionGuard';
 
 const repoUrl = 'https://github.com/Lucieran-Raven/ghost-privacy';
 const bugReportUrl = 'https://t.me/ghostdeveloperadmin';
 
 const Security = () => {
   const secureRuntime = isTauriRuntime();
+  const [buildIntegrity, setBuildIntegrity] = useState<BuildIntegrityResult | null>(null);
+  const [versionGuard, setVersionGuard] = useState<VersionGuardResult | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const res = await checkBuildIntegrity();
+      if (!alive) return;
+      setBuildIntegrity(res);
+    })().catch(() => {
+      if (!alive) return;
+      setBuildIntegrity({ status: 'error', platform: 'web' });
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const res = await checkVersionGuard();
+      if (!alive) return;
+      setVersionGuard(res);
+    })().catch(() => {
+      if (!alive) return;
+      setVersionGuard({ platform: 'web', status: 'skipped' });
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -78,6 +113,50 @@ const Security = () => {
                       <div className="font-mono text-xs tracking-[0.16em] uppercase text-white/60">VERIFICATION</div>
                     </div>
                     <div className="p-4 space-y-3">
+                      {buildIntegrity && (buildIntegrity.platform === 'tauri' || buildIntegrity.platform === 'android') ? (
+                        <div className="border border-[rgba(255,10,42,0.14)] p-3 bg-black/40 font-mono text-[12px] leading-relaxed text-white/70 space-y-1">
+                          <div>
+                            {buildIntegrity.status === 'verified'
+                              ? '[✓] BUILD INTEGRITY: VERIFIED'
+                              : buildIntegrity.status === 'unverified'
+                                ? '[!] BUILD INTEGRITY: UNVERIFIED'
+                                : buildIntegrity.status === 'error'
+                                  ? '[!] BUILD INTEGRITY: ERROR'
+                                  : '[!] BUILD INTEGRITY: SKIPPED'}
+                          </div>
+                          {buildIntegrity.expected ? <div>[→] EXPECTED SIGNER SHA-256: {buildIntegrity.expected}</div> : null}
+                          {buildIntegrity.observed ? <div>[→] OBSERVED SIGNER SHA-256: {buildIntegrity.observed}</div> : null}
+                        </div>
+                      ) : null}
+
+                      {versionGuard && (versionGuard.platform === 'tauri' || versionGuard.platform === 'android') ? (
+                        <div className="border border-[rgba(255,10,42,0.14)] p-3 bg-black/40 font-mono text-[12px] leading-relaxed text-white/70 space-y-1">
+                          <div>
+                            {versionGuard.status === 'ok'
+                              ? '[✓] VERSION GUARD: OK (ANTI-DOWNGRADE)'
+                              : versionGuard.status === 'downgraded'
+                                ? '[!] VERSION GUARD: DOWNGRADE DETECTED'
+                                : versionGuard.status === 'error'
+                                  ? '[!] VERSION GUARD: ERROR'
+                                  : '[!] VERSION GUARD: SKIPPED'}
+                          </div>
+                          {versionGuard.platform === 'tauri' ? (
+                            <>
+                              {versionGuard.currentVersion ? <div>[→] CURRENT VERSION: {versionGuard.currentVersion}</div> : null}
+                              {versionGuard.maxSeenVersion ? <div>[→] MAX SEEN VERSION: {versionGuard.maxSeenVersion}</div> : null}
+                            </>
+                          ) : (
+                            <>
+                              {typeof versionGuard.currentVersionCode === 'number' ? (
+                                <div>[→] CURRENT VERSION CODE: {versionGuard.currentVersionCode}</div>
+                              ) : null}
+                              {typeof versionGuard.maxSeenVersionCode === 'number' ? (
+                                <div>[→] MAX SEEN VERSION CODE: {versionGuard.maxSeenVersionCode}</div>
+                              ) : null}
+                            </>
+                          )}
+                        </div>
+                      ) : null}
                       <a
                         href={repoUrl}
                         target="_blank"
