@@ -30,7 +30,8 @@
     "audit": "npm audit --audit-level=moderate",
     "audit:fix": "npm audit fix",
     "security-check": "npm audit && npm outdated",
-    "verify-security": "npm audit && npm run lint && npm run build"
+    "verify-security": "npm audit && npm run lint && npm run build",
+    "postinstall": "node -e \"try{require.resolve('patch-package')}catch(e){process.exit(0)}\" && patch-package"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",
@@ -100,6 +101,7 @@
     "@tailwindcss/typography": "^0.5.16",
     "@tauri-apps/cli": "^2.9.6",
     "@capacitor/cli": "^6.2.0",
+    "patch-package": "^8.0.0",
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
