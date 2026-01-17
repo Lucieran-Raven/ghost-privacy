@@ -151,13 +151,18 @@ export function isValidGhostId(id: string): boolean {
 export async function aesGcmEncryptString(
   deps: EphemeralCryptoDeps,
   key: CryptoKey,
-  message: string
+  message: string,
+  aad?: Uint8Array
 ): Promise<EncryptResult> {
   const iv = deps.getRandomValues(new Uint8Array(12));
   const encoded = new TextEncoder().encode(message);
 
   try {
-    const encrypted = await deps.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+    const encrypted = await deps.subtle.encrypt(
+      aad ? { name: 'AES-GCM', iv, additionalData: aad } : { name: 'AES-GCM', iv },
+      key,
+      encoded
+    );
     return {
       encrypted: arrayBufferToBase64(encrypted),
       iv: arrayBufferToBase64(iv.buffer)
@@ -174,10 +179,15 @@ export async function aesGcmEncryptString(
 export async function aesGcmEncryptBytes(
   deps: EphemeralCryptoDeps,
   key: CryptoKey,
-  plaintext: ArrayBuffer
+  plaintext: ArrayBuffer,
+  aad?: Uint8Array
 ): Promise<EncryptResult> {
   const iv = deps.getRandomValues(new Uint8Array(12));
-  const encrypted = await deps.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
+  const encrypted = await deps.subtle.encrypt(
+    aad ? { name: 'AES-GCM', iv, additionalData: aad } : { name: 'AES-GCM', iv },
+    key,
+    plaintext
+  );
   return {
     encrypted: arrayBufferToBase64(encrypted),
     iv: arrayBufferToBase64(iv.buffer)
@@ -188,13 +198,18 @@ export async function aesGcmDecryptString(
   deps: EphemeralCryptoDeps,
   key: CryptoKey,
   encryptedBase64: string,
-  ivBase64: string
+  ivBase64: string,
+  aad?: Uint8Array
 ): Promise<string> {
   const encrypted = base64ToArrayBuffer(encryptedBase64);
   const iv = new Uint8Array(base64ToArrayBuffer(ivBase64));
 
   try {
-    const decrypted = await deps.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted);
+    const decrypted = await deps.subtle.decrypt(
+      aad ? { name: 'AES-GCM', iv, additionalData: aad } : { name: 'AES-GCM', iv },
+      key,
+      encrypted
+    );
     const bytes = new Uint8Array(decrypted);
     try {
       return new TextDecoder().decode(bytes);
@@ -223,13 +238,18 @@ export async function aesGcmDecryptBytes(
   deps: EphemeralCryptoDeps,
   key: CryptoKey,
   encryptedBase64: string,
-  ivBase64: string
+  ivBase64: string,
+  aad?: Uint8Array
 ): Promise<ArrayBuffer> {
   const encrypted = base64ToArrayBuffer(encryptedBase64);
   const iv = new Uint8Array(base64ToArrayBuffer(ivBase64));
 
   try {
-    return await deps.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted);
+    return await deps.subtle.decrypt(
+      aad ? { name: 'AES-GCM', iv, additionalData: aad } : { name: 'AES-GCM', iv },
+      key,
+      encrypted
+    );
   } finally {
     try {
       iv.fill(0);

@@ -67,20 +67,25 @@ export class EncryptionEngine {
     return aesGcmEncryptString(deps, this.key, message);
   }
 
-  async encryptBytes(plaintext: ArrayBuffer): Promise<{ encrypted: string; iv: string }> {
+  async encryptBytes(plaintext: ArrayBuffer, aad?: Uint8Array): Promise<{ encrypted: string; iv: string }> {
     if (this.tauriSessionId && this.tauriCapabilityToken && isTauriRuntime()) {
       const bytes = new Uint8Array(plaintext);
       const plaintextBase64 = bytesToBase64(bytes);
-      const res = await tauriInvoke<{ ciphertext: string; iv: string }>('vault_encrypt', {
+      bytes.fill(0);
+      const args: any = {
         session_id: this.tauriSessionId,
         capability_token: this.tauriCapabilityToken,
         plaintext_base64: plaintextBase64
-      });
+      };
+      if (aad && aad.byteLength > 0) {
+        args.aad_base64 = bytesToBase64(aad);
+      }
+      const res = await tauriInvoke<{ ciphertext: string; iv: string }>('vault_encrypt', args);
       return { encrypted: res.ciphertext, iv: res.iv };
     }
 
     if (!this.key) throw new Error('Encryption key not initialized');
-    return aesGcmEncryptBytes(deps, this.key, plaintext);
+    return aesGcmEncryptBytes(deps, this.key, plaintext, aad);
   }
 
   async decryptMessage(encryptedBase64: string, ivBase64: string): Promise<string> {
@@ -99,20 +104,31 @@ export class EncryptionEngine {
     return aesGcmDecryptString(deps, this.key, encryptedBase64, ivBase64);
   }
 
-  async decryptBytes(encryptedBase64: string, ivBase64: string): Promise<ArrayBuffer> {
+  async decryptBytes(encryptedBase64: string, ivBase64: string, aad?: Uint8Array): Promise<ArrayBuffer> {
     if (this.tauriSessionId && this.tauriCapabilityToken && isTauriRuntime()) {
-      const plaintextBase64 = await tauriInvoke<string>('vault_decrypt', {
+      const args: any = {
         session_id: this.tauriSessionId,
         capability_token: this.tauriCapabilityToken,
         ciphertext_base64: encryptedBase64,
         iv_base64: ivBase64
-      });
+      };
+      if (aad && aad.byteLength > 0) {
+        args.aad_base64 = bytesToBase64(aad);
+      }
+      const plaintextBase64 = await tauriInvoke<string>('vault_decrypt', args);
       const bytes = base64ToBytes(plaintextBase64);
-      return bytes.slice().buffer;
+      try {
+        return bytes.slice().buffer;
+      } finally {
+        try {
+          bytes.fill(0);
+        } catch {
+        }
+      }
     }
 
     if (!this.key) throw new Error('Encryption key not initialized');
-    return aesGcmDecryptBytes(deps, this.key, encryptedBase64, ivBase64);
+    return aesGcmDecryptBytes(deps, this.key, encryptedBase64, ivBase64, aad);
   }
 
   async exportKey(): Promise<string> {

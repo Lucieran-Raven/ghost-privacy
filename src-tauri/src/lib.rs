@@ -796,13 +796,17 @@ fn vault_set_key(session_id: String, capability_token: String, key_base64: Strin
 }
 
 #[tauri::command]
-fn vault_encrypt(session_id: String, capability_token: String, plaintext_base64: String) -> Result<serde_json::Value, String> {
+fn vault_encrypt(session_id: String, capability_token: String, plaintext_base64: String, aad_base64: Option<String>) -> Result<serde_json::Value, String> {
   validate_session_id(&session_id)?;
   require_vault_state(&session_id, &capability_token, true)?;
 
   let vault = KEY_VAULT.get_or_init(KeyVault::new);
   vault.with_key(&session_id, |key_bytes| {
     let plaintext = Zeroizing::new(decode_b64_limited(&plaintext_base64, MAX_B64_INPUT_LEN, MAX_VAULT_PLAINTEXT_BYTES)?);
+    let aad = match aad_base64.as_deref() {
+      Some(s) if !s.is_empty() => Zeroizing::new(decode_b64_limited(s, 2048, 1024)?),
+      _ => Zeroizing::new(Vec::new()),
+    };
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes));
 
     let mut nonce_bytes = [0u8; 12];
@@ -810,7 +814,7 @@ fn vault_encrypt(session_id: String, capability_token: String, plaintext_base64:
     let nonce = Nonce::from_slice(&nonce_bytes);
 
     let ciphertext = cipher
-      .encrypt(nonce, plaintext.as_ref())
+      .encrypt(nonce, aes_gcm::aead::Payload { msg: plaintext.as_ref(), aad: aad.as_slice() })
       .map_err(|_| "encrypt failed".to_string())?;
 
     Ok(serde_json::json!({
@@ -851,7 +855,7 @@ fn vault_encrypt_utf8(session_id: String, capability_token: String, plaintext: S
 }
 
 #[tauri::command]
-fn vault_decrypt(session_id: String, capability_token: String, ciphertext_base64: String, iv_base64: String) -> Result<String, String> {
+fn vault_decrypt(session_id: String, capability_token: String, ciphertext_base64: String, iv_base64: String, aad_base64: Option<String>) -> Result<String, String> {
   validate_session_id(&session_id)?;
   require_vault_state(&session_id, &capability_token, true)?;
 
@@ -867,12 +871,17 @@ fn vault_decrypt(session_id: String, capability_token: String, ciphertext_base64
       return Err("iv must be 12 bytes".to_string());
     }
 
+    let aad = match aad_base64.as_deref() {
+      Some(s) if !s.is_empty() => Zeroizing::new(decode_b64_limited(s, 2048, 1024)?),
+      _ => Zeroizing::new(Vec::new()),
+    };
+
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key_bytes));
     let nonce = Nonce::from_slice(&iv);
 
     let plaintext = Zeroizing::new(
       cipher
-        .decrypt(nonce, ciphertext.as_ref())
+        .decrypt(nonce, aes_gcm::aead::Payload { msg: ciphertext.as_ref(), aad: aad.as_slice() })
         .map_err(|_| "decrypt failed".to_string())?,
     );
 

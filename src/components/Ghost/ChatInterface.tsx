@@ -87,7 +87,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
   const partnerUnstableShownRef = useRef(false);
   const inactivityIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
-  const fileTransfersRef = useRef<Map<string, { chunks: string[]; received: number; total: number; iv: string; fileName: string; fileType: string; timestamp: number; cleanupTimer: ReturnType<typeof setTimeout> | null }>>(new Map());
+  const fileTransfersRef = useRef<Map<string, { chunks: string[]; received: number; total: number; iv: string; fileName: string; fileType: string; timestamp: number; senderId: string; cleanupTimer: ReturnType<typeof setTimeout> | null }>>(new Map());
   const pendingFileAcksRef = useRef<Map<string, (ok: boolean) => void>>(new Map());
   const localFingerprintRef = useRef<string>('');
   const isTerminatingRef = useRef(false);
@@ -104,6 +104,21 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
   const markActivity = () => {
     lastActivityRef.current = Date.now();
+  };
+
+  const buildChatAad = (params: { senderId: string; messageId: string; sequence: number; type: string }): Uint8Array => {
+    const te = new TextEncoder();
+    return te.encode(`ghost:aad:v1|chat|${sessionId}|${params.senderId}|${params.messageId}|${params.sequence}|${params.type}`);
+  };
+
+  const buildVoiceAad = (params: { senderId: string; messageId: string; sequence: number; duration: number }): Uint8Array => {
+    const te = new TextEncoder();
+    return te.encode(`ghost:aad:v1|voice|${sessionId}|${params.senderId}|${params.messageId}|${params.sequence}|${params.duration}`);
+  };
+
+  const buildFileAad = (params: { senderId: string; fileId: string }): Uint8Array => {
+    const te = new TextEncoder();
+    return te.encode(`ghost:aad:v1|file|${sessionId}|${params.senderId}|${params.fileId}`);
   };
 
   const MAX_VOICE_MESSAGES = 50;
@@ -141,6 +156,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     t.fileName = '';
     t.fileType = '';
     t.timestamp = 0;
+    t.senderId = '';
     t.cleanupTimer = null;
 
     fileTransfersRef.current.delete(fileId);
@@ -510,6 +526,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             fileName: sanitizeFileName(String(data.fileName || 'unknown_file')).slice(0, 256),
             fileType: String(data.fileType || 'application/octet-stream').slice(0, 128),
             timestamp: Number(data.timestamp) || payload.timestamp,
+            senderId: payload.senderId,
             cleanupTimer
           });
 
@@ -546,6 +563,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
               fileName: sanitizeFileName(String(data.fileName || 'unknown_file')).slice(0, 256),
               fileType: String(data.fileType || 'application/octet-stream').slice(0, 128),
               timestamp: Number(data.timestamp) || payload.timestamp,
+              senderId: payload.senderId,
               cleanupTimer
             };
             fileTransfersRef.current.set(fileId, t);
@@ -571,7 +589,12 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
           if (t.received >= t.total && t.total > 0) {
             const encrypted = t.chunks.join('');
-            const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, t.iv);
+            const aad = buildFileAad({ senderId: t.senderId || payload.senderId, fileId });
+            const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, t.iv, aad);
+            try {
+              aad.fill(0);
+            } catch {
+            }
             const decryptedBytes = new Uint8Array(decrypted);
 
             const fileType = sniffMimeFromBytes(decryptedBytes) || 'application/octet-stream';
@@ -754,10 +777,12 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             return;
           }
 
-          const decrypted = await encryptionEngineRef.current.decryptBytes(
-            encrypted,
-            iv
-          );
+          const aad = buildFileAad({ senderId: payload.senderId, fileId: payload.nonce });
+          const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, iv, aad);
+          try {
+            aad.fill(0);
+          } catch {
+          }
           const decryptedBytes = new Uint8Array(decrypted);
           const sniffedMime = sniffMimeFromBytes(decryptedBytes);
           const displayFileName = normalizeFileNameForMime(safeFileName, sniffedMime);
@@ -792,10 +817,12 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             ? rawType
             : 'text';
 
-          const decrypted = await encryptionEngineRef.current.decryptBytes(
-            encrypted,
-            iv
-          );
+          const aad = buildChatAad({ senderId: payload.senderId, messageId: payload.nonce, sequence: seq, type: safeType });
+          const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, iv, aad);
+          try {
+            aad.fill(0);
+          } catch {
+          }
           const decryptedBytes = new Uint8Array(decrypted);
 
           messageQueueRef.current.addMessage(sessionId, {
@@ -828,10 +855,13 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
           return;
         }
 
-        const decrypted = await encryptionEngineRef.current.decryptBytes(
-          payload.data.encrypted,
-          payload.data.iv
-        );
+        const duration = Number(payload.data?.duration) || 0;
+        const aad = buildVoiceAad({ senderId: payload.senderId, messageId: payload.nonce, sequence: seq, duration });
+        const decrypted = await encryptionEngineRef.current.decryptBytes(payload.data.encrypted, payload.data.iv, aad);
+        try {
+          aad.fill(0);
+        } catch {
+        }
 
         const decryptedBytes = new Uint8Array(decrypted);
         const blob = new Blob([decryptedBytes], { type: 'audio/webm;codecs=opus' });
@@ -942,8 +972,15 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       markActivity();
       const messageId = generateNonce();
 
+      const seq = replayProtectionRef.current.getNextSequence(participantIdRef.current);
+
       const arrayBuffer = await blob.arrayBuffer();
-      const { encrypted, iv } = await encryptionEngineRef.current.encryptBytes(arrayBuffer);
+      const aad = buildVoiceAad({ senderId: participantIdRef.current, messageId, sequence: seq, duration });
+      const { encrypted, iv } = await encryptionEngineRef.current.encryptBytes(arrayBuffer, aad);
+      try {
+        aad.fill(0);
+      } catch {
+      }
 
       try {
         const { secureZeroArrayBuffer } = await import('@/utils/algorithms/memory/zeroization');
@@ -984,7 +1021,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         iv,
         duration,
         messageId,
-        sequence: replayProtectionRef.current.getNextSequence(participantIdRef.current)
+        sequence: seq
       });
 
       if (!sent) {
@@ -1049,10 +1086,16 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
     try {
       const messageId = generateNonce();
+      const seq = replayProtectionRef.current.getNextSequence(participantIdRef.current);
       const trimmed = inputText.trim();
       const messageBytes = new TextEncoder().encode(trimmed);
       const encryptBytes = messageBytes.slice();
-      const { encrypted, iv } = await encryptionEngineRef.current.encryptBytes(encryptBytes.buffer);
+      const aad = buildChatAad({ senderId: participantIdRef.current, messageId, sequence: seq, type: 'text' });
+      const { encrypted, iv } = await encryptionEngineRef.current.encryptBytes(encryptBytes.buffer, aad);
+      try {
+        aad.fill(0);
+      } catch {
+      }
 
       try {
         const crypto = window.crypto;
@@ -1081,7 +1124,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         iv,
         type: 'text',
         messageId,
-        sequence: replayProtectionRef.current.getNextSequence(participantIdRef.current)
+        sequence: seq
       });
 
       if (!sent) {
@@ -1130,7 +1173,12 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
         const { displayTimestamp } = generatePlausibleTimestamp();
 
         const arrayBuffer = await file.arrayBuffer();
-        const { encrypted, iv } = await encryptionEngineRef.current!.encryptBytes(arrayBuffer);
+        const aad = buildFileAad({ senderId: participantIdRef.current, fileId: messageId });
+        const { encrypted, iv } = await encryptionEngineRef.current!.encryptBytes(arrayBuffer, aad);
+        try {
+          aad.fill(0);
+        } catch {
+        }
 
         try {
           const { secureZeroArrayBuffer } = await import('@/utils/algorithms/memory/zeroization');

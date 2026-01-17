@@ -680,12 +680,23 @@ export class RealtimeManager {
   }
 
   async send(type: PublicBroadcastType, data: any, retries = 3): Promise<boolean> {
+    let nonce = generateNonce();
+    try {
+      const mid = data && typeof data.messageId === 'string' ? data.messageId : '';
+      if ((type === 'chat-message' || type === 'voice-message' || type === 'video-message') && mid.length > 0 && mid.length <= 256) {
+        if (mid.indexOf(' ') === -1 && mid.indexOf('\n') === -1 && mid.indexOf('\r') === -1) {
+          nonce = mid;
+        }
+      }
+    } catch {
+    }
+
     const payload: BroadcastPayload = {
       type,
       senderId: this.participantId,
       data,
       timestamp: Date.now(),
-      nonce: generateNonce()
+      nonce
     };
 
     // If we're not connected, accept the message into an in-memory outbox when safe.
