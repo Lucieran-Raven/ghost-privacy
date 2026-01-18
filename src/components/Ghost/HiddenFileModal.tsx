@@ -30,6 +30,10 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
   const MAX_DECOY_BASE64_CHARS = 2_000_000;
   
   const fileType = fileName.split('.').pop()?.toLowerCase() || 'default';
+
+  const showGenericError = () => {
+    toast.error('Unable to proceed');
+  };
   
   const handleGenerateDecoy = () => {
     const type = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileType) ? 'image' :
@@ -43,32 +47,32 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
     const inner = innerPassword.trim();
 
     if (!outer || !inner) {
-      toast.error('Both passwords are required');
+      showGenericError();
       return;
     }
     
     if (outer === inner) {
-      toast.error('Passwords must be different');
+      showGenericError();
       return;
     }
     
     if (outer.length < 6 || inner.length < 6) {
-      toast.error('Passwords must be at least 6 characters');
+      showGenericError();
       return;
     }
 
     if (outer.length > MAX_PASSWORD_LEN || inner.length > MAX_PASSWORD_LEN) {
-      toast.error(`Passwords must be at most ${MAX_PASSWORD_LEN} characters`);
+      showGenericError();
       return;
     }
 
     if (typeof fileContent !== 'string' || fileContent.length === 0 || fileContent.length > MAX_FILE_BASE64_CHARS) {
-      toast.error('File is too large for hidden volume mode');
+      showGenericError();
       return;
     }
 
     if (decoyContent && decoyContent.length > MAX_DECOY_BASE64_CHARS) {
-      toast.error('Decoy content is too large');
+      showGenericError();
       return;
     }
     
@@ -82,7 +86,7 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
         inner
       );
       
-      toast.success('Hidden volume created');
+      toast.success('Ready');
       onComplete(encryptedData);
       setOuterPassword('');
       setInnerPassword('');
@@ -90,7 +94,7 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
       onClose();
     } catch (error) {
       void error;
-      toast.error('Failed to create hidden volume');
+      showGenericError();
     } finally {
       setIsProcessing(false);
     }
@@ -113,7 +117,7 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
             Hidden Volume Mode
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            Create deniable encryption - wrong password shows decoy content
+            Create deniable encryption with two plausible unlock states
           </DialogDescription>
         </DialogHeader>
         
@@ -121,9 +125,8 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
           <div className="space-y-4">
             <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
               <p className="text-sm text-foreground">
-                <strong>How it works:</strong> Your file will have two keys.
-                One shows fake content, the other reveals the real file.
-                Even under duress, you can provide the decoy password.
+                <strong>How it works:</strong> Your file will have two passwords.
+                Each password unlocks a different view.
               </p>
             </div>
             
@@ -141,11 +144,11 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
         {step === 'decoy' && (
           <div className="space-y-4">
             <div>
-              <Label className="text-foreground">Decoy Content (shown with wrong password)</Label>
+              <Label className="text-foreground">Cover Content</Label>
               <Textarea
                 value={decoyContent}
                 onChange={(e) => setDecoyContent(e.target.value)}
-                placeholder="Enter fake content that will be shown if the decoy password is used..."
+                placeholder="Enter alternate content that can be shown..."
                 className="mt-1.5 h-24 bg-secondary/50 border-border text-foreground"
               />
               <Button
@@ -154,7 +157,7 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
                 onClick={handleGenerateDecoy}
                 className="mt-2"
               >
-                Generate Random Decoy
+                Generate Random Cover
               </Button>
             </div>
             
@@ -176,19 +179,19 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
                 <AlertTriangle className="h-4 w-4 text-destructive mt-0.5" />
                 <p className="text-xs text-destructive">
                   <strong>Remember both passwords!</strong> There is no recovery.
-                  The outer password reveals decoy content, the inner password reveals your real file.
+                  Each password unlocks a different view.
                 </p>
               </div>
             </div>
             
             <div>
-              <Label className="text-foreground">Outer Password (decoy)</Label>
+              <Label className="text-foreground">Password 1</Label>
               <div className="relative mt-1.5">
                 <Input
                   type={showOuter ? 'text' : 'password'}
                   value={outerPassword}
                   onChange={(e) => setOuterPassword(e.target.value)}
-                  placeholder="Password for decoy content..."
+                  placeholder="Enter password..."
                   className="pr-10 bg-secondary/50 border-border text-foreground"
                 />
                 <button
@@ -202,13 +205,13 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
             </div>
             
             <div>
-              <Label className="text-foreground">Inner Password (real file)</Label>
+              <Label className="text-foreground">Password 2</Label>
               <div className="relative mt-1.5">
                 <Input
                   type={showInner ? 'text' : 'password'}
                   value={innerPassword}
                   onChange={(e) => setInnerPassword(e.target.value)}
-                  placeholder="Password for real content..."
+                  placeholder="Enter password..."
                   className="pr-10 bg-secondary/50 border-border text-foreground"
                 />
                 <button
