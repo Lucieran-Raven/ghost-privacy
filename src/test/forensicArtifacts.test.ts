@@ -100,6 +100,32 @@ describe('forensic artifact regression checks', () => {
     expect(violations).toEqual([]);
   });
 
+  it('does not introduce console logs in application source (non-comment)', () => {
+    const root = path.resolve(process.cwd(), 'src');
+    const files = listFiles(root)
+      .filter(f => /\.(ts|tsx)$/.test(f))
+      .filter(f => !f.includes(`${path.sep}test${path.sep}`))
+      .filter(f => !/\.test\.(ts|tsx)$/.test(f));
+
+    const banned = [
+      'console.'
+    ];
+
+    const violations: Array<{ file: string; needle: string }> = [];
+
+    for (const file of files) {
+      const raw = fs.readFileSync(file, 'utf8');
+      const code = stripComments(raw);
+      for (const needle of banned) {
+        if (code.includes(needle)) {
+          violations.push({ file: path.relative(process.cwd(), file), needle });
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
   it('does not introduce disk persistence primitives in application source (non-comment)', () => {
     const root = path.resolve(process.cwd(), 'src');
     const files = listFiles(root)

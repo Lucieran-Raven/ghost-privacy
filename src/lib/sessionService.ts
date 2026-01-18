@@ -104,6 +104,10 @@ class MemoryValidationCache {
 // Singleton memory cache
 const validationCache = new MemoryValidationCache();
 
+export function nuclearPurgeSessionValidationCache(): void {
+  validationCache.nuclearPurge();
+}
+
 export type SessionErrorType = 'NETWORK_ERROR' | 'INVALID_SESSION' | 'EXPIRED_SESSION' | 'RATE_LIMITED' | 'SERVER_ERROR';
 
 export interface SessionResult {
