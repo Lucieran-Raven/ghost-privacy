@@ -106,7 +106,7 @@ const Session = () => {
       {baseView}
       {isDecoyActive && (
         <Suspense fallback={<div />}>
-          <DecoyCalculator onExit={deactivateDecoy} />
+          <DecoyCalculator onExit={deactivateDecoy} showExitButton={false} />
         </Suspense>
       )}
     </>
