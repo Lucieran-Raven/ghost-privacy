@@ -4,7 +4,7 @@ import {
   generateCapabilityToken,
   getRateLimitKeyHex,
   hashCapabilityTokenToBytea,
-  jsonError
+  jsonResponse
 } from "../_shared/security.ts";
 import { getSupabaseServiceClient } from "../_shared/client.ts";
 
@@ -14,18 +14,26 @@ const RATE_LIMIT_MAX_SESSIONS = 10;
 const RATE_LIMIT_WINDOW_MINUTES = 60;
 
 // Generic error response - never leak internal details
-const errorResponse = (req: Request, status: number, code: string) => {
+const errorResponse = (req: Request, code: string) => {
   const messages: Record<string, string> = {
     INVALID_REQUEST: 'Invalid request',
     IP_UNAVAILABLE: 'Client IP unavailable',
-    RATE_LIMITED: 'Too many requests',
+    RATE_LIMITED: 'Rate limited',
     CONFLICT: 'Resource conflict',
     SERVER_ERROR: 'Unable to process request',
   };
-  return jsonError(messages[code] || 'Unable to process request', code, {
-    status,
-    headers: corsHeaders(req, ALLOWED_ORIGINS)
-  });
+
+  return jsonResponse(
+    {
+      success: false,
+      error: messages[code] || 'Unable to process request',
+      code
+    },
+    {
+      status: 200,
+      headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' }
+    }
+  );
 };
 
 serve(async (req: Request) => {
@@ -49,14 +57,14 @@ serve(async (req: Request) => {
     try {
       body = await req.json();
     } catch {
-      return errorResponse(req, 400, 'INVALID_REQUEST');
+      return errorResponse(req, 'INVALID_REQUEST');
     }
 
     const { sessionId } = body;
 
     // Strict input validation - no details leaked
     if (!sessionId || typeof sessionId !== 'string' || !/^GHOST-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(sessionId)) {
-      return errorResponse(req, 400, 'INVALID_REQUEST');
+      return errorResponse(req, 'INVALID_REQUEST');
     }
 
     // SECURITY FIX: Atomic rate limiting with fixed windows
@@ -69,7 +77,7 @@ serve(async (req: Request) => {
     try {
       rateKey = await getRateLimitKeyHex(req, windowStartIso);
     } catch {
-      return errorResponse(req, 400, 'IP_UNAVAILABLE');
+      return errorResponse(req, 'IP_UNAVAILABLE');
     }
 
     // Atomic increment using PostgreSQL ON CONFLICT
@@ -82,10 +90,10 @@ serve(async (req: Request) => {
 
     if (rateError) {
       // SECURITY FIX: Fail closed on rate limit errors to prevent DoS/Abuse
-      return errorResponse(req, 500, 'SERVER_ERROR');
+      return errorResponse(req, 'SERVER_ERROR');
     } else if (rateResult === false) {
       // RPC returns false when rate limit exceeded
-      return errorResponse(req, 429, 'RATE_LIMITED');
+      return errorResponse(req, 'RATE_LIMITED');
     }
 
     // Create session with strict 10-minute TTL
@@ -120,9 +128,9 @@ serve(async (req: Request) => {
 
     if (error) {
       if (error.code === '23505') {
-        return errorResponse(req, 409, 'CONFLICT');
+        return errorResponse(req, 'CONFLICT');
       }
-      return errorResponse(req, 500, 'SERVER_ERROR');
+      return errorResponse(req, 'SERVER_ERROR');
     }
 
     return new Response(
@@ -138,6 +146,6 @@ serve(async (req: Request) => {
     );
 
   } catch (error: unknown) {
-    return errorResponse(req, 500, 'SERVER_ERROR');
+    return errorResponse(req, 'SERVER_ERROR');
   }
 });

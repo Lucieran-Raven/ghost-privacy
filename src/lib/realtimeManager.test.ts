@@ -145,3 +145,70 @@ describe('RealtimeManager replay suppression', () => {
     nowSpy.mockRestore();
   });
 });
+
+describe('RealtimeManager sealed padded-frame v2', () => {
+  it('pads to a minimum 8-frame power-of-two bucket with fixed-size frame strings', async () => {
+    const rm = new RealtimeManager('GHOST-ABCD-1234', 'aaaaaaaaaaaaaaaaaaaaaa', 'me');
+
+    const inner = {
+      type: 'typing',
+      senderId: 'me',
+      data: { isTyping: true },
+      timestamp: Date.now(),
+      nonce: 'mid-1'
+    };
+
+    const frames = await (rm as any).toPaddedFrames(inner);
+
+    expect(Array.isArray(frames)).toBe(true);
+    expect(frames.length).toBeGreaterThanOrEqual(8);
+    expect((frames.length & (frames.length - 1)) === 0).toBe(true);
+
+    for (const f of frames) {
+      expect(f.type).toBe('padded-frame');
+      expect(typeof f.data?.p).toBe('string');
+      expect(f.data.p.length).toBe(1024);
+
+      const len = Number.parseInt(String(f.data.p).slice(0, 6), 10);
+      const innerJson = String(f.data.p).slice(6, 6 + len);
+      const meta = JSON.parse(innerJson);
+      expect(meta.v).toBe(2);
+      expect(meta.total).toBe(frames.length);
+      expect(typeof meta.iv).toBe('string');
+      expect(meta.iv.length).toBe(16);
+      expect(typeof meta.chunk).toBe('string');
+      expect(meta.chunk.length).toBe(512);
+    }
+  });
+
+  it('decrypts and dispatches the original inner payload once all frames arrive', async () => {
+    const sessionId = 'GHOST-ABCD-1234';
+    const channelToken = 'aaaaaaaaaaaaaaaaaaaaaa';
+
+    const sender = new RealtimeManager(sessionId, channelToken, 'me');
+    const receiver = new RealtimeManager(sessionId, channelToken, 'peer');
+
+    const handler = vi.fn();
+    receiver.onMessage('chat-message', handler);
+
+    const inner = {
+      type: 'chat-message',
+      senderId: 'me',
+      data: { encrypted: 'ciphertext', iv: 'iv', sequence: 1, type: 'text' },
+      timestamp: Date.now(),
+      nonce: 'msg-123'
+    };
+
+    const frames = await (sender as any).toPaddedFrames(inner);
+    for (const f of frames) {
+      await (receiver as any).handleIncomingPaddedFrame(f);
+    }
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const delivered = handler.mock.calls[0]?.[0];
+    expect(delivered.type).toBe('chat-message');
+    expect(delivered.senderId).toBe('me');
+    expect(delivered.nonce).toBe('msg-123');
+    expect(delivered.data.encrypted).toBe('ciphertext');
+  });
+});

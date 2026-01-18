@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors.ts";
 import {
-  jsonError,
+  jsonResponse,
   getRateLimitKeyHex,
   hashCapabilityTokenToBytea
 } from "../_shared/security.ts";
@@ -21,10 +21,17 @@ const errorResponse = async (req: Request, status: number, code: string) => {
     SERVER_ERROR: 'Internal error'
   };
 
-  return jsonError(messages[code] || 'Internal error', code, {
-    status,
-    headers: corsHeaders(req, ALLOWED_ORIGINS)
-  });
+  return jsonResponse(
+    {
+      success: false,
+      error: messages[code] || 'Internal error',
+      code
+    },
+    {
+      status: 200,
+      headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' }
+    }
+  );
 };
 
 serve(async (req: Request) => {

@@ -4,7 +4,7 @@ import {
   generateCapabilityToken,
   getRateLimitKeyHex,
   hashCapabilityTokenToBytea,
-  jsonError,
+  jsonResponse,
 } from "../_shared/security.ts";
 import { getSupabaseServiceClient } from "../_shared/client.ts";
 
@@ -22,10 +22,17 @@ const errorResponse = async (req: Request, status: number, code: string) => {
     SERVER_ERROR: 'Internal error'
   };
 
-  return jsonError(messages[code] || 'Internal error', code, {
-    status,
-    headers: corsHeaders(req, ALLOWED_ORIGINS)
-  });
+  return jsonResponse(
+    {
+      success: false,
+      error: messages[code] || 'Internal error',
+      code
+    },
+    {
+      status: 200,
+      headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' }
+    }
+  );
 };
 
 serve(async (req: Request) => {

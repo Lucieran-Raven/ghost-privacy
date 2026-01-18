@@ -7,6 +7,14 @@ const PADDED_FRAME_TOTAL_CHARS = 1024;
 const PADDED_FRAME_HEADER_CHARS = 6;
 const PADDED_FRAME_PAYLOAD_CHARS = PADDED_FRAME_TOTAL_CHARS - PADDED_FRAME_HEADER_CHARS;
 
+const PADDED_FRAME_VERSION = 2;
+const SEALED_CHUNK_BYTES = 384;
+const SEALED_CHUNK_B64_CHARS = 512;
+const SEALED_TAG_BYTES = 16;
+const SEALED_LEN_PREFIX_BYTES = 4;
+const SEALED_MIN_BUCKET_FRAMES = 8;
+const SEND_FRAME_JITTER_MAX_MS = 25;
+
 const PADDED_FRAME_MAX_INNER_FRAMES = 256;
 const PADDED_FRAME_BUFFER_TTL_MS = 30 * 1000;
 const PADDED_FRAME_MAX_INFLIGHT = 128;
@@ -29,6 +37,54 @@ function decodeBase64ToUtf8(b64: string): string {
     bytes[i] = binary.charCodeAt(i);
   }
   return new TextDecoder().decode(bytes);
+}
+
+function base64UrlEncodeBytes(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const base64 = btoa(binary);
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function base64UrlDecodeToBytes(value: string): Uint8Array {
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function concatBytes(chunks: Uint8Array[]): Uint8Array {
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.length;
+  }
+  return out;
+}
+
+function nextPowerOfTwo(n: number): number {
+  let p = 1;
+  while (p < n) p <<= 1;
+  return p;
+}
+
+function randomInt(maxExclusive: number): number {
+  if (maxExclusive <= 0) return 0;
+  try {
+    const buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    return buf[0] % maxExclusive;
+  } catch {
+    return Math.floor(Math.random() * maxExclusive);
+  }
 }
 
 function toFixedLenFrameString(innerJson: string): string {
@@ -131,6 +187,8 @@ export class RealtimeManager {
   private readonly seenIncomingMaxEntries = 4096;
 
   private incomingFrames: Map<string, { total: number; chunks: string[]; received: number; updatedAt: number }> = new Map();
+
+  private transportKeyPromise: Promise<CryptoKey> | null = null;
 
   constructor(sessionId: string, channelToken: string, participantId: string) {
     this.sessionId = sessionId;
@@ -291,7 +349,7 @@ export class RealtimeManager {
 
     let frames: BroadcastPayload[];
     try {
-      frames = this.toPaddedFrames(payload);
+      frames = await this.toPaddedFrames(payload);
     } catch {
       return false;
     }
@@ -300,6 +358,10 @@ export class RealtimeManager {
       try {
         let ok = true;
         for (const frame of frames) {
+          const jitter = randomInt(SEND_FRAME_JITTER_MAX_MS + 1);
+          if (jitter > 0) {
+            await new Promise(resolve => setTimeout(resolve, jitter));
+          }
           const result = await this.channel.send({
             type: 'broadcast',
             event: 'ghost-message',
@@ -387,27 +449,191 @@ export class RealtimeManager {
     }
   }
 
-  private toPaddedFrames(inner: BroadcastPayload): BroadcastPayload[] {
-    const innerJson = JSON.stringify(inner);
-    const innerB64 = encodeUtf8ToBase64(innerJson);
+  private async getTransportKey(): Promise<CryptoKey> {
+    if (this.transportKeyPromise) return this.transportKeyPromise;
 
-    // Conservative chunk sizing so the JSON metadata fits.
-    // All frames will have identical `data.p` length.
-    const maxChunk = 700;
-    const total = Math.max(1, Math.ceil(innerB64.length / maxChunk));
-    if (total > PADDED_FRAME_MAX_INNER_FRAMES) {
+    this.transportKeyPromise = (async () => {
+      const tokenBytes = base64UrlDecodeToBytes(this.channelToken);
+      const sidBytes = new TextEncoder().encode(this.sessionId);
+      const material = concatBytes([tokenBytes, sidBytes]);
+      const digest = await crypto.subtle.digest('SHA-256', material.buffer as ArrayBuffer);
+      return await crypto.subtle.importKey(
+        'raw',
+        digest,
+        { name: 'AES-GCM' },
+        false,
+        ['encrypt', 'decrypt']
+      );
+    })();
+
+    return this.transportKeyPromise;
+  }
+
+  private async sealPayload(inner: BroadcastPayload, bucketFrames: number): Promise<{ ivB64: string; chunksB64: string[] }> {
+    const innerJson = JSON.stringify(inner);
+    const innerBytes = new TextEncoder().encode(innerJson);
+
+    const plaintextLen = bucketFrames * SEALED_CHUNK_BYTES - SEALED_TAG_BYTES;
+    if (plaintextLen <= SEALED_LEN_PREFIX_BYTES) {
+      throw new Error('invalid sealing size');
+    }
+    if (innerBytes.length > plaintextLen - SEALED_LEN_PREFIX_BYTES) {
       throw new Error('payload too large');
     }
 
+    const plaintext = new Uint8Array(plaintextLen);
+    crypto.getRandomValues(plaintext);
+
+    const dv = new DataView(plaintext.buffer);
+    dv.setUint32(0, innerBytes.length, false);
+    plaintext.set(innerBytes, SEALED_LEN_PREFIX_BYTES);
+
+    const iv = new Uint8Array(12);
+    crypto.getRandomValues(iv);
+
+    const key = await this.getTransportKey();
+    const aad = new TextEncoder().encode(`${this.sessionId}|${inner.nonce}`);
+
+    const ciphertext = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv, additionalData: aad },
+      key,
+      plaintext.buffer as ArrayBuffer
+    );
+
+    const ctBytes = new Uint8Array(ciphertext);
+    if (ctBytes.length !== bucketFrames * SEALED_CHUNK_BYTES) {
+      throw new Error('unexpected ciphertext length');
+    }
+
+    const chunksB64: string[] = [];
+    for (let i = 0; i < bucketFrames; i++) {
+      const chunkBytes = ctBytes.slice(i * SEALED_CHUNK_BYTES, (i + 1) * SEALED_CHUNK_BYTES);
+      const chunkB64 = base64UrlEncodeBytes(chunkBytes);
+      if (chunkB64.length !== SEALED_CHUNK_B64_CHARS) {
+        throw new Error('unexpected chunk encoding');
+      }
+      chunksB64.push(chunkB64);
+    }
+
+    try {
+      plaintext.fill(0);
+      innerBytes.fill(0);
+    } catch {
+    }
+
+    return { ivB64: base64UrlEncodeBytes(iv), chunksB64 };
+  }
+
+  private async unsealPayload(
+    senderId: string,
+    mid: string,
+    ivB64: string,
+    chunksB64: string[]
+  ): Promise<any | null> {
+    if (chunksB64.length < 1 || chunksB64.length > PADDED_FRAME_MAX_INNER_FRAMES) return null;
+
+    const chunksBytes: Uint8Array[] = [];
+    for (const c of chunksB64) {
+      if (typeof c !== 'string' || c.length !== SEALED_CHUNK_B64_CHARS) return null;
+      let b: Uint8Array;
+      try {
+        b = base64UrlDecodeToBytes(c);
+      } catch {
+        return null;
+      }
+      if (b.length !== SEALED_CHUNK_BYTES) return null;
+      chunksBytes.push(b);
+    }
+
+    let iv: Uint8Array;
+    try {
+      iv = base64UrlDecodeToBytes(ivB64);
+    } catch {
+      return null;
+    }
+    if (iv.length !== 12) return null;
+
+    const ciphertextBytes = concatBytes(chunksBytes);
+
+    const key = await this.getTransportKey();
+    const aad = new TextEncoder().encode(`${this.sessionId}|${mid}`);
+
+    let plaintextBuf: ArrayBuffer;
+    try {
+      plaintextBuf = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv, additionalData: aad },
+        key,
+        ciphertextBytes.buffer as ArrayBuffer
+      );
+    } catch {
+      return null;
+    }
+
+    const plaintext = new Uint8Array(plaintextBuf);
+    if (plaintext.length < SEALED_LEN_PREFIX_BYTES) return null;
+
+    const dv = new DataView(plaintext.buffer);
+    const msgLen = dv.getUint32(0, false);
+    if (!Number.isFinite(msgLen) || msgLen <= 0 || msgLen > plaintext.length - SEALED_LEN_PREFIX_BYTES) return null;
+
+    const msgBytes = plaintext.slice(SEALED_LEN_PREFIX_BYTES, SEALED_LEN_PREFIX_BYTES + msgLen);
+
+    let json: string;
+    try {
+      json = new TextDecoder().decode(msgBytes);
+    } catch {
+      return null;
+    }
+
+    let inner: any;
+    try {
+      inner = JSON.parse(json);
+    } catch {
+      return null;
+    }
+
+    if (!inner || typeof inner !== 'object') return null;
+    if (typeof inner.senderId !== 'string' || inner.senderId !== senderId) return null;
+    if (typeof inner.nonce !== 'string' || inner.nonce !== mid) return null;
+
+    try {
+      plaintext.fill(0);
+      msgBytes.fill(0);
+    } catch {
+    }
+
+    return inner;
+  }
+
+  private async toPaddedFrames(inner: BroadcastPayload): Promise<BroadcastPayload[]> {
+    const innerJson = JSON.stringify(inner);
+    const innerBytes = new TextEncoder().encode(innerJson);
+
+    const neededPlain = SEALED_LEN_PREFIX_BYTES + innerBytes.length;
+    let totalFrames = SEALED_MIN_BUCKET_FRAMES;
+    while (totalFrames * SEALED_CHUNK_BYTES - SEALED_TAG_BYTES < neededPlain) {
+      totalFrames *= 2;
+      if (totalFrames > PADDED_FRAME_MAX_INNER_FRAMES) {
+        throw new Error('payload too large');
+      }
+    }
+
+    const bucket = Math.max(SEALED_MIN_BUCKET_FRAMES, nextPowerOfTwo(totalFrames));
+    if (bucket > PADDED_FRAME_MAX_INNER_FRAMES) {
+      throw new Error('payload too large');
+    }
+
+    const sealed = await this.sealPayload(inner, bucket);
+
     const frames: BroadcastPayload[] = [];
-    for (let seq = 0; seq < total; seq++) {
-      const chunk = innerB64.slice(seq * maxChunk, (seq + 1) * maxChunk);
+    for (let seq = 0; seq < bucket; seq++) {
       const frameData = {
-        v: 1,
+        v: PADDED_FRAME_VERSION,
         mid: inner.nonce,
         seq,
-        total,
-        chunk
+        total: bucket,
+        iv: sealed.ivB64,
+        chunk: sealed.chunksB64[seq]
       };
       const frameJson = JSON.stringify(frameData);
       const p = toFixedLenFrameString(frameJson);
@@ -423,7 +649,7 @@ export class RealtimeManager {
     return frames;
   }
 
-  private handleIncomingPaddedFrame(payload: BroadcastPayload): void {
+  private async handleIncomingPaddedFrame(payload: BroadcastPayload): Promise<void> {
     const now = Date.now();
     this.cleanupFrameBuffers(now);
 
@@ -438,14 +664,19 @@ export class RealtimeManager {
       return;
     }
 
-    if (!frame || frame.v !== 1) return;
+    if (!frame || (frame.v !== 1 && frame.v !== PADDED_FRAME_VERSION)) return;
     if (typeof frame.mid !== 'string' || frame.mid.length === 0 || frame.mid.length > 256) return;
     if (typeof frame.seq !== 'number' || !Number.isFinite(frame.seq)) return;
     if (typeof frame.total !== 'number' || !Number.isFinite(frame.total)) return;
     if (frame.total < 1 || frame.total > PADDED_FRAME_MAX_INNER_FRAMES) return;
     if (frame.seq < 0 || frame.seq >= frame.total) return;
-    if (typeof frame.chunk !== 'string') return;
-    if (frame.chunk.length > 2048) return;
+    if (frame.v === PADDED_FRAME_VERSION) {
+      if (typeof frame.iv !== 'string' || frame.iv.length !== 16) return;
+      if (typeof frame.chunk !== 'string' || frame.chunk.length !== SEALED_CHUNK_B64_CHARS) return;
+    } else {
+      if (typeof frame.chunk !== 'string') return;
+      if (frame.chunk.length > 2048) return;
+    }
 
     const key = `${payload.senderId}:${frame.mid}`;
     let buf = this.incomingFrames.get(key);
@@ -470,6 +701,22 @@ export class RealtimeManager {
     }
 
     this.incomingFrames.delete(key);
+
+    if (frame.v === PADDED_FRAME_VERSION) {
+      const innerPayload = await this.unsealPayload(payload.senderId, frame.mid, frame.iv, buf.chunks);
+      if (!innerPayload) return;
+      if (!this.shouldAcceptIncoming(innerPayload, { allowPaddedFrame: false })) {
+        return;
+      }
+
+      const type = innerPayload.type as PublicBroadcastType;
+      const handler = this.messageHandlers.get(type);
+      if (handler) {
+        handler(innerPayload as BroadcastPayload);
+      }
+      return;
+    }
+
     const innerB64 = buf.chunks.join('');
     let innerPayload: any;
     try {
@@ -543,7 +790,7 @@ export class RealtimeManager {
       // Frames are fixed-size; suppress per-frame replay tracking to avoid filling replay cache.
       if (payload.type === 'padded-frame') {
         if (!this.shouldAcceptIncoming(payload, { allowPaddedFrame: true, skipReplayCheck: true })) return;
-        this.handleIncomingPaddedFrame(payload as BroadcastPayload);
+        void this.handleIncomingPaddedFrame(payload as BroadcastPayload);
         return;
       }
 
@@ -568,7 +815,11 @@ export class RealtimeManager {
 
   private async connectWithRetry(): Promise<void> {
     // Extended exponential backoff: 500ms, 1s, 2s, 4s, 8s...
-    const getBackoffDelay = (attempt: number) => Math.min(500 * Math.pow(2, attempt), 30000);
+    const getBackoffDelay = (attempt: number) => {
+      const base = Math.min(500 * Math.pow(2, attempt), 30000);
+      const jitter = 0.8 + (randomInt(401) / 1000); // 0.8 .. 1.201
+      return Math.max(250, Math.floor(base * jitter));
+    };
     
     return new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -663,7 +914,8 @@ export class RealtimeManager {
     this.reconnectAttempts++;
     this.updateState('reconnecting', 50);
     
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
+    const baseDelay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
+    const delay = Math.max(250, Math.floor(baseDelay * (0.8 + randomInt(401) / 1000)));
     
     await new Promise(resolve => setTimeout(resolve, delay));
 

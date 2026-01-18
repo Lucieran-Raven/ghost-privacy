@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors.ts";
 import {
-  jsonError,
   getRateLimitKeyHex,
   generateCapabilityToken,
   hashCapabilityTokenToBytea
@@ -16,11 +15,10 @@ const invalidResponse = (req: Request) => new Response(
   { headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' } }
 );
 
-const errorResponse = (req: Request) =>
-  jsonError('Internal error', 'SERVER_ERROR', {
-    status: 500,
-    headers: corsHeaders(req, ALLOWED_ORIGINS)
-  });
+const errorResponse = async (req: Request) => {
+  await new Promise(r => setTimeout(r, 50));
+  return invalidResponse(req);
+};
 
 serve(async (req: Request) => {
   const origin = req.headers.get('origin') || '';
@@ -122,7 +120,7 @@ serve(async (req: Request) => {
         .maybeSingle();
 
       if (updateError) {
-        return errorResponse(req);
+        return await errorResponse(req);
       }
 
       if (updated?.expires_at) {
@@ -146,7 +144,7 @@ serve(async (req: Request) => {
       .maybeSingle();
 
     if (error) {
-      return errorResponse(req);
+      return await errorResponse(req);
     }
 
     if (!session?.expires_at) {
@@ -160,6 +158,6 @@ serve(async (req: Request) => {
     );
     
   } catch (error: unknown) {
-    return errorResponse(req);
+    return await errorResponse(req);
   }
 });
