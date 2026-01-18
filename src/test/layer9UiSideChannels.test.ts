@@ -6,6 +6,17 @@ function read(relPath: string): string {
   return fs.readFileSync(path.resolve(process.cwd(), relPath), 'utf8');
 }
 
+function listFiles(dir: string): string[] {
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  const out: string[] = [];
+  for (const e of entries) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) out.push(...listFiles(p));
+    else out.push(p);
+  }
+  return out;
+}
+
 describe('layer9 ui/human side-channel invariants', () => {
   it('wires global PrivacyShield into App', () => {
     const src = read('src/App.tsx');
@@ -35,5 +46,28 @@ describe('layer9 ui/human side-channel invariants', () => {
     expect(src).toMatch(/autoCorrect="off"/);
     expect(src).toMatch(/autoCapitalize="off"/);
     expect(src).toMatch(/spellCheck=\{false\}/);
+  });
+
+  it('does not use direct clipboard APIs outside ephemeralClipboard', () => {
+    const root = path.resolve(process.cwd(), 'src');
+    const files = listFiles(root).filter((f) => /\.(ts|tsx)$/.test(f));
+    const violations: string[] = [];
+
+    for (const file of files) {
+      const rel = path.relative(process.cwd(), file);
+      if (rel.replace(/\\/g, '/').endsWith('src/utils/ephemeralClipboard.ts')) {
+        continue;
+      }
+      const raw = fs.readFileSync(file, 'utf8');
+      if (/navigator\s*\.\s*clipboard\b/i.test(raw)) {
+        violations.push(rel);
+        continue;
+      }
+      if (/clipboard\s*\.\s*(writeText|readText)\s*\(/i.test(raw)) {
+        violations.push(rel);
+      }
+    }
+
+    expect(violations).toEqual([]);
   });
 });

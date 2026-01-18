@@ -27,9 +27,13 @@ function installListeners(): void {
   listenersInstalled = true;
 
   if (typeof window !== 'undefined') {
-    window.addEventListener('blur', () => {
+    const clear = () => {
       void clearIfStillOurs();
-    });
+    };
+    window.addEventListener('blur', clear);
+    window.addEventListener('pagehide', clear);
+    window.addEventListener('beforeunload', clear);
+    window.addEventListener('unload', clear);
   }
 
   if (typeof document !== 'undefined') {
