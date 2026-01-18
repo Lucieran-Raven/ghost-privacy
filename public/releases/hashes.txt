@@ -4,5 +4,5 @@
 #
 # Current (GitHub releases)
 05b7a43b868779150b1276e19d4bd82622adf6656064a022a8e2a83d6257d9ee  ghost-privacy-android-release.apk
-8b817f2045d322af95679def23f6430d19df8f2ec5bd376c1dca6abb507c840f  Ghost Privacy_0.1.4_x64-setup.exe
-e4aeccacf62d4da561e8b68b35a6d9672985537c5bf3723813671d592545125c  Ghost Privacy_0.1.4_x64_en-US.msi
+8b817f2045d322af95679def23f6430d19df8f2ec5bd376c1dca6abb507c840f  Ghost.Privacy_0.1.4_x64-setup.exe
+e4aeccacf62d4da561e8b68b35a6d9672985537c5bf3723813671d592545125c  Ghost.Privacy_0.1.4_x64_en-US.msi
