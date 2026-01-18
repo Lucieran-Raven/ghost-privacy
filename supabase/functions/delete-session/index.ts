@@ -4,6 +4,7 @@ import {
   generateCapabilityToken,
   getRateLimitKeyHex,
   hashCapabilityTokenToBytea,
+  hashSessionIdHex,
   jsonResponse,
 } from "../_shared/security.ts";
 import { getSupabaseServiceClient } from "../_shared/client.ts";
@@ -83,6 +84,13 @@ serve(async (req: Request) => {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 
+    let storedSessionId: string;
+    try {
+      storedSessionId = await hashSessionIdHex(sessionId);
+    } catch {
+      return errorResponse(req, 404, 'NOT_FOUND');
+    }
+
     const windowMs = 60 * 60 * 1000;
     const windowStart = new Date(Math.floor(Date.now() / windowMs) * windowMs);
     const windowStartIso = windowStart.toISOString();
@@ -134,7 +142,7 @@ serve(async (req: Request) => {
         guest_capability_hash: rotatedGuestHashBytea,
         channel_token_hash: rotatedChannelHashBytea
       })
-      .eq('session_id', sessionId)
+      .eq('session_id', storedSessionId)
       .eq('host_capability_hash', hostHashBytea)
       .eq('channel_token_hash', channelHashBytea)
       .select('session_id')

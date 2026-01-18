@@ -4,6 +4,7 @@ import {
   generateCapabilityToken,
   getRateLimitKeyHex,
   hashCapabilityTokenToBytea,
+  hashSessionIdHex,
   jsonResponse
 } from "../_shared/security.ts";
 import { getSupabaseServiceClient } from "../_shared/client.ts";
@@ -67,6 +68,13 @@ serve(async (req: Request) => {
       return errorResponse(req, 'INVALID_REQUEST');
     }
 
+    let storedSessionId: string;
+    try {
+      storedSessionId = await hashSessionIdHex(sessionId);
+    } catch {
+      return errorResponse(req, 'INVALID_REQUEST');
+    }
+
     // SECURITY FIX: Atomic rate limiting with fixed windows
     // IMPORTANT: window_start must be stable within the window, otherwise the UPSERT never conflicts.
     const windowMs = RATE_LIMIT_WINDOW_MINUTES * 60 * 1000;
@@ -114,7 +122,7 @@ serve(async (req: Request) => {
     const { data, error } = await supabase
       .from('ghost_sessions')
       .insert({
-        session_id: sessionId,
+        session_id: storedSessionId,
         capability_hash: hostHashBytea,
         host_capability_hash: hostHashBytea,
         guest_capability_hash: guestHashBytea,
@@ -124,7 +132,7 @@ serve(async (req: Request) => {
         created_at: createdAt,
         max_expires_at: maxExpiresAt
       })
-      .select('session_id, expires_at')
+      .select('expires_at')
       .single();
 
     if (error) {
@@ -137,7 +145,7 @@ serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: true,
-        sessionId: data.session_id,
+        sessionId,
         expiresAt: data.expires_at,
         hostToken,
         guestToken,

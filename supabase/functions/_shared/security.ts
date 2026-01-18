@@ -40,6 +40,12 @@ function arrayBufferToHex(buffer: ArrayBuffer): string {
   return hex;
 }
 
+async function sha256Hex(message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(message));
+  return arrayBufferToHex(digest);
+}
+
 function base64UrlEncode(bytes: Uint8Array): string {
   let binary = '';
   for (let i = 0; i < bytes.length; i++) {
@@ -235,6 +241,13 @@ export async function hashCapabilityTokenToBytea(token: string): Promise<string>
   const copy = new Uint8Array(bytes);
   const digest = await crypto.subtle.digest('SHA-256', copy.buffer as ArrayBuffer);
   return `\\x${arrayBufferToHex(digest)}`;
+}
+
+export async function hashSessionIdHex(sessionId: string): Promise<string> {
+  if (!sessionId || typeof sessionId !== 'string') {
+    throw new Error('Invalid sessionId');
+  }
+  return await sha256Hex(sessionId);
 }
 
 export async function verifyCapabilityHash(

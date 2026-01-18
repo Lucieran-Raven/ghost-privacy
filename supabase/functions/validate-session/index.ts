@@ -3,7 +3,8 @@ import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors
 import {
   getRateLimitKeyHex,
   generateCapabilityToken,
-  hashCapabilityTokenToBytea
+  hashCapabilityTokenToBytea,
+  hashSessionIdHex
 } from "../_shared/security.ts";
 import { getSupabaseServiceClient } from "../_shared/client.ts";
 
@@ -48,6 +49,14 @@ serve(async (req: Request) => {
     // Strict input validation - constant-time response for all failures
     if (!sessionId || typeof sessionId !== 'string' || !/^GHOST-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(sessionId)) {
       // Delay to match successful query timing
+      await new Promise(r => setTimeout(r, 50));
+      return invalidResponse(req);
+    }
+
+    let storedSessionId: string;
+    try {
+      storedSessionId = await hashSessionIdHex(sessionId);
+    } catch {
       await new Promise(r => setTimeout(r, 50));
       return invalidResponse(req);
     }
@@ -112,7 +121,7 @@ serve(async (req: Request) => {
       const { data: updated, error: updateError } = await supabase
         .from('ghost_sessions')
         .update({ used: true, guest_capability_hash: rotatedGuestHashBytea })
-        .eq('session_id', sessionId)
+        .eq('session_id', storedSessionId)
         .eq('guest_capability_hash', tokenHashBytea)
         .eq('channel_token_hash', channelHashBytea)
         .is('used', false)
@@ -138,7 +147,7 @@ serve(async (req: Request) => {
     const { data: session, error } = await supabase
       .from('ghost_sessions')
       .select('expires_at')
-      .eq('session_id', sessionId)
+      .eq('session_id', storedSessionId)
       .eq('host_capability_hash', tokenHashBytea)
       .eq('channel_token_hash', channelHashBytea)
       .gt('expires_at', nowIso)

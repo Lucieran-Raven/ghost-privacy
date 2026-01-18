@@ -41,6 +41,43 @@ describe('layer10 backend/database invariants', () => {
     expect(violations).toEqual([]);
   });
 
+  it('uses hash-only session identifiers in edge functions (no raw sessionId in DB filters/inserts)', () => {
+    const root = path.resolve(process.cwd(), 'supabase', 'functions');
+    const files = listFiles(root)
+      .filter((f) => f.endsWith('.ts'))
+      .filter((f) => !f.includes(`${path.sep}_shared${path.sep}`));
+
+    const violations: Array<{ file: string; needle: string }> = [];
+
+    for (const file of files) {
+      const rel = path.relative(process.cwd(), file);
+      const raw = fs.readFileSync(file, 'utf8');
+
+      if (/\.eq\(\s*['\"]session_id['\"]\s*,\s*sessionId\s*\)/.test(raw)) {
+        violations.push({ file: rel, needle: ".eq('session_id', sessionId)" });
+      }
+
+      if (/session_id\s*:\s*sessionId\b/.test(raw)) {
+        violations.push({ file: rel, needle: 'session_id: sessionId' });
+      }
+
+      if (/\.eq\(\s*['\"]session_id['\"]\s*,\s*body\.sessionId\s*\)/.test(raw)) {
+        violations.push({ file: rel, needle: ".eq('session_id', body.sessionId)" });
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it('includes a migration to enforce sha256-hex session_id storage', () => {
+    const root = path.resolve(process.cwd(), 'supabase', 'migrations');
+    const files = listFiles(root).filter((f) => f.endsWith('.sql'));
+
+    const needle = 'ghost_sessions_session_id_sha256_hex_chk';
+    const has = files.some((file) => fs.readFileSync(file, 'utf8').includes(needle));
+    expect(has).toBe(true);
+  });
+
   it('does not store raw IP address fields in migrations (hash-only identifiers)', () => {
     const root = path.resolve(process.cwd(), 'supabase', 'migrations');
     const files = listFiles(root).filter((f) => f.endsWith('.sql'));

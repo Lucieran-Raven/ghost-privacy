@@ -3,7 +3,8 @@ import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors
 import {
   jsonResponse,
   getRateLimitKeyHex,
-  hashCapabilityTokenToBytea
+  hashCapabilityTokenToBytea,
+  hashSessionIdHex
 } from "../_shared/security.ts";
 import { getSupabaseServiceClient } from "../_shared/client.ts";
 
@@ -71,6 +72,13 @@ serve(async (req: Request) => {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 
+    let storedSessionId: string;
+    try {
+      storedSessionId = await hashSessionIdHex(sessionId);
+    } catch {
+      return errorResponse(req, 404, 'NOT_FOUND');
+    }
+
     let hostHashBytea: string;
     let channelHashBytea: string;
     try {
@@ -83,7 +91,7 @@ serve(async (req: Request) => {
     const { data: session, error: readError } = await supabase
       .from('ghost_sessions')
       .select('expires_at, max_expires_at')
-      .eq('session_id', sessionId)
+      .eq('session_id', storedSessionId)
       .eq('host_capability_hash', hostHashBytea)
       .eq('channel_token_hash', channelHashBytea)
       .maybeSingle();
@@ -151,7 +159,7 @@ serve(async (req: Request) => {
     const { data: updated, error: updateError } = await supabase
       .from('ghost_sessions')
       .update({ expires_at: nextExpiryIso })
-      .eq('session_id', sessionId)
+      .eq('session_id', storedSessionId)
       .eq('host_capability_hash', hostHashBytea)
       .eq('channel_token_hash', channelHashBytea)
       .gt('expires_at', new Date().toISOString())

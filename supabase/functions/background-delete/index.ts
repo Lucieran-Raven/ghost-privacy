@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors.ts";
-import { jsonError, requireCronAuth } from "../_shared/security.ts";
+import { hashSessionIdHex, jsonError, requireCronAuth } from "../_shared/security.ts";
 import { getSupabaseServiceClient } from "../_shared/client.ts";
 
 declare const Deno: {
@@ -57,10 +57,20 @@ serve(async (req: Request) => {
       });
     }
 
+    let storedSessionId: string;
+    try {
+      storedSessionId = await hashSessionIdHex(sessionId);
+    } catch {
+      return jsonError('Invalid request', 'INVALID_REQUEST', {
+        status: 400,
+        headers: corsHeaders(req, ALLOWED_ORIGINS)
+      });
+    }
+
     const { error } = await supabase
       .from('ghost_sessions')
       .delete()
-      .eq('session_id', sessionId);
+      .eq('session_id', storedSessionId);
 
     if (error) {
       return errorResponse(req);
