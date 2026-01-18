@@ -6,28 +6,32 @@
  * Privacy: NEVER logs, NEVER stores, NEVER makes network requests, NEVER persists beyond caller-managed memory.
  */
 
-import { createSessionCapabilityBindingBody, type SessionCapabilityBindingBody } from './binding';
+import { createSessionHostActionBody, type SessionHostActionBody } from './binding';
 import { isValidCapabilityToken, isValidSessionId } from './binding';
 
 export const DELETE_SESSION_FUNCTION_NAME = 'delete-session' as const;
 
 export interface DeleteSessionInvokeRequest {
   functionName: typeof DELETE_SESSION_FUNCTION_NAME;
-  body: SessionCapabilityBindingBody;
+  body: SessionHostActionBody;
 }
 
 export function createDeleteSessionInvokeRequest(
   sessionId: string,
-  capabilityToken: string
+  hostToken: string,
+  channelToken: string
 ): DeleteSessionInvokeRequest {
   if (!isValidSessionId(sessionId)) {
     throw new Error('invalid session id');
   }
-  if (!isValidCapabilityToken(capabilityToken)) {
-    throw new Error('invalid capability token');
+  if (!isValidCapabilityToken(hostToken)) {
+    throw new Error('invalid host token');
+  }
+  if (!isValidCapabilityToken(channelToken)) {
+    throw new Error('invalid channel token');
   }
   return {
     functionName: DELETE_SESSION_FUNCTION_NAME,
-    body: createSessionCapabilityBindingBody(sessionId, capabilityToken)
+    body: createSessionHostActionBody(sessionId, hostToken, channelToken)
   };
 }

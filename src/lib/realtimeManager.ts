@@ -106,7 +106,7 @@ export interface ConnectionState {
 export class RealtimeManager {
   private channel: RealtimeChannel | null = null;
   private sessionId: string;
-  private capabilityToken: string;
+  private channelToken: string;
   private participantId: string;
   private outbox: Array<{ payload: BroadcastPayload; retries: number; enqueuedAt: number }> = [];
   private readonly outboxMaxItems = 64;
@@ -132,9 +132,9 @@ export class RealtimeManager {
 
   private incomingFrames: Map<string, { total: number; chunks: string[]; received: number; updatedAt: number }> = new Map();
 
-  constructor(sessionId: string, capabilityToken: string, participantId: string) {
+  constructor(sessionId: string, channelToken: string, participantId: string) {
     this.sessionId = sessionId;
-    this.capabilityToken = capabilityToken;
+    this.channelToken = channelToken;
     this.participantId = participantId;
   }
 
@@ -513,7 +513,7 @@ export class RealtimeManager {
 
     this.stopCoverTraffic();
 
-    const channelName = await deriveRealtimeChannelName(this.sessionId, this.capabilityToken);
+    const channelName = await deriveRealtimeChannelName(this.sessionId, this.channelToken);
     this.updateState('subscribing', 25);
 
     this.channel = supabase.channel(channelName, {

@@ -3,7 +3,7 @@
 import { isValidCapabilityToken, isValidSessionId } from '@/utils/algorithms/session/binding';
 
 export class SecurityManager {
-  private static sessionCapabilityTokens: Map<string, string> = new Map();
+  private static sessionHostTokens: Map<string, string> = new Map();
 
   static async generateFingerprint(): Promise<string> {
     const bytes = new Uint8Array(16);
@@ -12,31 +12,47 @@ export class SecurityManager {
   }
 
   static setCapabilityToken(sessionId: string, capabilityToken: string): void {
-    if (!isValidSessionId(sessionId)) {
-      throw new Error('invalid session id');
-    }
-    if (!isValidCapabilityToken(capabilityToken)) {
-      throw new Error('invalid capability token');
-    }
-
-    const existing = this.sessionCapabilityTokens.get(sessionId);
-    if (existing && existing !== capabilityToken) {
-      throw new Error('capability token already set');
-    }
-
-    this.sessionCapabilityTokens.set(sessionId, capabilityToken);
+    this.setHostToken(sessionId, capabilityToken);
   }
 
   static getCapabilityToken(sessionId: string): string | null {
-    return this.sessionCapabilityTokens.get(sessionId) || null;
+    return this.getHostToken(sessionId);
   }
 
   static clearCapabilityToken(sessionId: string): void {
-    this.sessionCapabilityTokens.delete(sessionId);
+    this.clearHostToken(sessionId);
   }
 
   static clearAllCapabilityTokens(): void {
-    this.sessionCapabilityTokens.clear();
+    this.clearAllHostTokens();
+  }
+
+  static setHostToken(sessionId: string, hostToken: string): void {
+    if (!isValidSessionId(sessionId)) {
+      throw new Error('invalid session id');
+    }
+    if (!isValidCapabilityToken(hostToken)) {
+      throw new Error('invalid host token');
+    }
+
+    const existing = this.sessionHostTokens.get(sessionId);
+    if (existing && existing !== hostToken) {
+      throw new Error('host token already set');
+    }
+
+    this.sessionHostTokens.set(sessionId, hostToken);
+  }
+
+  static getHostToken(sessionId: string): string | null {
+    return this.sessionHostTokens.get(sessionId) || null;
+  }
+
+  static clearHostToken(sessionId: string): void {
+    this.sessionHostTokens.delete(sessionId);
+  }
+
+  static clearAllHostTokens(): void {
+    this.sessionHostTokens.clear();
   }
 
   private static generateRandomBytes(length: number): string {

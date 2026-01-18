@@ -12,7 +12,8 @@ const DecoyCalculator = lazy(() => import('@/components/Ghost/DecoyCalculator'))
 
 interface SessionState {
   sessionId: string;
-  capabilityToken: string;
+  token: string;
+  channelToken: string;
   isHost: boolean;
   timerMode: string;
 }
@@ -47,8 +48,8 @@ const Session = () => {
     };
   }, [session]);
 
-  const handleSessionStart = (sessionId: string, capabilityToken: string, isHost: boolean, timerMode: string) => {
-    setSession({ sessionId, capabilityToken, isHost, timerMode });
+  const handleSessionStart = (sessionId: string, token: string, channelToken: string, isHost: boolean, timerMode: string) => {
+    setSession({ sessionId, token, channelToken, isHost, timerMode });
   };
 
   const handleHoneypotDetected = (sessionId: string, trapType: string) => {
@@ -93,7 +94,8 @@ const Session = () => {
       <Suspense fallback={<div />}>
         <ChatInterface
           sessionId={session.sessionId}
-          capabilityToken={session.capabilityToken}
+          token={session.token}
+          channelToken={session.channelToken}
           isHost={session.isHost}
           timerMode={session.timerMode}
           onEndSession={(showToast = true) => handleEndSession(showToast)}

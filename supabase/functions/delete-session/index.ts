@@ -45,14 +45,14 @@ serve(async (req: Request) => {
   try {
     const supabase = getSupabaseServiceClient();
 
-    let body: { sessionId?: string; capabilityToken?: string };
+    let body: { sessionId?: string; hostToken?: string; channelToken?: string };
     try {
       body = await req.json();
     } catch {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 
-    const { sessionId, capabilityToken } = body;
+    const { sessionId, hostToken, channelToken } = body;
 
     // Validate session ID format (GHOST-XXXX-XXXX)
     const sessionIdPattern = /^GHOST-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
@@ -60,11 +60,19 @@ serve(async (req: Request) => {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 
-    if (!capabilityToken || typeof capabilityToken !== 'string' || capabilityToken.length !== 22) {
+    if (!hostToken || typeof hostToken !== 'string' || hostToken.length !== 22) {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 
-    if (!/^[A-Za-z0-9_-]+$/.test(capabilityToken)) {
+    if (!/^[A-Za-z0-9_-]+$/.test(hostToken)) {
+      return errorResponse(req, 400, 'INVALID_REQUEST');
+    }
+
+    if (!channelToken || typeof channelToken !== 'string' || channelToken.length !== 22) {
+      return errorResponse(req, 400, 'INVALID_REQUEST');
+    }
+
+    if (!/^[A-Za-z0-9_-]+$/.test(channelToken)) {
       return errorResponse(req, 400, 'INVALID_REQUEST');
     }
 
@@ -90,23 +98,37 @@ serve(async (req: Request) => {
       return errorResponse(req, 404, 'NOT_FOUND');
     }
 
-    let capabilityHashBytea: string;
+    let hostHashBytea: string;
+    let channelHashBytea: string;
     try {
-      capabilityHashBytea = await hashCapabilityTokenToBytea(capabilityToken);
+      hostHashBytea = await hashCapabilityTokenToBytea(hostToken);
+      channelHashBytea = await hashCapabilityTokenToBytea(channelToken);
     } catch {
       return errorResponse(req, 404, 'NOT_FOUND');
     }
 
     const revokedExpiryIso = new Date(0).toISOString();
 
-    const rotatedToken = generateCapabilityToken();
-    const rotatedCapabilityHashBytea = await hashCapabilityTokenToBytea(rotatedToken);
+    const rotatedHostToken = generateCapabilityToken();
+    const rotatedGuestToken = generateCapabilityToken();
+    const rotatedChannelToken = generateCapabilityToken();
+
+    const rotatedHostHashBytea = await hashCapabilityTokenToBytea(rotatedHostToken);
+    const rotatedGuestHashBytea = await hashCapabilityTokenToBytea(rotatedGuestToken);
+    const rotatedChannelHashBytea = await hashCapabilityTokenToBytea(rotatedChannelToken);
 
     const { data: revoked, error: revokeError } = await supabase
       .from('ghost_sessions')
-      .update({ expires_at: revokedExpiryIso, capability_hash: rotatedCapabilityHashBytea })
+      .update({
+        expires_at: revokedExpiryIso,
+        capability_hash: rotatedHostHashBytea,
+        host_capability_hash: rotatedHostHashBytea,
+        guest_capability_hash: rotatedGuestHashBytea,
+        channel_token_hash: rotatedChannelHashBytea
+      })
       .eq('session_id', sessionId)
-      .eq('capability_hash', capabilityHashBytea)
+      .eq('host_capability_hash', hostHashBytea)
+      .eq('channel_token_hash', channelHashBytea)
       .select('session_id')
       .maybeSingle();
 

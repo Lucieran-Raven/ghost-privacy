@@ -2,11 +2,11 @@ import { deriveRealtimeChannelName as deriveRealtimeChannelNameAlgorithm } from 
 import { isValidCapabilityToken, isValidSessionId } from '@/utils/algorithms/session/binding';
 import { isTauriRuntime, tauriInvoke } from '@/utils/runtime';
 
-export async function deriveRealtimeChannelName(sessionId: string, capabilityToken: string): Promise<string> {
+export async function deriveRealtimeChannelName(sessionId: string, channelToken: string): Promise<string> {
   if (!isValidSessionId(sessionId)) {
     throw new Error('invalid session id');
   }
-  if (!isValidCapabilityToken(capabilityToken)) {
+  if (!isValidCapabilityToken(channelToken)) {
     throw new Error('invalid capability token');
   }
 
@@ -14,7 +14,7 @@ export async function deriveRealtimeChannelName(sessionId: string, capabilityTok
     try {
       const name = await tauriInvoke<string>('derive_realtime_channel_name', {
         session_id: sessionId,
-        capability_token: capabilityToken
+        capability_token: channelToken
       });
       if (
         typeof name === 'string' &&
@@ -27,5 +27,5 @@ export async function deriveRealtimeChannelName(sessionId: string, capabilityTok
     }
   }
 
-  return deriveRealtimeChannelNameAlgorithm({ subtle: crypto.subtle }, sessionId, capabilityToken);
+  return deriveRealtimeChannelNameAlgorithm({ subtle: crypto.subtle }, sessionId, channelToken);
 }

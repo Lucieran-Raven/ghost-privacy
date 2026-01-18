@@ -27,6 +27,21 @@ export interface SessionCapabilityBindingBody extends SessionBindingBody {
   capabilityToken: string;
 }
 
+export interface SessionChannelBindingBody extends SessionBindingBody {
+  channelToken: string;
+}
+
+export interface SessionValidateBody extends SessionBindingBody {
+  token: string;
+  channelToken: string;
+  role: 'host' | 'guest';
+}
+
+export interface SessionHostActionBody extends SessionBindingBody {
+  hostToken: string;
+  channelToken: string;
+}
+
 export function createSessionBindingBody(sessionId: string): SessionBindingBody {
   return { sessionId };
 }
@@ -36,6 +51,14 @@ export function createSessionCapabilityBindingBody(
   capabilityToken: string
 ): SessionCapabilityBindingBody {
   return { sessionId, capabilityToken };
+}
+
+export function createSessionHostActionBody(
+  sessionId: string,
+  hostToken: string,
+  channelToken: string
+): SessionHostActionBody {
+  return { sessionId, hostToken, channelToken };
 }
 
 export interface ValidationCacheEntry {

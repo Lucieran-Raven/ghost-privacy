@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 
 interface SessionCreatorProps {
-  onSessionStart: (sessionId: string, capabilityToken: string, isHost: boolean, timerMode: string) => void;
+  onSessionStart: (sessionId: string, token: string, channelToken: string, isHost: boolean, timerMode: string) => void;
   onHoneypotDetected?: (sessionId: string, trapType: string) => void;
 }
 
@@ -55,13 +55,13 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
         return;
       }
 
-      if (!result.capabilityToken) {
+      if (!result.hostToken || !result.guestToken || !result.channelToken) {
         setError('Failed to establish session capability');
         return;
       }
 
-      SecurityManager.setCapabilityToken(newId, result.capabilityToken);
-      setGhostId(`${newId}.${result.capabilityToken}`);
+      SecurityManager.setHostToken(newId, result.hostToken);
+      setGhostId(`${newId}.${result.guestToken}.${result.channelToken}`);
       setIsWaiting(true);
       toast.success('Secure channel established');
     } catch {
@@ -85,10 +85,19 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
 
   const handleStartSession = () => {
     if (ghostId) {
-      const parts = ghostId.split('.');
-      const sessionId = parts[0] || '';
-      const capabilityToken = parts[1] || '';
-      onSessionStart(sessionId, capabilityToken, true, 'on-leave');
+      const parsed = parseAccessCode(ghostId);
+      if (!parsed) {
+        setError('Invalid access code');
+        return;
+      }
+
+      const hostToken = SecurityManager.getHostToken(parsed.sessionId);
+      if (!hostToken) {
+        setError('Host capability missing');
+        return;
+      }
+
+      onSessionStart(parsed.sessionId, hostToken, parsed.channelToken, true, 'on-leave');
     }
   };
 
@@ -119,7 +128,7 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
 
     const parsed = isStandardFormat ? parseAccessCode(trimmedId) : null;
     if (isStandardFormat && !parsed) {
-      setError('Invalid access code (missing capability token)');
+      setError('Invalid access code');
       await ensureMinDelay();
       return;
     }
@@ -129,14 +138,19 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
     
     try {
       if (isStandardFormat) {
-        SecurityManager.setCapabilityToken(parsed!.sessionId, parsed!.capabilityToken);
-        const ok = await SessionService.validateSession(parsed!.sessionId, parsed!.capabilityToken, 'guest');
-        if (!ok) {
+        try {
+          SecurityManager.clearHostToken(parsed!.sessionId);
+        } catch {
+        }
+
+        const res = await SessionService.validateSession(parsed!.sessionId, parsed!.guestToken, parsed!.channelToken, 'guest');
+        if (!res.valid) {
           setError('Invalid or expired access code');
-          SecurityManager.clearCapabilityToken(parsed!.sessionId);
           return;
         }
-        onSessionStart(parsed!.sessionId, parsed!.capabilityToken, false, 'on-join');
+
+        const token = res.rotatedGuestToken || parsed!.guestToken;
+        onSessionStart(parsed!.sessionId, token, parsed!.channelToken, false, 'on-join');
       } else {
         // Handle honeypot format
         if (!researchEnabled) {
@@ -151,7 +165,7 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
       setError('Failed to join session. Please retry.');
       try {
         if (parsed?.sessionId) {
-          SecurityManager.clearCapabilityToken(parsed.sessionId);
+          SecurityManager.clearHostToken(parsed.sessionId);
         }
       } catch {
       }

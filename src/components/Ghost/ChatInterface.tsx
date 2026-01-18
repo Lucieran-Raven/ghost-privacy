@@ -23,7 +23,8 @@ import TimestampSettings from './TimestampSettings';
 
 interface ChatInterfaceProps {
   sessionId: string;
-  capabilityToken: string;
+  token: string;
+  channelToken: string;
   isHost: boolean;
   timerMode: string;
   onEndSession: (showToast?: boolean) => void;
@@ -47,7 +48,7 @@ interface VoiceMessageData {
   played: boolean;
 }
 
-const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSession }: ChatInterfaceProps) => {
+const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEndSession }: ChatInterfaceProps) => {
   const navigate = useNavigate();
   const { fullCleanup } = useMemoryCleanup();
 
@@ -206,7 +207,9 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
   useEffect(() => {
     try {
-      SecurityManager.setCapabilityToken(sessionId, capabilityToken);
+      if (isHost) {
+        SecurityManager.setHostToken(sessionId, token);
+      }
     } catch {
       // Ignore
     }
@@ -215,7 +218,9 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
 
     return () => {
       try {
-        void SessionService.deleteSession(sessionId, capabilityToken);
+        if (isHost) {
+          void SessionService.deleteSession(sessionId, channelToken, token);
+        }
       } catch {
         // Ignore
       }
@@ -226,7 +231,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       }
       void cleanup();
     };
-  }, [sessionId, capabilityToken]);
+  }, [sessionId, token, channelToken, isHost]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -375,8 +380,8 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       setConnectionState({ status: 'validating', progress: 10 });
 
       if (isHost) {
-        const valid = await SessionService.validateSession(sessionId, capabilityToken, 'host');
-        if (!valid) {
+        const res = await SessionService.validateSession(sessionId, token, channelToken, 'host');
+        if (!res.valid) {
           setConnectionState({ status: 'error', progress: 0, error: 'Invalid or expired session' });
           toast.error('Invalid or expired session');
           return;
@@ -406,7 +411,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       setConnectionState({ status: 'connecting', progress: 30 });
 
       keyPairRef.current = await KeyExchange.generateKeyPair();
-      realtimeManagerRef.current = new RealtimeManager(sessionId, capabilityToken, participantIdRef.current);
+      realtimeManagerRef.current = new RealtimeManager(sessionId, channelToken, participantIdRef.current);
 
       setupMessageHandlers();
 
@@ -688,9 +693,9 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
             const keyBase64 = bytesToBase64(bytes);
 
             try {
-              await tauriInvoke('vault_bind_capability', { session_id: sessionId, capability_token: capabilityToken });
-              await tauriInvoke('vault_set_key', { session_id: sessionId, capability_token: capabilityToken, key_base64: keyBase64 });
-              encryptionEngineRef.current?.enableTauriVault(sessionId, capabilityToken);
+              await tauriInvoke('vault_bind_capability', { session_id: sessionId, capability_token: token });
+              await tauriInvoke('vault_set_key', { session_id: sessionId, capability_token: token, key_base64: keyBase64 });
+              encryptionEngineRef.current?.enableTauriVault(sessionId, token);
             } catch {
               const sharedSecret = await KeyExchange.deriveSharedSecret(
                 keyPairRef.current.privateKey,
@@ -1328,11 +1333,13 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
       // Ignore
     }
 
-    let deleted = false;
-    try {
-      deleted = await SessionService.deleteSession(sessionId);
-    } catch {
-      deleted = false;
+    let deleted = !isHost;
+    if (isHost) {
+      try {
+        deleted = await SessionService.deleteSession(sessionId, channelToken, token);
+      } catch {
+        deleted = false;
+      }
     }
 
     destroyLocalSessionData();
@@ -1392,7 +1399,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     messageQueueRef.current.nuclearPurge();
 
     try {
-      SecurityManager.clearCapabilityToken(sessionId);
+      SecurityManager.clearHostToken(sessionId);
     } catch {
       // Ignore
     }
@@ -1457,7 +1464,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     messageQueueRef.current.destroySession(sessionId);
 
     try {
-      SecurityManager.clearCapabilityToken(sessionId);
+      SecurityManager.clearHostToken(sessionId);
     } catch {
       // Ignore
     }
@@ -1521,7 +1528,7 @@ const ChatInterface = ({ sessionId, capabilityToken, isHost, timerMode, onEndSes
     }
 
     // 1. Server-side nuclear wipe (atomic)
-    const deleted = await SessionService.deleteSession(sessionId);
+    const deleted = isHost ? await SessionService.deleteSession(sessionId, channelToken, token) : true;
 
     // Android native hardening: clear WebView caches immediately on user-initiated session end.
     try {

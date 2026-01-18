@@ -110,7 +110,16 @@ export interface SessionResult {
   success: boolean;
   error?: string;
   errorType?: SessionErrorType;
-  capabilityToken?: string;
+  hostToken?: string;
+  guestToken?: string;
+  channelToken?: string;
+  expiresAt?: string;
+}
+
+export interface ValidateSessionResult {
+  valid: boolean;
+  expiresAt?: string;
+  rotatedGuestToken?: string;
 }
 
 export class SessionService {
@@ -144,11 +153,23 @@ export class SessionService {
         return { success: false, error: data?.error || 'Failed to create session', errorType };
       }
 
-      if (!data?.capabilityToken || typeof data.capabilityToken !== 'string' || !isValidCapabilityToken(data.capabilityToken)) {
+      if (!data?.hostToken || typeof data.hostToken !== 'string' || !isValidCapabilityToken(data.hostToken)) {
+        return { success: false, error: 'Invalid server response', errorType: 'SERVER_ERROR' };
+      }
+      if (!data?.guestToken || typeof data.guestToken !== 'string' || !isValidCapabilityToken(data.guestToken)) {
+        return { success: false, error: 'Invalid server response', errorType: 'SERVER_ERROR' };
+      }
+      if (!data?.channelToken || typeof data.channelToken !== 'string' || !isValidCapabilityToken(data.channelToken)) {
         return { success: false, error: 'Invalid server response', errorType: 'SERVER_ERROR' };
       }
 
-      return { success: true, capabilityToken: data.capabilityToken };
+      return {
+        success: true,
+        hostToken: data.hostToken,
+        guestToken: data.guestToken,
+        channelToken: data.channelToken,
+        expiresAt: typeof data.expiresAt === 'string' ? data.expiresAt : undefined
+      };
     } catch {
       return { success: false, error: 'Network unreachable', errorType: 'NETWORK_ERROR' };
     }
@@ -163,14 +184,23 @@ export class SessionService {
    * - Network errors return FALSE (fail-closed, zero-trust)
    * - Offline detection shows user-friendly message
    */
-  static async validateSession(sessionId: string, capabilityToken: string, role: 'host' | 'guest'): Promise<boolean> {
+  static async validateSession(
+    sessionId: string,
+    token: string,
+    channelToken: string,
+    role: 'host' | 'guest'
+  ): Promise<ValidateSessionResult> {
     // Client-side validation first
     if (!isValidSessionId(sessionId)) {
-      return false;
+      return { valid: false };
     }
 
-    if (!capabilityToken || !isValidCapabilityToken(capabilityToken)) {
-      return false;
+    if (!token || !isValidCapabilityToken(token)) {
+      return { valid: false };
+    }
+
+    if (!channelToken || !isValidCapabilityToken(channelToken)) {
+      return { valid: false };
     }
 
     // CRITICAL SECURITY FIX: Triple-verified fail-closed validation
@@ -179,12 +209,12 @@ export class SessionService {
 
     try {
       // Check memory-only cache first
-      const cached = validationCache.get(sessionId, role, capabilityToken);
+      const cached = validationCache.get(sessionId, role, token);
 
       if (cached) {
         const now = Date.now();
         if (isCacheEntryValid(now, cached)) {
-          return true;
+          return { valid: true, expiresAt: cached.expiresAt };
         }
       }
 
@@ -192,7 +222,7 @@ export class SessionService {
       networkAttempted = true;
       
       const { data, error } = await supabase.functions.invoke('validate-session', {
-        body: { sessionId, capabilityToken, role }
+        body: { sessionId, token, channelToken, role }
       });
 
       // CRITICAL SECURITY FIX: ANY network anomaly = FAIL CLOSED
@@ -206,21 +236,31 @@ export class SessionService {
         }
 
         // CRITICAL: Always return false on ANY network error
-        return false;
+        return { valid: false };
       }
 
       networkSucceeded = true;
       const isValid = data?.valid === true;
 
+      const rotatedGuestToken = typeof data?.rotatedGuestToken === 'string' && isValidCapabilityToken(data.rotatedGuestToken)
+        ? data.rotatedGuestToken
+        : undefined;
+
+      const tokenForCache = rotatedGuestToken || token;
+
       // Cache successful validation WITH expiration timestamp
       if (isValid && data?.expiresAt) {
-        validationCache.set(sessionId, role, capabilityToken, data.expiresAt);
+        validationCache.set(sessionId, role, tokenForCache, data.expiresAt);
       } else {
         // Invalid session - clear any stale cache
         validationCache.clear(sessionId);
       }
 
-      return isValid;
+      return {
+        valid: isValid,
+        expiresAt: typeof data?.expiresAt === 'string' ? data.expiresAt : undefined,
+        rotatedGuestToken
+      };
     } catch (error) {
       // CRITICAL SECURITY FIX: ANY exception = FAIL CLOSED
       void error;
@@ -229,7 +269,7 @@ export class SessionService {
       void networkAttempted;
       void networkSucceeded;
       
-      return false; // Zero-trust: any uncertainty = invalid
+      return { valid: false }; // Zero-trust: any uncertainty = invalid
     }
   }
 
@@ -248,13 +288,17 @@ export class SessionService {
    * 
    * ATOMIC: This operation must complete regardless of network state
    */
-  static async deleteSession(sessionId: string, capabilityTokenOverride?: string): Promise<boolean> {
+  static async deleteSession(sessionId: string, channelToken: string, hostTokenOverride?: string): Promise<boolean> {
     if (!isValidSessionId(sessionId)) {
       return false;
     }
 
-    const capabilityToken = capabilityTokenOverride || SecurityManager.getCapabilityToken(sessionId);
-    if (!capabilityToken || !isValidCapabilityToken(capabilityToken)) {
+    if (!channelToken || !isValidCapabilityToken(channelToken)) {
+      return false;
+    }
+
+    const hostToken = hostTokenOverride || SecurityManager.getHostToken(sessionId);
+    if (!hostToken || !isValidCapabilityToken(hostToken)) {
       return false;
     }
 
@@ -262,7 +306,7 @@ export class SessionService {
     this.clearValidationCache(sessionId);
 
     try {
-      const request = createDeleteSessionInvokeRequest(sessionId, capabilityToken);
+      const request = createDeleteSessionInvokeRequest(sessionId, hostToken, channelToken);
       const { data, error } = await supabase.functions.invoke(request.functionName, { body: request.body });
 
       if (error) {

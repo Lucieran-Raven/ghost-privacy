@@ -23,14 +23,14 @@ async function hmacSha256Hex(deps: RealtimeChannelDeps, keyBytes: Uint8Array, me
   }
 }
 
-export async function deriveRealtimeChannelName(deps: RealtimeChannelDeps, sessionId: string, capabilityToken: string): Promise<string> {
+export async function deriveRealtimeChannelName(deps: RealtimeChannelDeps, sessionId: string, channelToken: string): Promise<string> {
   if (!isValidSessionId(sessionId)) {
     throw new Error('invalid session id');
   }
-  if (!isValidCapabilityToken(capabilityToken)) {
+  if (!isValidCapabilityToken(channelToken)) {
     throw new Error('invalid capability token');
   }
-  const keyBytes = base64UrlToBytes(capabilityToken);
+  const keyBytes = base64UrlToBytes(channelToken);
 
   const mac = await hmacSha256Hex(deps, keyBytes, sessionId);
   keyBytes.fill(0);

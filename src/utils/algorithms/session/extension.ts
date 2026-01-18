@@ -6,21 +6,22 @@
  * Privacy: NEVER logs, NEVER stores, NEVER makes network requests, NEVER persists beyond caller-managed memory.
  */
 
-import { createSessionCapabilityBindingBody, type SessionCapabilityBindingBody } from './binding';
+import { createSessionHostActionBody, type SessionHostActionBody } from './binding';
 
 export const EXTEND_SESSION_FUNCTION_NAME = 'extend-session' as const;
 
 export interface ExtendSessionInvokeRequest {
   functionName: typeof EXTEND_SESSION_FUNCTION_NAME;
-  body: SessionCapabilityBindingBody;
+  body: SessionHostActionBody;
 }
 
 export function createExtendSessionInvokeRequest(
   sessionId: string,
-  capabilityToken: string
+  hostToken: string,
+  channelToken: string
 ): ExtendSessionInvokeRequest {
   return {
     functionName: EXTEND_SESSION_FUNCTION_NAME,
-    body: createSessionCapabilityBindingBody(sessionId, capabilityToken)
+    body: createSessionHostActionBody(sessionId, hostToken, channelToken)
   };
 }

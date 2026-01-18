@@ -91,16 +91,29 @@ serve(async (req: Request) => {
     // Create session with strict 10-minute TTL
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-    const capabilityToken = generateCapabilityToken();
-    const capabilityHashBytea = await hashCapabilityTokenToBytea(capabilityToken);
+    const hostToken = generateCapabilityToken();
+    const guestToken = generateCapabilityToken();
+    const channelToken = generateCapabilityToken();
+
+    const hostHashBytea = await hashCapabilityTokenToBytea(hostToken);
+    const guestHashBytea = await hashCapabilityTokenToBytea(guestToken);
+    const channelHashBytea = await hashCapabilityTokenToBytea(channelToken);
+
+    const createdAt = new Date().toISOString();
+    const maxExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
     const { data, error } = await supabase
       .from('ghost_sessions')
       .insert({
         session_id: sessionId,
-        capability_hash: capabilityHashBytea,
+        capability_hash: hostHashBytea,
+        host_capability_hash: hostHashBytea,
+        guest_capability_hash: guestHashBytea,
+        channel_token_hash: channelHashBytea,
         used: false,
-        expires_at: expiresAt
+        expires_at: expiresAt,
+        created_at: createdAt,
+        max_expires_at: maxExpiresAt
       })
       .select('session_id, expires_at')
       .single();
@@ -117,7 +130,9 @@ serve(async (req: Request) => {
         success: true,
         sessionId: data.session_id,
         expiresAt: data.expires_at,
-        capabilityToken
+        hostToken,
+        guestToken,
+        channelToken
       }),
       { headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' } }
     );

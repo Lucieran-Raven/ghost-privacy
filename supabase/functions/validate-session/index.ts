@@ -3,7 +3,8 @@ import { corsHeaders, getAllowedOrigins, isAllowedOrigin } from "../_shared/cors
 import {
   jsonError,
   getRateLimitKeyHex,
-  verifyCapabilityHash
+  generateCapabilityToken,
+  hashCapabilityTokenToBytea
 } from "../_shared/security.ts";
 import { getSupabaseServiceClient } from "../_shared/client.ts";
 
@@ -38,14 +39,14 @@ serve(async (req: Request) => {
   try {
     const supabase = getSupabaseServiceClient();
 
-    let body: { sessionId?: string; capabilityToken?: string; role?: string };
+    let body: { sessionId?: string; token?: string; channelToken?: string; role?: string };
     try {
       body = await req.json();
     } catch {
       return invalidResponse(req);
     }
 
-    const { sessionId, capabilityToken, role } = body;
+    const { sessionId, token, channelToken, role } = body;
     // Strict input validation - constant-time response for all failures
     if (!sessionId || typeof sessionId !== 'string' || !/^GHOST-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(sessionId)) {
       // Delay to match successful query timing
@@ -53,12 +54,12 @@ serve(async (req: Request) => {
       return invalidResponse(req);
     }
 
-    if (
-      !capabilityToken ||
-      typeof capabilityToken !== 'string' ||
-      capabilityToken.length !== 22 ||
-      !/^[A-Za-z0-9_-]+$/.test(capabilityToken)
-    ) {
+    if (!token || typeof token !== 'string' || token.length !== 22 || !/^[A-Za-z0-9_-]+$/.test(token)) {
+      await new Promise(r => setTimeout(r, 50));
+      return invalidResponse(req);
+    }
+
+    if (!channelToken || typeof channelToken !== 'string' || channelToken.length !== 22 || !/^[A-Za-z0-9_-]+$/.test(channelToken)) {
       await new Promise(r => setTimeout(r, 50));
       return invalidResponse(req);
     }
@@ -93,39 +94,30 @@ serve(async (req: Request) => {
       return invalidResponse(req);
     }
 
-    const { data: session, error } = await supabase
-      .from('ghost_sessions')
-      .select('session_id, expires_at, capability_hash, used')
-      .eq('session_id', sessionId)
-      .gt('expires_at', new Date().toISOString())
-      .maybeSingle();
-    if (error) {
-      return errorResponse(req);
-    }
-    
-    if (!session) {
-      await new Promise(r => setTimeout(r, 50));
-      return invalidResponse(req);
-    }
+    const nowIso = new Date().toISOString();
 
-    const capabilityOk = await verifyCapabilityHash(session.capability_hash, capabilityToken);
-    if (!capabilityOk) {
+    let tokenHashBytea: string;
+    let channelHashBytea: string;
+    try {
+      tokenHashBytea = await hashCapabilityTokenToBytea(token);
+      channelHashBytea = await hashCapabilityTokenToBytea(channelToken);
+    } catch {
       await new Promise(r => setTimeout(r, 50));
       return invalidResponse(req);
     }
 
     if (normalizedRole === 'guest') {
-      if (session.used === true) {
-        await new Promise(r => setTimeout(r, 50));
-        return invalidResponse(req);
-      }
+      const rotatedGuestToken = generateCapabilityToken();
+      const rotatedGuestHashBytea = await hashCapabilityTokenToBytea(rotatedGuestToken);
 
       const { data: updated, error: updateError } = await supabase
         .from('ghost_sessions')
-        .update({ used: true })
+        .update({ used: true, guest_capability_hash: rotatedGuestHashBytea })
         .eq('session_id', sessionId)
+        .eq('guest_capability_hash', tokenHashBytea)
+        .eq('channel_token_hash', channelHashBytea)
         .is('used', false)
-        .gt('expires_at', new Date().toISOString())
+        .gt('expires_at', nowIso)
         .select('expires_at')
         .maybeSingle();
 
@@ -135,7 +127,7 @@ serve(async (req: Request) => {
 
       if (updated?.expires_at) {
         return new Response(
-          JSON.stringify({ valid: true, expiresAt: updated.expires_at }),
+          JSON.stringify({ valid: true, expiresAt: updated.expires_at, rotatedGuestToken }),
           { headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' } }
         );
       }
@@ -144,7 +136,24 @@ serve(async (req: Request) => {
       return invalidResponse(req);
     }
 
-    // Host validation (no fingerprint binding)
+    const { data: session, error } = await supabase
+      .from('ghost_sessions')
+      .select('expires_at')
+      .eq('session_id', sessionId)
+      .eq('host_capability_hash', tokenHashBytea)
+      .eq('channel_token_hash', channelHashBytea)
+      .gt('expires_at', nowIso)
+      .maybeSingle();
+
+    if (error) {
+      return errorResponse(req);
+    }
+
+    if (!session?.expires_at) {
+      await new Promise(r => setTimeout(r, 50));
+      return invalidResponse(req);
+    }
+
     return new Response(
       JSON.stringify({ valid: true, expiresAt: session.expires_at }),
       { headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' } }
