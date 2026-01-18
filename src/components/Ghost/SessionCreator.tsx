@@ -8,6 +8,7 @@ import { HoneypotService } from '@/lib/honeypotService';
 import { parseAccessCode } from '@/utils/algorithms/session/accessCode';
 import { getResearchFeaturesState, setResearchFeaturesEnabled } from '@/utils/researchFeatures';
 import { writeEphemeralClipboard } from '@/utils/ephemeralClipboard';
+import { createMinDelay } from '@/utils/interactionTiming';
 import { cn } from '@/lib/utils';
 import ParticleField from './ParticleField';
 import { Switch } from '@/components/ui/switch';
@@ -36,9 +37,7 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
     if (isCreatingRef.current || isLoading) return;
     isCreatingRef.current = true;
 
-    const start = Date.now();
     const ensureMinDelay = createMinDelay(350);
-    };
     
     setIsLoading(true);
     setError(null);
@@ -109,15 +108,8 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
   const handleJoinSession = async () => {
     if (isLoading) return;
 
-    const start = Date.now();
-    const ensureMinDelay = async () => {
-      const elapsed = Date.now() - start;
-      const min = 350;
-      if (elapsed < min) {
-        await new Promise<void>((resolve) => setTimeout(resolve, min - elapsed));
-      }
-    };
-    
+    const ensureMinDelay = createMinDelay(350);
+
     const trimmedId = joinId.trim();
     const rawSessionId = (trimmedId.split('.', 1)[0] || '').trim().toUpperCase();
     
