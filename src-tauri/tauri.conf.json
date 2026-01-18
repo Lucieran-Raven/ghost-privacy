@@ -5,9 +5,9 @@
   "identifier": "app.ghostprivacy.desktop",
   "build": {
     "frontendDist": "../dist",
-    "devUrl": "http://localhost:8080",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev:tauri",
+    "beforeBuildCommand": "npm run build:tauri"
   },
   "app": {
     "windows": [

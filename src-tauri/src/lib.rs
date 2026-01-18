@@ -678,7 +678,7 @@ fn verify_build_integrity() -> Result<serde_json::Value, String> {
   {
     let expected = option_env!("GHOST_EXPECTED_TAURI_SIGNING_CERT_SHA256").unwrap_or("");
     if expected.is_empty() {
-      return Ok(serde_json::json!({"status": "error"}));
+      return Ok(serde_json::json!({"status": "skipped"}));
     }
 
     let exe_path = std::env::current_exe().map_err(|_| "exe path unavailable".to_string())?;

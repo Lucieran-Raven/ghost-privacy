@@ -4,9 +4,10 @@ import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  base: process.env.TAURI_PLATFORM ? './' : '/',
   server: {
     host: process.env.VITE_DEV_LISTEN_ALL === '1' ? "::" : "127.0.0.1",
-    port: 8080,
+    port: Number(process.env.VITE_PORT) || 8080,
     strictPort: true,
     cors: false,
   },

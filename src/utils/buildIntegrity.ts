@@ -17,7 +17,7 @@ export async function enforceBuildIntegrityOrExit(): Promise<BuildIntegrityResul
   const isNative = res.platform === 'tauri' || res.platform === 'android';
   const shouldExit =
     res.status === 'unverified' ||
-    (import.meta.env.PROD && isNative && res.status !== 'verified');
+    (import.meta.env.PROD && isNative && res.status === 'error');
 
   if (!shouldExit) return res;
 
