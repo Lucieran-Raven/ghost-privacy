@@ -1804,6 +1804,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                     setInputText(e.target.value);
                   }}
                   onKeyDown={handleKeyDown}
+                  onBlur={() => {
+                    setInputText('');
+                  }}
                   onFocus={() => {
                     if (focusScrollTimeoutRef.current) {
                       clearTimeout(focusScrollTimeoutRef.current);
@@ -1812,6 +1815,10 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
                     }, 300);
                   }}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   placeholder={isKeyExchangeComplete ? "Type your message..." : "Connecting..."}
                   disabled={!isKeyExchangeComplete}
                   rows={1}

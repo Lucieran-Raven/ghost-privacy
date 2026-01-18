@@ -10,6 +10,8 @@ import InstallPrompt from "./components/Ghost/InstallPrompt";
 import DecoyRoutes from "./components/Ghost/DecoyRoutes";
 import SecurityStatusBar from "./components/Ghost/SecurityStatusBar";
 import { usePlausibleDeniability } from "./hooks/usePlausibleDeniability";
+import { usePrivacyShield } from "./hooks/usePrivacyShield";
+import PrivacyShield from "./components/Ghost/PrivacyShield";
 
 const Index = lazy(() => import("./pages/Index"));
 const Session = lazy(() => import("./pages/Session"));
@@ -30,6 +32,7 @@ const queryClient = new QueryClient();
 
 const App = () => {
   const { isDecoyActive } = usePlausibleDeniability();
+  const { isShieldActive, canDismiss, dismiss } = usePrivacyShield();
 
   return (
     <ErrorBoundary>
@@ -39,6 +42,7 @@ const App = () => {
             <AmbientAura />
             <div className="relative z-10">
               <SecurityStatusBar />
+              <PrivacyShield active={isShieldActive} canDismiss={canDismiss} onDismiss={dismiss} />
               {!isDecoyActive && <Toaster />}
               {!isDecoyActive && <Sonner position="top-center" />}
               <BrowserRouter>

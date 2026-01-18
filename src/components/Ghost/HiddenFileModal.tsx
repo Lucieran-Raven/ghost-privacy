@@ -191,6 +191,10 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
                   type={showOuter ? 'text' : 'password'}
                   value={outerPassword}
                   onChange={(e) => setOuterPassword(e.target.value)}
+                  autoComplete="new-password"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   placeholder="Enter password..."
                   className="pr-10 bg-secondary/50 border-border text-foreground"
                 />
@@ -211,6 +215,10 @@ const HiddenFileModal = ({ open, onClose, fileContent, fileName, onComplete }: H
                   type={showInner ? 'text' : 'password'}
                   value={innerPassword}
                   onChange={(e) => setInnerPassword(e.target.value)}
+                  autoComplete="new-password"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   placeholder="Enter password..."
                   className="pr-10 bg-secondary/50 border-border text-foreground"
                 />

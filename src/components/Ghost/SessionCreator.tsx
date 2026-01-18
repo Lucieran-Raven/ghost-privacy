@@ -354,6 +354,10 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
                   type="text"
                   value={joinId}
                   onChange={(e) => { setJoinId(e.target.value); setError(null); }}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   placeholder="GHOST-XXXX-XXXX.<access-token>"
                   className="w-full p-4 rounded-xl bg-background/80 border-2 border-border/50 focus:border-primary focus:outline-none focus:shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)] font-mono text-base md:text-lg text-center tracking-[0.15em] placeholder:text-muted-foreground/50 transition-all"
                 />
