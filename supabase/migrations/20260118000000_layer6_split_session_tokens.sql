@@ -1,6 +1,6 @@
 DO $$
 BEGIN
-  CREATE EXTENSION IF NOT EXISTS pgcrypto;
+  CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 EXCEPTION
   WHEN insufficient_privilege THEN
     -- ignore
@@ -10,6 +10,7 @@ END $$;
 
 DO $$
 BEGIN
+  PERFORM set_config('search_path', 'extensions, public', true);
   IF EXISTS (
     SELECT 1 FROM information_schema.tables
     WHERE table_schema = 'public' AND table_name = 'ghost_sessions'
