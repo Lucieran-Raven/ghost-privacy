@@ -96,6 +96,17 @@ const DecoyCalculator = ({ onExit }: DecoyCalculatorProps) => {
       className="fixed inset-0 bg-neutral-100 dark:bg-neutral-900 flex items-center justify-center z-[9999]"
     >
       <div className="w-full max-w-xs p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs uppercase tracking-[0.16em] text-neutral-500 dark:text-neutral-400">Calculator</div>
+          <button
+            type="button"
+            onClick={onExit}
+            className="text-xs uppercase tracking-[0.16em] text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+          >
+            Exit
+          </button>
+        </div>
+
         {/* Display */}
         <div className="bg-neutral-200 dark:bg-neutral-800 rounded-xl p-4 mb-4">
           <div className="text-right text-4xl font-light text-neutral-900 dark:text-white truncate">

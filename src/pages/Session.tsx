@@ -68,55 +68,48 @@ const Session = () => {
     navigate('/');
   };
 
-  // Ghost v3.0: Show decoy calculator when panic mode activated
-  if (isDecoyActive) {
-    return (
-      <Suspense fallback={<div />}>
-        <DecoyCalculator onExit={deactivateDecoy} />
-      </Suspense>
-    );
-  }
-
-  // Show honeypot interface if triggered
-  if (honeypot) {
-    return (
-      <Suspense fallback={<div />}>
-        <HoneypotChat
-          sessionId={honeypot.sessionId}
-          trapType={honeypot.trapType}
-        />
-      </Suspense>
-    );
-  }
-
-  if (session) {
-    return (
-      <Suspense fallback={<div />}>
-        <ChatInterface
-          sessionId={session.sessionId}
-          token={session.token}
-          channelToken={session.channelToken}
-          isHost={session.isHost}
-          timerMode={session.timerMode}
-          onEndSession={(showToast = true) => handleEndSession(showToast)}
-        />
-      </Suspense>
-    );
-  }
-
-  return (
+  const baseView = honeypot ? (
+    <Suspense fallback={<div />}>
+      <HoneypotChat
+        sessionId={honeypot.sessionId}
+        trapType={honeypot.trapType}
+      />
+    </Suspense>
+  ) : session ? (
+    <Suspense fallback={<div />}>
+      <ChatInterface
+        sessionId={session.sessionId}
+        token={session.token}
+        channelToken={session.channelToken}
+        isHost={session.isHost}
+        timerMode={session.timerMode}
+        onEndSession={(showToast = true) => handleEndSession(showToast)}
+      />
+    </Suspense>
+  ) : (
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="pt-20 md:pt-24">
         <div className="container mx-auto px-4">
           <ClearnetWarning className="max-w-2xl mx-auto mb-6" />
         </div>
-        <SessionCreator 
-          onSessionStart={handleSessionStart} 
+        <SessionCreator
+          onSessionStart={handleSessionStart}
           onHoneypotDetected={handleHoneypotDetected}
         />
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {baseView}
+      {isDecoyActive && (
+        <Suspense fallback={<div />}>
+          <DecoyCalculator onExit={deactivateDecoy} />
+        </Suspense>
+      )}
+    </>
   );
 };
 

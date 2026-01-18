@@ -22,6 +22,7 @@ const Onion = lazy(() => import("./pages/Onion"));
 const Tor = lazy(() => import("./pages/Tor"));
 const Quarantine = lazy(() => import("./pages/Quarantine"));
 const Downloads = lazy(() => import("./pages/Downloads"));
+const Calculator = lazy(() => import("./pages/Calculator"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -41,6 +42,7 @@ const App = () => (
                 <Routes>
                   <Route path="/" element={<Index />} />
                   <Route path="/session" element={<Session />} />
+                  <Route path="/calculator" element={<Calculator />} />
                   <Route path="/security" element={<Security />} />
                   <Route path="/about" element={<About />} />
                   <Route path="/terms" element={<Terms />} />
