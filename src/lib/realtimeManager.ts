@@ -817,8 +817,7 @@ export class RealtimeManager {
     // Extended exponential backoff: 500ms, 1s, 2s, 4s, 8s...
     const getBackoffDelay = (attempt: number) => {
       const base = Math.min(500 * Math.pow(2, attempt), 30000);
-      const jitter = 0.8 + (randomInt(401) / 1000); // 0.8 .. 1.201
-      return Math.max(250, Math.floor(base * jitter));
+      return Math.max(250, Math.floor(base));
     };
     
     return new Promise<void>((resolve, reject) => {
@@ -841,7 +840,7 @@ export class RealtimeManager {
           }, delay);
         } else {
           this.updateState('error', 0, 'Secure channel establishing…');
-          reject(new Error('Connection timeout'));
+          reject(new Error('Connection failed'));
         }
       }, 8000); // Increased timeout from 3s to 8s per attempt
 
@@ -887,7 +886,7 @@ export class RealtimeManager {
           } else {
             this.updateState('error', 0, 'Secure channel establishing…');
             this.handleDisconnect();
-            reject(new Error(`Channel failed: ${status}`));
+            reject(new Error('Connection failed'));
           }
         }
       });
@@ -907,7 +906,7 @@ export class RealtimeManager {
 
   private async attemptReconnect(): Promise<void> {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      this.updateState('error', 0, 'Failed to reconnect');
+      this.updateState('error', 0, 'Secure channel establishing…');
       return;
     }
 
@@ -915,7 +914,7 @@ export class RealtimeManager {
     this.updateState('reconnecting', 50);
     
     const baseDelay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
-    const delay = Math.max(250, Math.floor(baseDelay * (0.8 + randomInt(401) / 1000)));
+    const delay = Math.max(250, Math.floor(baseDelay));
     
     await new Promise(resolve => setTimeout(resolve, delay));
 

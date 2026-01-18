@@ -149,12 +149,18 @@ export class SessionService {
         if (error.message?.includes('fetch') || error.message?.includes('network')) {
           return { success: false, error: 'Network unreachable', errorType: 'NETWORK_ERROR' };
         }
-        return { success: false, error: error.message, errorType: 'SERVER_ERROR' };
+        return { success: false, error: 'Unable to create session', errorType: 'SERVER_ERROR' };
       }
 
       if (!data?.success) {
-        const errorType: SessionErrorType = data?.error?.includes('rate') ? 'RATE_LIMITED' : 'SERVER_ERROR';
-        return { success: false, error: data?.error || 'Failed to create session', errorType };
+        const code = typeof data?.code === 'string' ? data.code : '';
+        if (code === 'RATE_LIMITED') {
+          return { success: false, error: 'Rate limited', errorType: 'RATE_LIMITED' };
+        }
+        if (code === 'INVALID_REQUEST') {
+          return { success: false, error: 'Invalid session ID format', errorType: 'INVALID_SESSION' };
+        }
+        return { success: false, error: 'Unable to create session', errorType: 'SERVER_ERROR' };
       }
 
       if (!data?.hostToken || typeof data.hostToken !== 'string' || !isValidCapabilityToken(data.hostToken)) {
