@@ -35,6 +35,10 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
     // Prevent double execution
     if (isCreatingRef.current || isLoading) return;
     isCreatingRef.current = true;
+
+    const start = Date.now();
+    const ensureMinDelay = createMinDelay(350);
+    };
     
     setIsLoading(true);
     setError(null);
@@ -67,6 +71,7 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
     } catch {
       setError('Failed to create session. Please retry.');
     } finally {
+      await ensureMinDelay();
       setIsLoading(false);
       isCreatingRef.current = false;
     }
@@ -120,23 +125,22 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
     const isStandardFormat = isValidGhostId(rawSessionId);
     const isHoneypotFormat = researchEnabled && HoneypotService.hasHoneypotPrefix(rawSessionId);
     
-    if (!isStandardFormat && !isHoneypotFormat) {
-      setError('Invalid access code format');
-      await ensureMinDelay();
-      return;
-    }
-
-    const parsed = isStandardFormat ? parseAccessCode(trimmedId) : null;
-    if (isStandardFormat && !parsed) {
-      setError('Invalid access code');
-      await ensureMinDelay();
-      return;
-    }
-
     setIsLoading(true);
     setError(null);
+
+    const parsed = isStandardFormat ? parseAccessCode(trimmedId) : null;
     
     try {
+      if (!isStandardFormat && !isHoneypotFormat) {
+        setError('Invalid access code format');
+        return;
+      }
+
+      if (isStandardFormat && !parsed) {
+        setError('Invalid access code');
+        return;
+      }
+
       if (isStandardFormat) {
         try {
           SecurityManager.clearHostToken(parsed!.sessionId);
@@ -155,7 +159,6 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
         // Handle honeypot format
         if (!researchEnabled) {
           setError('Invalid access code format');
-          await ensureMinDelay();
           return;
         }
         const fingerprint = await SecurityManager.generateFingerprint();
@@ -170,6 +173,7 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
       } catch {
       }
     } finally {
+      await ensureMinDelay();
       setIsLoading(false);
     }
   };
@@ -290,12 +294,13 @@ const SessionCreator = ({ onSessionStart, onHoneypotDetected }: SessionCreatorPr
                     
                     {/* ID Box - Cinematic glowing border */}
                     <div className="relative p-4 md:p-6 rounded-xl bg-background/80 border-2 border-primary/50 mb-4 md:mb-6 shadow-[0_0_30px_rgba(var(--primary-rgb),0.3)] backdrop-blur-sm">
-                      <div className="font-mono text-xl md:text-2xl lg:text-3xl font-bold text-primary tracking-[0.2em] ghost-id-display pr-10">
+                      <div aria-hidden="true" className="font-mono text-xl md:text-2xl lg:text-3xl font-bold text-primary tracking-[0.2em] ghost-id-display pr-10">
                         {ghostId.split('.')[0]}
                       </div>
                       <button
                         onClick={handleCopyId}
                         className="absolute top-3 right-3 md:top-4 md:right-4 p-2 rounded-lg hover:bg-primary/10 active:bg-primary/20 transition-colors touch-target"
+                        aria-label="Copy access code"
                       >
                         {isCopied ? (
                           <Check className="h-5 w-5 text-accent" />

@@ -40,6 +40,16 @@ describe('layer9 ui/human side-channel invariants', () => {
     expect(src).toMatch(/<input[\s\S]*spellCheck=\{false\}/);
   });
 
+  it('normalizes create/join timing with shared min-delay helper', () => {
+    const src = read('src/components/Ghost/SessionCreator.tsx');
+    expect(src).toMatch(/createMinDelay\(350\)/);
+  });
+
+  it('hides verification fingerprints from accessibility tree', () => {
+    const src = read('src/components/Ghost/KeyVerificationModal.tsx');
+    expect(src).toMatch(/<code[\s\S]*aria-hidden="true"/);
+  });
+
   it('disables autofill/autocorrect/spellcheck for hidden volume passwords', () => {
     const src = read('src/components/Ghost/HiddenFileModal.tsx');
     expect(src).toMatch(/autoComplete="new-password"/);

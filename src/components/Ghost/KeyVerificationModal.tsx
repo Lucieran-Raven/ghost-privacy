@@ -90,6 +90,7 @@ const KeyVerificationModal = ({
                     onClick={() => copyToClipboard(localFingerprint, 'local')}
                     className="p-1.5 rounded hover:bg-secondary active:bg-secondary/80 transition-colors touch-target"
                     title="Copy to clipboard"
+                    aria-label="Copy your verification code"
                   >
                     {copiedLocal ? (
                       <Check className="h-4 w-4 text-accent" />
@@ -98,7 +99,7 @@ const KeyVerificationModal = ({
                     )}
                   </button>
                 </div>
-                <code className="block text-lg md:text-xl lg:text-2xl font-mono font-bold text-foreground tracking-wider break-all">
+                <code aria-hidden="true" className="block text-lg md:text-xl lg:text-2xl font-mono font-bold text-foreground tracking-wider break-all">
                   {formatFingerprint(localFingerprint)}
                 </code>
                 <p className="text-[11px] md:text-xs text-muted-foreground mt-2">Read this to your partner</p>
@@ -112,6 +113,7 @@ const KeyVerificationModal = ({
                     onClick={() => copyToClipboard(remoteFingerprint, 'remote')}
                     className="p-1.5 rounded hover:bg-secondary active:bg-secondary/80 transition-colors touch-target"
                     title="Copy to clipboard"
+                    aria-label="Copy partner verification code"
                   >
                     {copiedRemote ? (
                       <Check className="h-4 w-4 text-accent" />
@@ -120,7 +122,7 @@ const KeyVerificationModal = ({
                     )}
                   </button>
                 </div>
-                <code className="block text-lg md:text-xl lg:text-2xl font-mono font-bold text-foreground tracking-wider break-all">
+                <code aria-hidden="true" className="block text-lg md:text-xl lg:text-2xl font-mono font-bold text-foreground tracking-wider break-all">
                   {formatFingerprint(remoteFingerprint)}
                 </code>
                 <p className="text-[11px] md:text-xs text-muted-foreground mt-2">Have them read their code to you</p>
