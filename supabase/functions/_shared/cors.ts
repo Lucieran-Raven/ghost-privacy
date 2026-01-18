@@ -6,26 +6,37 @@
 export function getAllowedOrigins(): Set<string> {
   const env = Deno.env.get('ENVIRONMENT') || 'development';
 
+  const nativeOrigins = [
+    'tauri://localhost',
+    'https://tauri.localhost',
+    'http://tauri.localhost',
+    'capacitor://localhost',
+    'ionic://localhost',
+    'http://localhost:1420',
+    'http://127.0.0.1:1420'
+  ];
+
   if (env === 'production') {
     // Production: only allow explicit production origins
     const prodOrigins = Deno.env.get('PROD_ALLOWED_ORIGINS');
     if (prodOrigins) {
-      return new Set(prodOrigins.split(',').map(origin => origin.trim()));
+      return new Set([...prodOrigins.split(',').map(origin => origin.trim()), ...nativeOrigins]);
     }
-    return new Set(['https://ghostprivacy.netlify.app']);
+    return new Set(['https://ghostprivacy.netlify.app', ...nativeOrigins]);
   }
 
   // Development/Staging: allow explicit dev origins (+ Lovable preview domains via suffix match)
   const devOrigins = Deno.env.get('DEV_ALLOWED_ORIGINS');
   if (devOrigins) {
-    return new Set(devOrigins.split(',').map(origin => origin.trim()));
+    return new Set([...devOrigins.split(',').map(origin => origin.trim()), ...nativeOrigins]);
   }
 
   return new Set([
     'https://ghostprivacy.netlify.app',
     'http://localhost:8080',
     'http://127.0.0.1:8080',
-    'http://[::1]:8080'
+    'http://[::1]:8080',
+    ...nativeOrigins
   ]);
 }
 

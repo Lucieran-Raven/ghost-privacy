@@ -78,26 +78,45 @@ jobs:
               echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
             } >> "$GITHUB_ENV"
           else
-            echo "Android keystore not configured; proceeding with unsigned release."
+            echo "Android keystore not configured; generating ephemeral keystore for installable APK (NOT for Play Store)."
+            umask 077
+            keytool -genkeypair -v \
+              -keystore android/app/release.jks \
+              -storetype JKS \
+              -alias ghostprivacy \
+              -storepass ghostprivacy \
+              -keypass ghostprivacy \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Ghost Privacy, OU=Dev, O=Ghost Privacy, L=NA, S=NA, C=US"
+
+            {
+              echo "ANDROID_KEYSTORE_PATH=$GITHUB_WORKSPACE/android/app/release.jks"
+              echo "ANDROID_KEYSTORE_PASSWORD=ghostprivacy"
+              echo "ANDROID_KEY_ALIAS=ghostprivacy"
+              echo "ANDROID_KEY_PASSWORD=ghostprivacy"
+            } >> "$GITHUB_ENV"
           fi
 
       - name: Extract signing cert SHA-256 (integrity anchor)
         env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PATH: ${{ env.ANDROID_KEYSTORE_PATH }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ env.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ env.ANDROID_KEY_ALIAS }}
         run: |
           set -euo pipefail
-          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
-            CERT_HASH=$(keytool -list -v -keystore android/app/release.jks -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" | grep -m 1 -E 'SHA256:' | awk '{print $2}' | tr -d ':')
-            if [ -z "$CERT_HASH" ]; then
-              echo "Failed to extract signing cert SHA-256 from keystore"
-              exit 1
-            fi
-            echo "ANDROID_EXPECTED_SIGNING_CERT_SHA256=$CERT_HASH" >> "$GITHUB_ENV"
-          else
-            echo "No keystore; skipping signing cert SHA-256 extraction (unsigned build)."
+          if [ -z "${ANDROID_KEYSTORE_PATH:-}" ]; then
+            echo "No keystore path available; cannot extract signing cert SHA-256"
+            exit 1
           fi
+
+          CERT_HASH=$(keytool -list -v -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" | grep -m 1 -E 'SHA256:' | awk '{print $2}' | tr -d ':')
+          if [ -z "$CERT_HASH" ]; then
+            echo "Failed to extract signing cert SHA-256 from keystore"
+            exit 1
+          fi
+          echo "ANDROID_EXPECTED_SIGNING_CERT_SHA256=$CERT_HASH" >> "$GITHUB_ENV"
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
