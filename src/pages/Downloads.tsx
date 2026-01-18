@@ -37,8 +37,22 @@ const Downloads = () => {
     return map;
   }, [hashesText]);
 
-  const windowsExe = 'Ghost.Privacy_0.1.0_x64-setup.exe';
-  const androidApk = 'app-debug.apk';
+  const releaseTag = 'v0.1.8';
+  const windowsExe = 'Ghost Privacy_0.1.4_x64-setup.exe';
+  const windowsMsi = 'Ghost Privacy_0.1.4_x64_en-US.msi';
+  const androidApk = 'ghost-privacy-android-release.apk';
+
+  const androidApkUrl = `https://github.com/Lucieran-Raven/ghost-privacy/releases/download/${releaseTag}/${androidApk}`;
+  const androidShaUrl = `https://github.com/Lucieran-Raven/ghost-privacy/releases/download/${releaseTag}/${androidApk}.sha256`;
+  const androidAttestationUrl = `https://github.com/Lucieran-Raven/ghost-privacy/releases/download/${releaseTag}/integrity-attestation-android.txt`;
+
+  const windowsExeUrl = `https://github.com/Lucieran-Raven/ghost-privacy/releases/download/${releaseTag}/${encodeURIComponent(windowsExe)}`;
+  const windowsMsiUrl = `https://github.com/Lucieran-Raven/ghost-privacy/releases/download/${releaseTag}/${encodeURIComponent(windowsMsi)}`;
+  const windowsShaUrl = `https://github.com/Lucieran-Raven/ghost-privacy/releases/download/${releaseTag}/ghost-privacy-windows.sha256`;
+  const windowsAttestationUrl = `https://github.com/Lucieran-Raven/ghost-privacy/releases/download/${releaseTag}/integrity-attestation-windows.txt`;
+
+  const sourceZipUrl = `https://github.com/Lucieran-Raven/ghost-privacy/archive/refs/tags/${releaseTag}.zip`;
+  const sourceTarUrl = `https://github.com/Lucieran-Raven/ghost-privacy/archive/refs/tags/${releaseTag}.tar.gz`;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -56,7 +70,7 @@ const Downloads = () => {
                 <div className="border border-[rgba(255,10,42,0.14)] p-4 bg-black/40">
                   <div className="font-mono text-sm tracking-[0.12em] text-white/90">GHOST PRIVACY DOWNLOADS</div>
                   <div className="mt-2 font-mono text-[12px] leading-relaxed text-white/70">
-                    VERIFY BEFORE RUNNING. COMPARE SHA-256 AGAINST <a className="underline hover:text-white" href="/releases/hashes.txt">/releases/hashes.txt</a>. DOWNLOAD LINKS REDIRECT TO THE OFFICIAL GITHUB RELEASE ASSETS.
+                    VERIFY BEFORE RUNNING. DOWNLOAD LINKS POINT TO THE OFFICIAL GITHUB RELEASE ASSETS.
                   </div>
                 </div>
 
@@ -70,11 +84,32 @@ const Downloads = () => {
                         SmartScreen warning: More info → Run anyway.
                       </div>
                       <a
-                        href="/releases/GhostPrivacy-Setup.exe"
+                        href={windowsExeUrl}
                         className="inline-flex w-full justify-between items-center px-4 py-3 border border-[rgba(255,10,42,0.24)] bg-black/40 font-mono text-xs tracking-[0.16em] uppercase text-white/85 transition-all active:translate-y-[1px] hover:border-[rgba(255,10,42,0.55)] hover:text-white hover:shadow-[0_0_12px_rgba(255,10,42,0.35)]"
                       >
                         DOWNLOAD
                         <span className="text-white/50">.EXE</span>
+                      </a>
+                      <a
+                        href={windowsMsiUrl}
+                        className="inline-flex w-full justify-between items-center px-4 py-3 border border-[rgba(255,10,42,0.24)] bg-black/40 font-mono text-xs tracking-[0.16em] uppercase text-white/85 transition-all active:translate-y-[1px] hover:border-[rgba(255,10,42,0.55)] hover:text-white hover:shadow-[0_0_12px_rgba(255,10,42,0.35)]"
+                      >
+                        DOWNLOAD
+                        <span className="text-white/50">.MSI</span>
+                      </a>
+                      <a
+                        href={windowsShaUrl}
+                        className="inline-flex w-full justify-between items-center px-4 py-3 border border-[rgba(255,10,42,0.24)] bg-black/40 font-mono text-xs tracking-[0.16em] uppercase text-white/85 transition-all active:translate-y-[1px] hover:border-[rgba(255,10,42,0.55)] hover:text-white hover:shadow-[0_0_12px_rgba(255,10,42,0.35)]"
+                      >
+                        DOWNLOAD
+                        <span className="text-white/50">SHA256</span>
+                      </a>
+                      <a
+                        href={windowsAttestationUrl}
+                        className="inline-flex w-full justify-between items-center px-4 py-3 border border-[rgba(255,10,42,0.24)] bg-black/40 font-mono text-xs tracking-[0.16em] uppercase text-white/85 transition-all active:translate-y-[1px] hover:border-[rgba(255,10,42,0.55)] hover:text-white hover:shadow-[0_0_12px_rgba(255,10,42,0.35)]"
+                      >
+                        DOWNLOAD
+                        <span className="text-white/50">ATTEST</span>
                       </a>
                       {hashes.get(windowsExe) ? (
                         <div className="font-mono text-[11px] leading-relaxed text-white/60">
@@ -102,11 +137,25 @@ const Downloads = () => {
                         Enable Install unknown apps for your browser if blocked.
                       </div>
                       <a
-                        href="/releases/GhostPrivacy.apk"
+                        href={androidApkUrl}
                         className="inline-flex w-full justify-between items-center px-4 py-3 border border-[rgba(255,10,42,0.24)] bg-black/40 font-mono text-xs tracking-[0.16em] uppercase text-white/85 transition-all active:translate-y-[1px] hover:border-[rgba(255,10,42,0.55)] hover:text-white hover:shadow-[0_0_12px_rgba(255,10,42,0.35)]"
                       >
                         DOWNLOAD
                         <span className="text-white/50">.APK</span>
+                      </a>
+                      <a
+                        href={androidShaUrl}
+                        className="inline-flex w-full justify-between items-center px-4 py-3 border border-[rgba(255,10,42,0.24)] bg-black/40 font-mono text-xs tracking-[0.16em] uppercase text-white/85 transition-all active:translate-y-[1px] hover:border-[rgba(255,10,42,0.55)] hover:text-white hover:shadow-[0_0_12px_rgba(255,10,42,0.35)]"
+                      >
+                        DOWNLOAD
+                        <span className="text-white/50">SHA256</span>
+                      </a>
+                      <a
+                        href={androidAttestationUrl}
+                        className="inline-flex w-full justify-between items-center px-4 py-3 border border-[rgba(255,10,42,0.24)] bg-black/40 font-mono text-xs tracking-[0.16em] uppercase text-white/85 transition-all active:translate-y-[1px] hover:border-[rgba(255,10,42,0.55)] hover:text-white hover:shadow-[0_0_12px_rgba(255,10,42,0.35)]"
+                      >
+                        DOWNLOAD
+                        <span className="text-white/50">ATTEST</span>
                       </a>
                       {hashes.get(androidApk) ? (
                         <div className="font-mono text-[11px] leading-relaxed text-white/60">
@@ -147,6 +196,16 @@ const Downloads = () => {
                 <div className="border border-[rgba(255,10,42,0.14)] p-4 bg-black/40">
                   <div className="font-mono text-xs tracking-[0.16em] uppercase text-white/60">RELEASE VERIFICATION</div>
                   <div className="mt-2 font-mono text-[12px] leading-relaxed text-white/70 space-y-2">
+                    <div>
+                      Source code:
+                      <a className="underline hover:text-white" href={sourceZipUrl} target="_blank" rel="noopener noreferrer">
+                        {` ${releaseTag}.zip`}
+                      </a>
+                      <span className="text-white/50"> · </span>
+                      <a className="underline hover:text-white" href={sourceTarUrl} target="_blank" rel="noopener noreferrer">
+                        {` ${releaseTag}.tar.gz`}
+                      </a>
+                    </div>
                     <div>
                       Read:
                       <a className="underline hover:text-white" href="https://github.com/Lucieran-Raven/ghost-privacy/blob/main/docs/RELEASE_VERIFICATION.md" target="_blank" rel="noopener noreferrer">

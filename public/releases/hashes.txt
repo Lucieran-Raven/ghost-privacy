@@ -3,8 +3,6 @@
 # <sha256>  <filename>
 #
 # Current (GitHub releases)
-fcb4c9636e7a67d45528d9f5269d2256799845be11d438bf8bc703a71dcf2636  app-debug.apk
-a3a7d8dbba7d33aa599c31c7439c43d9ed8b1653a37d3a5c433610c1ac8846ef  GhostPrivacy-Setup.exe
-fcb4c9636e7a67d45528d9f5269d2256799845be11d438bf8bc703a71dcf2636  GhostPrivacy.apk
-a3a7d8dbba7d33aa599c31c7439c43d9ed8b1653a37d3a5c433610c1ac8846ef  Ghost.Privacy_0.1.0_x64-setup.exe
-e4342e165aab137de2c218c57f4f0c66d8b8e23e41d4aa182582ca026097e294  Ghost.Privacy_0.1.0_x64_en-US.msi
+05b7a43b868779150b1276e19d4bd82622adf6656064a022a8e2a83d6257d9ee  ghost-privacy-android-release.apk
+8b817f2045d322af95679def23f6430d19df8f2ec5bd376c1dca6abb507c840f  Ghost Privacy_0.1.4_x64-setup.exe
+e4aeccacf62d4da561e8b68b35a6d9672985537c5bf3723813671d592545125c  Ghost Privacy_0.1.4_x64_en-US.msi
