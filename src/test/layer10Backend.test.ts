@@ -33,7 +33,7 @@ describe('layer10 backend/database invariants', () => {
         violations.push(rel);
       }
 
-      if (/getRateLimitKeyHex\(\s*req\s*,\s*[^,\)]+\s*\)/.test(raw)) {
+      if (/getRateLimitKeyHex\(\s*req\s*,\s*[^,)]+\s*\)/.test(raw)) {
         violations.push(rel);
       }
     }
@@ -53,7 +53,7 @@ describe('layer10 backend/database invariants', () => {
       const rel = path.relative(process.cwd(), file);
       const raw = fs.readFileSync(file, 'utf8');
 
-      if (/\.eq\(\s*['\"]session_id['\"]\s*,\s*sessionId\s*\)/.test(raw)) {
+      if (/\.eq\(\s*['"]session_id['"]\s*,\s*sessionId\s*\)/.test(raw)) {
         violations.push({ file: rel, needle: ".eq('session_id', sessionId)" });
       }
 
@@ -61,7 +61,7 @@ describe('layer10 backend/database invariants', () => {
         violations.push({ file: rel, needle: 'session_id: sessionId' });
       }
 
-      if (/\.eq\(\s*['\"]session_id['\"]\s*,\s*body\.sessionId\s*\)/.test(raw)) {
+      if (/\.eq\(\s*['"]session_id['"]\s*,\s*body\.sessionId\s*\)/.test(raw)) {
         violations.push({ file: rel, needle: ".eq('session_id', body.sessionId)" });
       }
     }
