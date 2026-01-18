@@ -57,8 +57,9 @@ serve(async (req) => {
     const windowStartIso = windowStart.toISOString();
 
     let rateKey: string;
+    const action = 'detect_honeypot';
     try {
-      rateKey = await getRateLimitKeyHex(req, windowStartIso);
+      rateKey = await getRateLimitKeyHex(req, action, windowStartIso);
     } catch {
       return new Response(
         JSON.stringify({ isHoneypot: false, trapType: null }),
@@ -68,7 +69,7 @@ serve(async (req) => {
 
     const { data: rateOk, error: rateErr } = await supabase.rpc('increment_rate_limit', {
       p_ip_hash: rateKey,
-      p_action: 'detect_honeypot',
+      p_action: action,
       p_window_start: windowStartIso,
       p_max_count: 400
     });

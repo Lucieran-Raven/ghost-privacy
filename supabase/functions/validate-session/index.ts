@@ -73,8 +73,9 @@ serve(async (req: Request) => {
     const windowStartIso = windowStart.toISOString();
 
     let rateKey: string;
+    const action = 'validate_session';
     try {
-      rateKey = await getRateLimitKeyHex(req, windowStartIso);
+      rateKey = await getRateLimitKeyHex(req, action, windowStartIso);
     } catch {
       await new Promise(r => setTimeout(r, 50));
       return invalidResponse(req);
@@ -82,7 +83,7 @@ serve(async (req: Request) => {
 
     const { data: rateOk, error: rateErr } = await supabase.rpc('increment_rate_limit', {
       p_ip_hash: rateKey,
-      p_action: 'validate_session',
+      p_action: action,
       p_window_start: windowStartIso,
       p_max_count: 200
     });

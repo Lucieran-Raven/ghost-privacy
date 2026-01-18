@@ -176,10 +176,14 @@ export async function getClientIpHashHex(req: Request): Promise<string> {
 /**
  * Deterministic per-window rate-limit key.
  *
- * Prevents correlating clients across windows: the same IP will hash differently
- * for each stable window_start value.
+ * Prevents correlating clients across windows AND actions: the same IP will hash differently
+ * for each stable (action, window_start) pair.
  */
-export async function getRateLimitKeyHex(req: Request, windowStartIso: string): Promise<string> {
+export async function getRateLimitKeyHex(req: Request, action: string, windowStartIso: string): Promise<string> {
+  if (!action || typeof action !== 'string' || action.length > 64) {
+    throw new Error('Invalid action');
+  }
+
   const rawIp = extractClientIp(req);
   const env = Deno.env.get('ENVIRONMENT') || 'development';
 
@@ -194,7 +198,7 @@ export async function getRateLimitKeyHex(req: Request, windowStartIso: string): 
     }
   }
 
-  return await hmacSha256Hex(`${windowStartIso}|${finalIp}`);
+  return await hmacSha256Hex(`${action}|${windowStartIso}|${finalIp}`);
 }
 
 export function hexToBytea(hex: string): string {

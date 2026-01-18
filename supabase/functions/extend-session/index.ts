@@ -100,15 +100,16 @@ serve(async (req: Request) => {
     const windowStartIso = windowStart.toISOString();
 
     let rateKey: string;
+    const action = 'extend_session';
     try {
-      rateKey = await getRateLimitKeyHex(req, windowStartIso);
+      rateKey = await getRateLimitKeyHex(req, action, windowStartIso);
     } catch {
       return errorResponse(req, 404, 'NOT_FOUND');
     }
 
     const { data: rateOk, error: rateErr } = await supabase.rpc('increment_rate_limit', {
       p_ip_hash: rateKey,
-      p_action: 'extend_session',
+      p_action: action,
       p_window_start: windowStartIso,
       p_max_count: 300
     });

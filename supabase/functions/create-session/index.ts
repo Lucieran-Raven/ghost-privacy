@@ -74,8 +74,9 @@ serve(async (req: Request) => {
     const windowStartIso = windowStart.toISOString();
 
     let rateKey: string;
+    const action = 'create_session';
     try {
-      rateKey = await getRateLimitKeyHex(req, windowStartIso);
+      rateKey = await getRateLimitKeyHex(req, action, windowStartIso);
     } catch {
       return errorResponse(req, 'IP_UNAVAILABLE');
     }
@@ -83,7 +84,7 @@ serve(async (req: Request) => {
     // Atomic increment using PostgreSQL ON CONFLICT
     const { data: rateResult, error: rateError } = await supabase.rpc('increment_rate_limit', {
       p_ip_hash: rateKey,
-      p_action: 'create_session',
+      p_action: action,
       p_window_start: windowStartIso,
       p_max_count: RATE_LIMIT_MAX_SESSIONS
     });
