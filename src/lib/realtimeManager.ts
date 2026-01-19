@@ -21,6 +21,8 @@ const PADDED_FRAME_MAX_INFLIGHT = 128;
 
 const COVER_TRAFFIC_HEARTBEAT_INTERVAL_MS = 30 * 1000;
 
+const DIRECT_BROADCAST_MAX_CHARS = 90_000;
+
 function encodeUtf8ToBase64(s: string): string {
   const bytes = new TextEncoder().encode(s);
   let binary = '';
@@ -344,6 +346,56 @@ export class RealtimeManager {
 
   private async sendNow(payload: BroadcastPayload, retries: number): Promise<boolean> {
     if (!this.channel || this.connectionState.status !== 'connected') {
+      return false;
+    }
+
+    const shouldSendDirect = (() => {
+      if (payload.type === 'file') return true;
+      if (payload.type === 'message-ack' || payload.type === 'typing' || payload.type === 'presence') return true;
+      if (payload.type === 'key-exchange') return true;
+      if (payload.type === 'voice-message' || payload.type === 'video-message') {
+        try {
+          return JSON.stringify(payload).length <= DIRECT_BROADCAST_MAX_CHARS;
+        } catch {
+          return false;
+        }
+      }
+      if (payload.type === 'chat-message') {
+        try {
+          return JSON.stringify(payload).length <= DIRECT_BROADCAST_MAX_CHARS;
+        } catch {
+          return false;
+        }
+      }
+      return false;
+    })();
+
+    if (shouldSendDirect) {
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          const jitter = randomInt(SEND_FRAME_JITTER_MAX_MS + 1);
+          if (jitter > 0) {
+            await new Promise(resolve => setTimeout(resolve, jitter));
+          }
+          const result = await this.channel.send({
+            type: 'broadcast',
+            event: 'ghost-message',
+            payload
+          });
+          if (result === 'ok') {
+            this.lastHeartbeat = Date.now();
+            this.lastOutboundAt = this.lastHeartbeat;
+            return true;
+          }
+        } catch {
+          // Silent retry
+        }
+
+        if (attempt < retries) {
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+        }
+      }
+
       return false;
     }
 
