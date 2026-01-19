@@ -12,6 +12,11 @@ export function getAllowedOrigins(): Set<string> {
     'http://tauri.localhost',
     'capacitor://localhost',
     'ionic://localhost',
+    'http://localhost',
+    'https://localhost',
+    'http://127.0.0.1',
+    'https://127.0.0.1',
+    'http://10.0.2.2',
     'http://localhost:1420',
     'http://127.0.0.1:1420'
   ];
