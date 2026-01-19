@@ -12,8 +12,8 @@ android {
         applicationId "app.ghostprivacy.mobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 6
-        versionName "0.1.11"
+        versionCode 7
+        versionName "0.1.12"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         def expectedSigningCertSha256 = System.getenv('ANDROID_EXPECTED_SIGNING_CERT_SHA256')
         buildConfigField "String", "EXPECTED_SIGNING_CERT_SHA256", "\"${expectedSigningCertSha256 ?: ''}\""
