@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { isTauriRuntime } from '@/utils/runtime';
 import { checkBuildIntegrity, type BuildIntegrityResult } from '@/utils/buildIntegrity';
 import { checkVersionGuard, type VersionGuardResult } from '@/utils/versionGuard';
+import { checkThreatStatus, type ThreatStatusResult } from '@/utils/threatStatus';
 
 const repoUrl = 'https://github.com/Lucieran-Raven/ghost-privacy';
 const bugReportUrl = 'https://t.me/ghostdeveloperadmin';
@@ -13,6 +14,7 @@ const Security = () => {
   const secureRuntime = isTauriRuntime();
   const [buildIntegrity, setBuildIntegrity] = useState<BuildIntegrityResult | null>(null);
   const [versionGuard, setVersionGuard] = useState<VersionGuardResult | null>(null);
+  const [threatStatus, setThreatStatus] = useState<ThreatStatusResult | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -38,6 +40,21 @@ const Security = () => {
     })().catch(() => {
       if (!alive) return;
       setVersionGuard({ platform: 'web', status: 'skipped' });
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const res = await checkThreatStatus();
+      if (!alive) return;
+      setThreatStatus(res);
+    })().catch(() => {
+      if (!alive) return;
+      setThreatStatus({ platform: 'web', status: 'skipped' });
     });
     return () => {
       alive = false;
