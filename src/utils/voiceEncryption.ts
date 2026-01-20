@@ -62,23 +62,36 @@ export class SecureVoiceRecorder {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          sampleRate: 16000,
           echoCancellation: true,
-          noiseSuppression: true
+          noiseSuppression: true,
+          autoGainControl: true
         }
       });
 
-      // Determine supported MIME type
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm')
-          ? 'audio/webm'
-          : 'audio/mp4';
+      const preferredMimeTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/aac'
+      ];
 
-      this.mediaRecorder = new MediaRecorder(this.stream, {
-        mimeType,
-        audioBitsPerSecond: 24000
+      const supportedMimeType = preferredMimeTypes.find((t) => {
+        try {
+          return MediaRecorder.isTypeSupported(t);
+        } catch {
+          return false;
+        }
       });
+
+      const options: MediaRecorderOptions = {
+        audioBitsPerSecond: 24000
+      };
+
+      if (supportedMimeType) {
+        options.mimeType = supportedMimeType;
+      }
+
+      this.mediaRecorder = new MediaRecorder(this.stream, options);
 
       this.audioChunks = [];
       this.chunkIndex = 0;
@@ -92,8 +105,8 @@ export class SecureVoiceRecorder {
 
       this.mediaRecorder.start(100); // 100ms chunks
       this.isRecording = true;
-    } catch {
-      throw new Error('Microphone access denied');
+    } catch (err) {
+      throw err;
     }
   }
 

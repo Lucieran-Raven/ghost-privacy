@@ -20,6 +20,7 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 use zeroize::{Zeroize, Zeroizing};
 
 use std::path::{Path, PathBuf};
+use std::io::prelude::Write;
 
 #[cfg(windows)]
 use std::ffi::c_void;
@@ -957,6 +958,171 @@ fn derive_realtime_channel_name(session_id: String, capability_token: String) ->
     .ok_or_else(|| "invalid hmac output".to_string())?;
 
   Ok(format!("ghost-session-{}", tag))
+}
+
+fn is_safe_video_drop_id(id: &str) -> bool {
+  if id.is_empty() || id.len() > 128 {
+    return false;
+  }
+  id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+fn sanitize_video_drop_file_name(file_name: &str) -> String {
+  let mut out = String::with_capacity(file_name.len().min(128));
+  for c in file_name.chars() {
+    if out.len() >= 128 {
+      break;
+    }
+    if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
+      out.push(c);
+    }
+  }
+
+  let trimmed = out.trim_matches('.').to_string();
+  if trimmed.is_empty() {
+    return "video.mp4".to_string();
+  }
+
+  // Force an mp4 extension to avoid confusing file associations.
+  if trimmed.to_ascii_lowercase().ends_with(".mp4") {
+    trimmed
+  } else {
+    format!("{}.mp4", trimmed)
+  }
+}
+
+fn video_drop_temp_path(id: &str, file_name: &str) -> Result<PathBuf, String> {
+  if !is_safe_video_drop_id(id) {
+    return Err("invalid id".to_string());
+  }
+
+  let safe_name = sanitize_video_drop_file_name(file_name);
+  let dir = std::env::temp_dir();
+  let combined = format!("ghost-video-drop-{}-{}", id, safe_name);
+  Ok(dir.join(combined))
+}
+
+fn open_in_default_app(path: &Path) -> Result<(), String> {
+  let p = path.to_string_lossy().to_string();
+
+  #[cfg(target_os = "windows")]
+  {
+    // Use `cmd /C start` to delegate to the OS default handler.
+    std::process::Command::new("cmd")
+      .args(["/C", "start", "", &p])
+      .spawn()
+      .map_err(|_| "open failed".to_string())?;
+    Ok(())
+  }
+
+  #[cfg(target_os = "macos")]
+  {
+    std::process::Command::new("open")
+      .arg(&p)
+      .spawn()
+      .map_err(|_| "open failed".to_string())?;
+    Ok(())
+  }
+
+  #[cfg(all(unix, not(target_os = "macos")))]
+  {
+    std::process::Command::new("xdg-open")
+      .arg(&p)
+      .spawn()
+      .map_err(|_| "open failed".to_string())?;
+    Ok(())
+  }
+}
+
+#[tauri::command]
+fn video_drop_start(id: String, file_name: String) -> Result<(), String> {
+  if !is_safe_video_drop_id(&id) {
+    return Err("invalid id".to_string());
+  }
+
+  let path = video_drop_temp_path(&id, &file_name)?;
+  {
+    let mut f = ghostfs::File::options()
+      .create(true)
+      .truncate(true)
+      .write(true)
+      .open(&path)
+      .map_err(|_| "write failed".to_string())?;
+    f.flush().map_err(|_| "write failed".to_string())?;
+  }
+
+  let map = VIDEO_DROP_FILES.get_or_init(|| Mutex::new(HashMap::new()));
+  let mut map = map.lock().unwrap_or_else(|e| e.into_inner());
+  map.insert(id, path.to_string_lossy().to_string());
+  Ok(())
+}
+
+#[tauri::command]
+fn video_drop_append(id: String, chunk_base64: String) -> Result<(), String> {
+  if !is_safe_video_drop_id(&id) {
+    return Err("invalid id".to_string());
+  }
+
+  // Keep this reasonably bounded even though we still have upstream framing limits.
+  if chunk_base64.len() > MAX_B64_INPUT_LEN {
+    return Err("chunk too large".to_string());
+  }
+
+  let bytes = BASE64
+    .decode(chunk_base64.as_bytes())
+    .map_err(|_| "invalid base64".to_string())?;
+
+  let map = VIDEO_DROP_FILES.get_or_init(|| Mutex::new(HashMap::new()));
+  let map = map.lock().unwrap_or_else(|e| e.into_inner());
+  let p = map.get(&id).ok_or_else(|| "missing".to_string())?.to_string();
+  drop(map);
+
+  let mut f = ghostfs::File::options()
+    .create(true)
+    .append(true)
+    .open(&p)
+    .map_err(|_| "write failed".to_string())?;
+  let mut written = 0usize;
+  while written < bytes.len() {
+    let n = f.write(&bytes[written..]).map_err(|_| "write failed".to_string())?;
+    if n == 0 {
+      return Err("write failed".to_string());
+    }
+    written += n;
+  }
+  Ok(())
+}
+
+#[tauri::command]
+fn video_drop_finish_open(id: String, mime_type: String) -> Result<(), String> {
+  if !is_safe_video_drop_id(&id) {
+    return Err("invalid id".to_string());
+  }
+  if !mime_type.is_empty() && mime_type != "video/mp4" {
+    return Err("unsupported mime".to_string());
+  }
+
+  let map = VIDEO_DROP_FILES.get_or_init(|| Mutex::new(HashMap::new()));
+  let map = map.lock().unwrap_or_else(|e| e.into_inner());
+  let p = map.get(&id).ok_or_else(|| "missing".to_string())?.to_string();
+
+  open_in_default_app(Path::new(&p))
+}
+
+#[tauri::command]
+fn video_drop_purge(id: String) -> Result<(), String> {
+  if !is_safe_video_drop_id(&id) {
+    return Err("invalid id".to_string());
+  }
+
+  let map = VIDEO_DROP_FILES.get_or_init(|| Mutex::new(HashMap::new()));
+  let mut map = map.lock().unwrap_or_else(|e| e.into_inner());
+  if let Some(p) = map.remove(&id) {
+    if !p.is_empty() {
+      let _ = ghostfs::remove_file(&p);
+    }
+  }
+  Ok(())
 }
 
 #[cfg(test)]
