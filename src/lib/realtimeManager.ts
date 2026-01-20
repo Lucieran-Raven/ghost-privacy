@@ -332,7 +332,7 @@ export class RealtimeManager {
 
     if (this.outbox.length >= this.outboxMaxItems) {
       // Fail-closed for user content; don't silently drop.
-      if (payload.type === 'chat-message' || payload.type === 'voice-message' || payload.type === 'video-message') {
+      if (payload.type === 'chat-message' || payload.type === 'voice-message' || payload.type === 'video-message' || payload.type === 'file') {
         return false;
       }
 
@@ -350,7 +350,13 @@ export class RealtimeManager {
     }
 
     const shouldSendDirect = (() => {
-      if (payload.type === 'file') return true;
+      if (payload.type === 'file') {
+        try {
+          return JSON.stringify(payload).length <= DIRECT_BROADCAST_MAX_CHARS;
+        } catch {
+          return false;
+        }
+      }
       if (payload.type === 'message-ack' || payload.type === 'typing' || payload.type === 'presence') return true;
       if (payload.type === 'key-exchange') return true;
       if (payload.type === 'voice-message' || payload.type === 'video-message') {
@@ -1008,7 +1014,13 @@ export class RealtimeManager {
     }
 
     const ok = await this.sendNow(payload, retries);
-    if (ok) return true;
+    if (ok) {
+      if (this.outbox.length > 0) {
+        void this.flushOutbox().catch(() => {
+        });
+      }
+      return true;
+    }
 
     // Connection may be unstable; best-effort queue for retry after reconnection.
     return this.enqueuePayload(payload, retries);

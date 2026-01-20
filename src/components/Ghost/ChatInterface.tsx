@@ -227,7 +227,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
     return () => {
       try {
-        if (isHost) {
+        if (isHost && isTerminatingRef.current) {
           void SessionService.deleteSession(sessionId, channelToken, token);
         }
       } catch {
