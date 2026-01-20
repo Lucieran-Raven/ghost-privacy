@@ -1,6 +1,6 @@
 
-/releases/GhostPrivacy.apk https://github.com/Lucieran-Raven/ghost-privacy/releases/download/v0.1.14/ghost-privacy-android-release.apk 302
-/releases/GhostPrivacy-Setup.exe https://github.com/Lucieran-Raven/ghost-privacy/releases/tag/v0.1.14 302
+/releases/GhostPrivacy.apk https://github.com/Lucieran-Raven/ghost-privacy/releases/download/v0.1.15/ghost-privacy-android-release.apk 302
+/releases/GhostPrivacy-Setup.exe https://github.com/Lucieran-Raven/ghost-privacy/releases/tag/v0.1.15 302
 
 # SPA fallback - serve index.html for client-side routing
 /*    /index.html   200

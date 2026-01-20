@@ -19,6 +19,8 @@ use tauri_plugin_log::{Target, TargetKind};
 use x509_parser::prelude::{FromDer, X509Certificate};
 use zeroize::{Zeroize, Zeroizing};
 
+use std::path::{Path, PathBuf};
+
 #[cfg(windows)]
 use std::ffi::c_void;
 #[cfg(windows)]
@@ -107,6 +109,8 @@ mod memory_lock {
 static KEY_VAULT: OnceLock<KeyVault> = OnceLock::new();
 static MLOCK_WARNED: AtomicBool = AtomicBool::new(false);
 static VAULT_CAP_TAGS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+
+static VIDEO_DROP_FILES: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 
 const MAX_SESSION_ID_LEN: usize = 32;
 const MAX_CAPABILITY_TOKEN_LEN: usize = 256;
@@ -201,6 +205,16 @@ impl KeyVault {
 fn purge_cleanup_plan() {
   if let Some(vault) = KEY_VAULT.get() {
     vault.purge();
+  }
+
+  if let Some(map) = VIDEO_DROP_FILES.get() {
+    let mut map = map.lock().unwrap_or_else(|e| e.into_inner());
+    for (_id, p) in map.drain() {
+      if p.is_empty() {
+        continue;
+      }
+      let _ = ghostfs::remove_file(&p);
+    }
   }
 
   if let Some(tags) = VAULT_CAP_TAGS.get() {
@@ -1001,7 +1015,11 @@ pub fn run() {
       vault_encrypt_utf8,
       vault_decrypt,
       vault_decrypt_utf8,
-      derive_realtime_channel_name
+      derive_realtime_channel_name,
+      video_drop_start,
+      video_drop_append,
+      video_drop_finish_open,
+      video_drop_purge
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application");

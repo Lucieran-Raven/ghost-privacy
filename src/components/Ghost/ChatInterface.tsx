@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ghost, Send, Paperclip, Shield, X, Loader2, Trash2, HardDrive, FileText, FileSpreadsheet, FileImage, FileArchive, FileCode, File, AlertTriangle, Clock, Download } from 'lucide-react';
+import { Ghost, Send, Paperclip, Shield, X, Loader2, Trash2, HardDrive, FileText, FileSpreadsheet, FileImage, FileArchive, FileCode, File, AlertTriangle, Clock, Download, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { EncryptionEngine, KeyExchange, generateNonce } from '@/utils/encryption';
 import { SecurityManager, validateMessage, validateFile, sanitizeFileName } from '@/utils/security';
@@ -15,6 +15,7 @@ import { isTauriRuntime, setTauriContentProtected, tauriInvoke } from '@/utils/r
 import { base64ToBytes, bytesToBase64 } from '@/utils/algorithms/encoding/base64';
 import { secureZeroUint8Array } from '@/utils/algorithms/memory/zeroization';
 import { getReplayProtection, destroyReplayProtection } from '@/utils/replayProtection';
+import { usePlausibleDeniability } from '@/hooks/usePlausibleDeniability';
 import KeyVerificationModal from './KeyVerificationModal';
 import VoiceRecorder from './VoiceRecorder';
 import VoiceMessage from './VoiceMessage';
@@ -77,6 +78,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   const [voiceVerified, setVoiceVerified] = useState(false);
   const [isWindowVisible, setIsWindowVisible] = useState(true);
   const [showTimestampSettings, setShowTimestampSettings] = useState(false);
+  const [downloadedVideoDrops, setDownloadedVideoDrops] = useState<Set<string>>(new Set());
   const sessionKeyRef = useRef<CryptoKey | null>(null);
 
   const realtimeManagerRef = useRef<RealtimeManager | null>(null);
@@ -88,6 +90,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   const messageAreaRef = useRef<HTMLElement>(null);
   const inputBarRef = useRef<HTMLElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const messageQueueRef = useRef(getMessageQueue());
   const partnerWasPresentRef = useRef(false);
   const partnerDisconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -97,8 +100,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   const partnerUnstableShownRef = useRef(false);
   const inactivityIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
-  const fileTransfersRef = useRef<Map<string, { chunks: string[]; received: number; total: number; iv: string; fileName: string; fileType: string; timestamp: number; senderId: string; cleanupTimer: ReturnType<typeof setTimeout> | null }>>(new Map());
+  const fileTransfersRef = useRef<Map<string, { chunks: string[]; received: number; total: number; iv: string; fileName: string; fileType: string; sealedKind: string; timestamp: number; senderId: string; cleanupTimer: ReturnType<typeof setTimeout> | null }>>(new Map());
   const pendingFileAcksRef = useRef<Map<string, (ok: boolean) => void>>(new Map());
+  const activeNativeVideoDropIdsRef = useRef<Set<string>>(new Set());
   const localFingerprintRef = useRef<string>('');
   const isTerminatingRef = useRef(false);
   const verificationShownRef = useRef(false);
@@ -115,6 +119,45 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   const markActivity = () => {
     lastActivityRef.current = Date.now();
   };
+
+  const purgeActiveNativeVideoDropsBestEffort = useCallback(() => {
+    const ids = Array.from(activeNativeVideoDropIdsRef.current);
+    if (ids.length === 0) return;
+
+    activeNativeVideoDropIdsRef.current.clear();
+
+    void (async () => {
+      try {
+        if (isTauriRuntime()) {
+          for (const id of ids) {
+            try {
+              await tauriInvoke('video_drop_purge', { id });
+            } catch {
+            }
+          }
+          return;
+        }
+
+        const mod = await import('@capacitor/core');
+        if (mod.Capacitor?.isNativePlatform?.()) {
+          const VideoDrop = mod.registerPlugin('VideoDrop') as {
+            purge: (args: { id: string }) => Promise<{ ok?: boolean }>;
+          };
+          for (const id of ids) {
+            try {
+              await VideoDrop.purge({ id });
+            } catch {
+            }
+          }
+        }
+      } catch {
+      }
+    })();
+  }, []);
+
+  usePlausibleDeniability(() => {
+    purgeActiveNativeVideoDropsBestEffort();
+  });
 
   const buildChatAad = (params: { senderId: string; messageId: string; sequence: number; type: string }): Uint8Array => {
     const te = new TextEncoder();
@@ -165,6 +208,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     t.iv = '';
     t.fileName = '';
     t.fileType = '';
+    t.sealedKind = '';
     t.timestamp = 0;
     t.senderId = '';
     t.cleanupTimer = null;
@@ -272,6 +316,8 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         if (!isCapacitorNative()) {
           setInputText('');
         }
+      } else {
+        purgeActiveNativeVideoDropsBestEffort();
       }
     };
 
@@ -284,6 +330,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
     const handleFocus = () => {
       setIsWindowVisible(true);
+      purgeActiveNativeVideoDropsBestEffort();
     };
 
     if (typeof document !== 'undefined') {
@@ -546,6 +593,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           const iv = String(data.iv || '');
           if (iv.length === 0 || iv.length > MAX_IV_CHARS) return;
 
+          const sealedKind = String((data as any).sealedKind || '');
+          const effectiveSealedKind = sealedKind === 'video-drop' ? 'video-drop' : 'file';
+
           const existing = fileTransfersRef.current.get(fileId);
           if (existing?.cleanupTimer) {
             clearTimeout(existing.cleanupTimer);
@@ -562,6 +612,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             iv,
             fileName: sanitizeFileName(String(data.fileName || 'unknown_file')).slice(0, 256),
             fileType: String(data.fileType || 'application/octet-stream').slice(0, 128),
+            sealedKind: effectiveSealedKind,
             timestamp: Number(data.timestamp) || payload.timestamp,
             senderId: payload.senderId,
             cleanupTimer
@@ -588,6 +639,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             const iv = String(data.iv || '');
             if (iv.length === 0 || iv.length > MAX_IV_CHARS) return;
 
+            const sealedKind = String((data as any).sealedKind || '');
+            const effectiveSealedKind = sealedKind === 'video-drop' ? 'video-drop' : 'file';
+
             const cleanupTimer = setTimeout(() => {
               purgeFileTransfer(fileId);
             }, 5 * 60 * 1000);
@@ -599,11 +653,20 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               iv,
               fileName: sanitizeFileName(String(data.fileName || 'unknown_file')).slice(0, 256),
               fileType: String(data.fileType || 'application/octet-stream').slice(0, 128),
+              sealedKind: effectiveSealedKind,
               timestamp: Number(data.timestamp) || payload.timestamp,
               senderId: payload.senderId,
               cleanupTimer
             };
             fileTransfersRef.current.set(fileId, t);
+          }
+
+          try {
+            const sealedKind = String((data as any).sealedKind || '');
+            if (sealedKind === 'video-drop') {
+              t.sealedKind = 'video-drop';
+            }
+          } catch {
           }
           const idx = Number(data.index);
           if (!Number.isFinite(idx) || idx < 0 || idx >= t.total) return;
@@ -625,6 +688,19 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           await manager.send('file', { kind: 'ack', ackKind: 'chunk', fileId, index: idx });
 
           if (t.received >= t.total && t.total > 0) {
+            if (t.sealedKind === 'video-drop') {
+              messageQueueRef.current.addMessage(sessionId, {
+                id: fileId,
+                content: '',
+                sender: 'partner',
+                timestamp: t.timestamp,
+                type: 'video',
+                fileName: t.fileName
+              });
+              syncMessagesFromQueue();
+              return;
+            }
+
             const encrypted = t.chunks.join('');
             const aad = buildFileAad({ senderId: t.senderId || payload.senderId, fileId });
             const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, t.iv, aad);
@@ -677,7 +753,8 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           const pkB64 = String(payload.data?.publicKey || '');
           if (pkB64) {
             const pkBytes = base64ToBytes(pkB64);
-            const hash = await crypto.subtle.digest('SHA-256', pkBytes);
+            const pkBuf = pkBytes.buffer.slice(pkBytes.byteOffset, pkBytes.byteOffset + pkBytes.byteLength);
+            const hash = await crypto.subtle.digest('SHA-256', pkBuf);
             remoteFingerprint = Array.from(new Uint8Array(hash))
               .slice(0, 16)
               .map((b) => b.toString(16).padStart(2, '0'))
@@ -909,8 +986,8 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           const next = [...prev, {
             id: payload.nonce,
             blob,
-            duration: payload.data.duration,
-            sender: 'partner',
+            duration,
+            sender: 'partner' as const,
             timestamp: payload.timestamp,
             played: false
           }];
@@ -1037,7 +1114,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           id: messageId,
           blob,
           duration,
-          sender: 'me',
+          sender: 'me' as const,
           timestamp: Date.now(),
           played: false
         }];
@@ -1352,6 +1429,275 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         toast.error('Failed to send file');
       }
     })();
+  };
+
+  const handleVideoUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    event.target.value = '';
+
+    const validation = validateFile(file);
+    if (!validation.valid) {
+      toast.error(validation.error);
+      return;
+    }
+
+    if (file.type !== 'video/mp4') {
+      toast.error('Only MP4 videos are supported');
+      return;
+    }
+
+    if (validation.warning) {
+      toast.warning(validation.warning);
+    }
+
+    if (!encryptionEngineRef.current || !isKeyExchangeComplete) {
+      toast.error('Secure connection not established yet');
+      return;
+    }
+
+    if (!verificationState.verified) {
+      toast.error('Please verify security codes before sending videos');
+      setVerificationState(prev => ({ ...prev, show: true }));
+      return;
+    }
+
+    void (async () => {
+      try {
+        markActivity();
+        const sanitizedName = sanitizeFileName(file.name);
+        const messageId = generateNonce();
+
+        const { displayTimestamp } = generatePlausibleTimestamp();
+
+        const arrayBuffer = await file.arrayBuffer();
+        const aad = buildFileAad({ senderId: participantIdRef.current, fileId: messageId });
+        const { encrypted, iv } = await encryptionEngineRef.current!.encryptBytes(arrayBuffer, aad);
+        try {
+          aad.fill(0);
+        } catch {
+        }
+
+        try {
+          const { secureZeroArrayBuffer } = await import('@/utils/algorithms/memory/zeroization');
+          const crypto = window.crypto;
+          secureZeroArrayBuffer({ getRandomValues: (arr) => crypto.getRandomValues(arr) }, arrayBuffer);
+        } catch {
+          try {
+            new Uint8Array(arrayBuffer).fill(0);
+          } catch {
+          }
+        }
+
+        messageQueueRef.current.addMessage(sessionId, {
+          id: messageId,
+          content: '',
+          sender: 'me',
+          timestamp: displayTimestamp,
+          type: 'video',
+          fileName: sanitizedName
+        });
+        syncMessagesFromQueue();
+
+        const MAX_FILE_CHUNKS = 512;
+        const chunkSize = 45_000;
+        const totalChunks = Math.ceil(encrypted.length / chunkSize);
+
+        if (!Number.isFinite(totalChunks) || totalChunks <= 0 || totalChunks > MAX_FILE_CHUNKS) {
+          toast.error('Video too large to send');
+          return;
+        }
+
+        const sentInit = (await realtimeManagerRef.current?.send('file', {
+          kind: 'init',
+          fileId: messageId,
+          fileName: sanitizedName,
+          fileType: 'video/mp4',
+          sealedKind: 'video-drop',
+          iv,
+          totalChunks,
+          timestamp: displayTimestamp
+        })) ?? false;
+
+        if (!sentInit) {
+          toast.error('Video may not have been delivered');
+          return;
+        }
+
+        const initAck = await waitForFileAck(`${messageId}:init`, 1500);
+        if (!initAck) {
+          toast.error('Receiver must be updated to support Secure Video Drop');
+          return;
+        }
+
+        for (let i = 0; i < totalChunks; i++) {
+          const chunk = encrypted.slice(i * chunkSize, (i + 1) * chunkSize);
+
+          let delivered = false;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const ok = (await realtimeManagerRef.current?.send('file', {
+              kind: 'chunk',
+              fileId: messageId,
+              index: i,
+              chunk,
+              totalChunks,
+              fileName: sanitizedName,
+              fileType: 'video/mp4',
+              sealedKind: 'video-drop',
+              iv,
+              timestamp: displayTimestamp
+            })) ?? false;
+
+            if (!ok) {
+              continue;
+            }
+
+            const ackOk = await waitForFileAck(`${messageId}:${i}`, 6000);
+            if (ackOk) {
+              delivered = true;
+              break;
+            }
+          }
+
+          if (!delivered) {
+            toast.error('Video may not have been delivered');
+            return;
+          }
+        }
+      } catch {
+        toast.error('Failed to send video');
+      }
+    })();
+  };
+
+  const handleDownloadVideoDrop = async (fileId: string) => {
+    try {
+      if (!encryptionEngineRef.current) {
+        toast.error('Download failed');
+        return;
+      }
+
+      const t = fileTransfersRef.current.get(fileId);
+      if (!t || t.sealedKind !== 'video-drop' || t.total <= 0 || t.received < t.total) {
+        toast.error('Download failed');
+        return;
+      }
+
+      const encrypted = t.chunks.join('');
+      const aad = buildFileAad({ senderId: t.senderId, fileId });
+      const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, t.iv, aad);
+      try {
+        aad.fill(0);
+      } catch {
+      }
+
+      const decryptedBytes = new Uint8Array(decrypted);
+
+      const fileName = t.fileName || 'secure_video.mp4';
+
+      if (isTauriRuntime()) {
+        try {
+          await tauriInvoke('video_drop_start', { id: fileId, file_name: fileName });
+          const chunkBytes = 48 * 1024;
+          for (let i = 0; i < decryptedBytes.length; i += chunkBytes) {
+            const slice = decryptedBytes.slice(i, Math.min(decryptedBytes.length, i + chunkBytes));
+            const chunkBase64 = bytesToBase64(slice);
+            try {
+              slice.fill(0);
+            } catch {
+            }
+            await tauriInvoke('video_drop_append', { id: fileId, chunk_base64: chunkBase64 });
+          }
+          await tauriInvoke('video_drop_finish_open', { id: fileId, mime_type: 'video/mp4' });
+          activeNativeVideoDropIdsRef.current.add(fileId);
+        } catch {
+          toast.error('Download failed');
+          return;
+        } finally {
+          try {
+            decryptedBytes.fill(0);
+          } catch {
+          }
+        }
+      } else {
+        let handledNative = false;
+        try {
+          const mod = await import('@capacitor/core');
+          if (mod.Capacitor?.isNativePlatform?.()) {
+            const VideoDrop = mod.registerPlugin('VideoDrop') as {
+              start: (args: { id: string; fileName: string; mimeType: string }) => Promise<{ ok?: boolean }>;
+              append: (args: { id: string; chunkBase64: string }) => Promise<{ ok?: boolean }>;
+              finishAndOpen: (args: { id: string; mimeType: string }) => Promise<{ ok?: boolean }>;
+            };
+            await VideoDrop.start({ id: fileId, fileName, mimeType: 'video/mp4' });
+            const chunkBytes = 48 * 1024;
+            for (let i = 0; i < decryptedBytes.length; i += chunkBytes) {
+              const slice = decryptedBytes.slice(i, Math.min(decryptedBytes.length, i + chunkBytes));
+              const chunkBase64 = bytesToBase64(slice);
+              try {
+                slice.fill(0);
+              } catch {
+              }
+              await VideoDrop.append({ id: fileId, chunkBase64 });
+            }
+            await VideoDrop.finishAndOpen({ id: fileId, mimeType: 'video/mp4' });
+            activeNativeVideoDropIdsRef.current.add(fileId);
+            handledNative = true;
+          }
+        } catch {
+        } finally {
+          try {
+            decryptedBytes.fill(0);
+          } catch {
+          }
+        }
+
+        if (!handledNative) {
+          const blob = new Blob([decryptedBytes], { type: 'video/mp4' });
+          const objectUrl = URL.createObjectURL(blob);
+
+          if (typeof document === 'undefined') {
+            try {
+              URL.revokeObjectURL(objectUrl);
+            } catch {
+            }
+            toast.error('Download failed');
+            return;
+          }
+
+          const link = document.createElement('a');
+          link.href = objectUrl;
+          link.download = fileName;
+          link.rel = 'noopener noreferrer';
+          link.style.display = 'none';
+          document.body.appendChild(link);
+          try {
+            link.click();
+          } finally {
+            try {
+              document.body.removeChild(link);
+            } catch {
+            }
+            setTimeout(() => {
+              try {
+                URL.revokeObjectURL(objectUrl);
+              } catch {
+              }
+            }, 250);
+          }
+        }
+      }
+
+      purgeFileTransfer(fileId);
+      setDownloadedVideoDrops(prev => {
+        const next = new Set(prev);
+        next.add(fileId);
+        return next;
+      });
+    } catch {
+      toast.error('Download failed');
+    }
   };
 
   const triggerSessionTermination = async (reason: TerminationReason) => {
@@ -1743,6 +2089,73 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                           timestamp={voiceMessage.timestamp}
                           onPlayed={handleVoiceMessagePlayed}
                         />
+                      ) : message.type === 'video' ? (
+                        <div
+                          className={cn(
+                            "px-4 py-3 rounded-2xl",
+                            message.sender === 'me'
+                              ? "bg-primary/20 rounded-br-md"
+                              : "glass border border-border/50 rounded-bl-md"
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "p-2 rounded-full",
+                              message.sender === 'me' ? "bg-primary/25" : "bg-muted/30"
+                            )}>
+                              <Video className={cn(
+                                "h-4 w-4",
+                                message.sender === 'me' ? "text-primary-foreground" : "text-muted-foreground"
+                              )} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={cn(
+                                "text-sm",
+                                message.sender === 'me' ? "text-primary-foreground" : "text-foreground"
+                              )}>
+                                {message.sender === 'me' ? '📹 Secure video sent' : '📹 Secure video received'}
+                              </p>
+                              <p className={cn(
+                                "text-xs mt-0.5",
+                                message.sender === 'me' ? "text-primary-foreground/70" : "text-muted-foreground"
+                              )}>
+                                Download-only
+                              </p>
+                              {message.fileName && (
+                                <p className={cn(
+                                  "text-xs mt-0.5 truncate",
+                                  message.sender === 'me' ? "text-primary-foreground/60" : "text-muted-foreground/80"
+                                )}>
+                                  {sanitizeFileName(message.fileName)}
+                                </p>
+                              )}
+                            </div>
+                            {message.sender !== 'me' && !downloadedVideoDrops.has(message.id) && (
+                              <button
+                                onClick={() => void handleDownloadVideoDrop(message.id)}
+                                className={cn(
+                                  "p-2 rounded-full transition-colors active:scale-95",
+                                  "bg-accent/20 text-accent hover:bg-accent/30"
+                                )}
+                                aria-label="Download video"
+                                title="Download video"
+                              >
+                                <Download className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                          {message.sender !== 'me' && downloadedVideoDrops.has(message.id) && (
+                            <div className="mt-2 text-xs text-muted-foreground/70">
+                              ☢️ Securely destroyed after download
+                            </div>
+                          )}
+                          <div className={cn(
+                            "text-xs mt-2 opacity-60",
+                            message.sender === 'me' ? "text-primary-foreground" : "text-muted-foreground"
+                          )}>
+                            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
                       ) : (
                         <div
                           className={cn(
@@ -1887,6 +2300,13 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                   type="file"
                   accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.txt,.csv,.rtf,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.js,.json,.html,.css,.md,image/jpeg,image/png,image/gif,image/webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv,application/rtf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/zip,application/x-rar-compressed,text/javascript,application/json,text/html,text/css,text/markdown"
                   onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept=".mp4,video/mp4"
+                  onChange={handleVideoUpload}
                   className="hidden"
                 />
                 <button
