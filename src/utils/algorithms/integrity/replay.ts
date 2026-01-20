@@ -31,7 +31,7 @@ export interface ReplayValidationResult {
 }
 
 export const DEFAULT_REPLAY_CONFIG: ReplayProtectionConfig = {
-  maxTimeSkewMs: 5 * 60 * 1000,
+  maxTimeSkewMs: 60 * 60 * 1000,
   nonceRetentionMs: 30 * 60 * 1000,
   maxSequenceGap: 32
 };

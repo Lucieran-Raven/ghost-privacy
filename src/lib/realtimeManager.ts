@@ -234,7 +234,7 @@ export class RealtimeManager {
 
     if (typeof payload.timestamp !== 'number' || !Number.isFinite(payload.timestamp)) return false;
     const now = Date.now();
-    if (Math.abs(now - payload.timestamp) > 15 * 60 * 1000) return false;
+    if (Math.abs(now - payload.timestamp) > 60 * 60 * 1000) return false;
 
     try {
       const approx = this.estimatePayloadChars(payload as BroadcastPayload);

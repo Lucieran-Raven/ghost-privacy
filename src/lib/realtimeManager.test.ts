@@ -83,8 +83,8 @@ describe('RealtimeManager replay suppression', () => {
     };
 
     expect((rm as any).shouldAcceptIncoming(p)).toBe(true);
-    expect((rm as any).shouldAcceptIncoming({ ...p, nonce: 'n2', timestamp: baseTime - 16 * 60 * 1000 })).toBe(false);
-    expect((rm as any).shouldAcceptIncoming({ ...p, nonce: 'n3', timestamp: baseTime + 16 * 60 * 1000 })).toBe(false);
+    expect((rm as any).shouldAcceptIncoming({ ...p, nonce: 'n2', timestamp: baseTime - 61 * 60 * 1000 })).toBe(false);
+    expect((rm as any).shouldAcceptIncoming({ ...p, nonce: 'n3', timestamp: baseTime + 61 * 60 * 1000 })).toBe(false);
 
     nowSpy.mockRestore();
   });

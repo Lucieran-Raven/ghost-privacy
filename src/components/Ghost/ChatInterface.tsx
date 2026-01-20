@@ -411,9 +411,14 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
   useEffect(() => {
     const handlePageHide = () => {
+      if (!isTerminatingRef.current) {
+        return;
+      }
+
       if (isCapacitorNative()) {
         return;
       }
+
       try {
         destroyLocalSessionData();
       } catch {
@@ -1199,6 +1204,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     }
 
     try {
+      markActivity();
       const messageId = generateNonce();
       const seq = replayProtectionRef.current.getNextSequence(participantIdRef.current);
       const trimmed = inputText.trim();
@@ -2329,6 +2335,28 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                   title="Attach file"
                 >
                   <Paperclip className="h-5 w-5 text-muted-foreground" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (!isKeyExchangeComplete) {
+                      return;
+                    }
+                    if (!verificationState.verified) {
+                      toast.error('Please verify security codes before sending videos');
+                      if (!verificationState.show) {
+                        setVerificationState(prev => ({ ...prev, show: true }));
+                      }
+                      return;
+                    }
+                    videoInputRef.current?.click();
+                  }}
+                  disabled={!isKeyExchangeComplete}
+                  className="action-button-mobile border border-border/50 bg-secondary/30"
+                  aria-label="Secure Video Drop"
+                  title="Secure Video Drop"
+                >
+                  <Video className="h-5 w-5 text-muted-foreground" />
                 </button>
 
                 <button
