@@ -52,6 +52,15 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   const navigate = useNavigate();
   const { fullCleanup } = useMemoryCleanup();
 
+  const isCapacitorNative = (): boolean => {
+    try {
+      const c = (window as any).Capacitor;
+      return Boolean(c && typeof c.isNativePlatform === 'function' && c.isNativePlatform());
+    } catch {
+      return false;
+    }
+  };
+
   const [messages, setMessages] = useState<QueuedMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isPartnerConnected, setIsPartnerConnected] = useState(false);
@@ -260,13 +269,17 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       if (typeof document === 'undefined') return;
       setIsWindowVisible(!document.hidden);
       if (document.hidden) {
-        setInputText('');
+        if (!isCapacitorNative()) {
+          setInputText('');
+        }
       }
     };
 
     const handleBlur = () => {
       setIsWindowVisible(false);
-      setInputText('');
+      if (!isCapacitorNative()) {
+        setInputText('');
+      }
     };
 
     const handleFocus = () => {
@@ -351,6 +364,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
   useEffect(() => {
     const handlePageHide = () => {
+      if (isCapacitorNative()) {
+        return;
+      }
       try {
         destroyLocalSessionData();
       } catch {
@@ -455,13 +471,29 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       }
     });
 
-    // Handle partner join/leave via presence
     manager.onPresenceChange((participants) => {
       const partnerCount = Math.max(0, participants.length - 1); // Exclude self
       setIsPartnerConnected(partnerCount > 0);
-      
+      partnerCountRef.current = partnerCount;
+
       if (partnerCount === 0 && partnerWasPresentRef.current) {
-        addSystemMessage('👋 Partner left the session');
+        if (partnerDisconnectTimeoutRef.current) {
+          clearTimeout(partnerDisconnectTimeoutRef.current);
+        }
+        partnerDisconnectTimeoutRef.current = setTimeout(() => {
+          if (partnerCountRef.current === 0 && partnerWasPresentRef.current) {
+            addSystemMessage('👋 Partner left the session');
+          }
+        }, 3000);
+        return;
+      }
+
+      if (partnerCount > 0) {
+        partnerWasPresentRef.current = true;
+        if (partnerDisconnectTimeoutRef.current) {
+          clearTimeout(partnerDisconnectTimeoutRef.current);
+          partnerDisconnectTimeoutRef.current = null;
+        }
       }
     });
 
@@ -1805,7 +1837,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                   }}
                   onKeyDown={handleKeyDown}
                   onBlur={() => {
-                    setInputText('');
+                    if (!isCapacitorNative()) {
+                      setInputText('');
+                    }
                   }}
                   onFocus={() => {
                     if (focusScrollTimeoutRef.current) {
