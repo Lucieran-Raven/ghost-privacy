@@ -102,6 +102,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   const lastActivityRef = useRef<number>(Date.now());
   const fileTransfersRef = useRef<Map<string, { chunks: string[]; received: number; total: number; iv: string; fileName: string; fileType: string; sealedKind: string; timestamp: number; senderId: string; cleanupTimer: ReturnType<typeof setTimeout> | null }>>(new Map());
   const pendingFileAcksRef = useRef<Map<string, (ok: boolean) => void>>(new Map());
+  const seenFileAcksRef = useRef<Map<string, number>>(new Map());
   const activeNativeVideoDropIdsRef = useRef<Set<string>>(new Set());
   const localFingerprintRef = useRef<string>('');
   const isTerminatingRef = useRef(false);
@@ -178,6 +179,13 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
   const waitForFileAck = (key: string, timeoutMs: number): Promise<boolean> => {
     return new Promise((resolve) => {
+      const seenAt = seenFileAcksRef.current.get(key);
+      if (typeof seenAt === 'number') {
+        seenFileAcksRef.current.delete(key);
+        resolve(true);
+        return;
+      }
+
       pendingFileAcksRef.current.set(key, resolve);
 
       setTimeout(() => {
@@ -562,10 +570,19 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           if (!fileId) return;
           const ackKind = String(data.ackKind || '');
           if (ackKind === 'init') {
-            const resolver = pendingFileAcksRef.current.get(`${fileId}:init`);
+            const key = `${fileId}:init`;
+            const resolver = pendingFileAcksRef.current.get(key);
             if (resolver) {
-              pendingFileAcksRef.current.delete(`${fileId}:init`);
+              pendingFileAcksRef.current.delete(key);
               resolver(true);
+            } else {
+              const seen = seenFileAcksRef.current;
+              if (seen.size > 2048) {
+                for (const k of Array.from(seen.keys()).slice(0, 512)) {
+                  seen.delete(k);
+                }
+              }
+              seen.set(key, Date.now());
             }
             return;
           }
@@ -578,6 +595,14 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             if (resolver) {
               pendingFileAcksRef.current.delete(k);
               resolver(true);
+            } else {
+              const seen = seenFileAcksRef.current;
+              if (seen.size > 2048) {
+                for (const key of Array.from(seen.keys()).slice(0, 512)) {
+                  seen.delete(key);
+                }
+              }
+              seen.set(k, Date.now());
             }
             return;
           }
@@ -676,6 +701,18 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               cleanupTimer
             };
             fileTransfersRef.current.set(fileId, t);
+
+            if (effectiveSealedKind === 'video-drop') {
+              messageQueueRef.current.addMessage(sessionId, {
+                id: fileId,
+                content: '',
+                sender: 'partner',
+                timestamp: Number(data.timestamp) || payload.timestamp,
+                type: 'video',
+                fileName: sanitizeFileName(String(data.fileName || 'secure_video.mp4')).slice(0, 256)
+              });
+              syncMessagesFromQueue();
+            }
           }
 
           try {
@@ -1352,6 +1389,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         // Compatibility fallback: legacy clients may not ACK or may not handle `file` events.
         let legacyPeer = false;
 
+        const initAckPromise = waitForFileAck(`${messageId}:init`, 2500);
         let sent = (await realtimeManagerRef.current?.send('file', {
           kind: 'init',
           fileId: messageId,
@@ -1363,7 +1401,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         })) ?? false;
 
         if (sent) {
-          const initAck = await waitForFileAck(`${messageId}:init`, 1500);
+          const initAck = await initAckPromise;
           legacyPeer = !initAck;
         }
 
@@ -1387,6 +1425,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
             let delivered = false;
             for (let attempt = 0; attempt < 3; attempt++) {
+              const ackPromise = legacyPeer ? null : waitForFileAck(`${messageId}:${i}`, 6000);
               const ok = (await realtimeManagerRef.current?.send('file', {
                 kind: 'chunk',
                 fileId: messageId,
@@ -1423,7 +1462,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                 delivered = true;
                 break;
               } else {
-                const ackOk = await waitForFileAck(`${messageId}:${i}`, 6000);
+                const ackOk = await (ackPromise ?? Promise.resolve(false));
                 if (ackOk) {
                   delivered = true;
                   break;
@@ -1543,8 +1582,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
         const initAck = await waitForFileAck(`${messageId}:init`, 4000);
         if (!initAck) {
-          toast.error('Receiver must be updated to support Secure Video Drop');
-          return;
+          toast.warning('Receiver may be slow to acknowledge; continuing…');
         }
 
         for (let i = 0; i < totalChunks; i++) {
@@ -1552,6 +1590,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
           let delivered = false;
           for (let attempt = 0; attempt < 3; attempt++) {
+            const ackPromise = waitForFileAck(`${messageId}:${i}`, 12000);
             const ok = (await realtimeManagerRef.current?.send('file', {
               kind: 'chunk',
               fileId: messageId,
@@ -1569,7 +1608,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               continue;
             }
 
-            const ackOk = await waitForFileAck(`${messageId}:${i}`, 12000);
+            const ackOk = await ackPromise;
             if (ackOk) {
               delivered = true;
               break;
@@ -1663,9 +1702,11 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           }
         } catch {
         } finally {
-          try {
-            decryptedBytes.fill(0);
-          } catch {
+          if (handledNative) {
+            try {
+              decryptedBytes.fill(0);
+            } catch {
+            }
           }
         }
 
@@ -1693,6 +1734,10 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           } finally {
             try {
               document.body.removeChild(link);
+            } catch {
+            }
+            try {
+              decryptedBytes.fill(0);
             } catch {
             }
             setTimeout(() => {
