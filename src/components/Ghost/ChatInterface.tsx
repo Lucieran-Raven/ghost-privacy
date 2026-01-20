@@ -623,6 +623,18 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             cleanupTimer
           });
 
+          if (effectiveSealedKind === 'video-drop') {
+            messageQueueRef.current.addMessage(sessionId, {
+              id: fileId,
+              content: '',
+              sender: 'partner',
+              timestamp: Number(data.timestamp) || payload.timestamp,
+              type: 'video',
+              fileName: sanitizeFileName(String(data.fileName || 'secure_video.mp4')).slice(0, 256)
+            });
+            syncMessagesFromQueue();
+          }
+
           await manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
           return;
         }
@@ -694,14 +706,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
           if (t.received >= t.total && t.total > 0) {
             if (t.sealedKind === 'video-drop') {
-              messageQueueRef.current.addMessage(sessionId, {
-                id: fileId,
-                content: '',
-                sender: 'partner',
-                timestamp: t.timestamp,
-                type: 'video',
-                fileName: t.fileName
-              });
               syncMessagesFromQueue();
               return;
             }
@@ -734,6 +738,12 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               fileName: displayFileName
             });
             syncMessagesFromQueue();
+          }
+
+          if (t.sealedKind === 'video-drop') {
+            if (t.received === 1 || t.received === t.total || t.received % 8 === 0) {
+              syncMessagesFromQueue();
+            }
           }
 
           return;
@@ -1531,7 +1541,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           return;
         }
 
-        const initAck = await waitForFileAck(`${messageId}:init`, 1500);
+        const initAck = await waitForFileAck(`${messageId}:init`, 4000);
         if (!initAck) {
           toast.error('Receiver must be updated to support Secure Video Drop');
           return;
@@ -1559,7 +1569,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               continue;
             }
 
-            const ackOk = await waitForFileAck(`${messageId}:${i}`, 6000);
+            const ackOk = await waitForFileAck(`${messageId}:${i}`, 12000);
             if (ackOk) {
               delivered = true;
               break;
