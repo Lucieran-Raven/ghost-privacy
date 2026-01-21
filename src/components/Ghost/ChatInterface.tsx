@@ -2470,9 +2470,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                   }}
                   onKeyDown={handleKeyDown}
                   onBlur={() => {
-                    if (!isCapacitorNative()) {
-                      setInputText('');
-                    }
                   }}
                   onFocus={() => {
                     if (focusScrollTimeoutRef.current) {
