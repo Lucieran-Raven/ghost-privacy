@@ -1668,8 +1668,16 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       }
 
       const t = fileTransfersRef.current.get(fileId);
-      if (!t || t.sealedKind !== 'video-drop' || t.total <= 0 || t.received < t.total) {
+      if (!t) {
+        toast.error('Video not available');
+        return;
+      }
+      if (t.sealedKind !== 'video-drop' || t.total <= 0) {
         toast.error('Download failed');
+        return;
+      }
+      if (t.received < t.total) {
+        toast.info(`Video still receiving (${t.received}/${t.total})`);
         return;
       }
 
@@ -2301,7 +2309,19 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                                 "text-xs mt-0.5",
                                 message.sender === 'me' ? "text-primary-foreground/70" : "text-muted-foreground"
                               )}>
-                                Download-only
+                                {(() => {
+                                  if (message.sender === 'me') {
+                                    return 'Download-only';
+                                  }
+                                  const t = fileTransfersRef.current.get(message.id);
+                                  if (!t || t.sealedKind !== 'video-drop' || t.total <= 0) {
+                                    return 'Download-only';
+                                  }
+                                  if (t.received < t.total) {
+                                    return `Receiving ${t.received}/${t.total}`;
+                                  }
+                                  return 'Ready to download';
+                                })()}
                               </p>
                               {message.fileName && (
                                 <p className={cn(
@@ -2314,10 +2334,32 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                             </div>
                             {message.sender !== 'me' && !downloadedVideoDrops.has(message.id) && (
                               <button
-                                onClick={() => void handleDownloadVideoDrop(message.id)}
+                                onClick={() => {
+                                  const t = fileTransfersRef.current.get(message.id);
+                                  if (!t || t.sealedKind !== 'video-drop' || t.total <= 0) {
+                                    toast.error('Video not available');
+                                    return;
+                                  }
+                                  if (t.received < t.total) {
+                                    toast.info(`Video still receiving (${t.received}/${t.total})`);
+                                    return;
+                                  }
+                                  void handleDownloadVideoDrop(message.id);
+                                }}
+                                disabled={(() => {
+                                  const t = fileTransfersRef.current.get(message.id);
+                                  return !t || t.sealedKind !== 'video-drop' || t.total <= 0 || t.received < t.total;
+                                })()}
                                 className={cn(
                                   "p-2 rounded-full transition-colors active:scale-95",
-                                  "bg-accent/20 text-accent hover:bg-accent/30"
+                                  "bg-accent/20 text-accent hover:bg-accent/30",
+                                  (() => {
+                                    const t = fileTransfersRef.current.get(message.id);
+                                    if (!t || t.sealedKind !== 'video-drop' || t.total <= 0 || t.received < t.total) {
+                                      return 'opacity-50 cursor-not-allowed hover:bg-accent/20';
+                                    }
+                                    return '';
+                                  })()
                                 )}
                                 aria-label="Download video"
                                 title="Download video"
