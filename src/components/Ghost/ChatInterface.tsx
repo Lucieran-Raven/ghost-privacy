@@ -1633,6 +1633,18 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         return;
       }
 
+      let preOpened: Window | null = null;
+      try {
+        if (!isTauriRuntime() && !isCapacitorNative() && typeof window !== 'undefined' && typeof navigator !== 'undefined') {
+          const ua = String(navigator.userAgent || '');
+          const likelyMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+          if (likelyMobile && typeof window.open === 'function') {
+            preOpened = window.open('about:blank', '_blank');
+          }
+        }
+      } catch {
+      }
+
       const t = fileTransfersRef.current.get(fileId);
       if (!t || t.sealedKind !== 'video-drop' || t.total <= 0 || t.received < t.total) {
         toast.error('Download failed');
@@ -1723,19 +1735,20 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             return;
           }
 
-          const link = document.createElement('a');
-          link.href = objectUrl;
-          link.download = fileName;
-          link.rel = 'noopener noreferrer';
-          link.style.display = 'none';
-          document.body.appendChild(link);
-          try {
-            link.click();
-          } finally {
+          if (preOpened) {
             try {
-              document.body.removeChild(link);
+              preOpened.location.href = objectUrl;
+              toast.success('Video opened');
             } catch {
+              try {
+                preOpened.close();
+              } catch {
+              }
+              preOpened = null;
             }
+          }
+
+          if (preOpened) {
             try {
               decryptedBytes.fill(0);
             } catch {
@@ -1745,7 +1758,33 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                 URL.revokeObjectURL(objectUrl);
               } catch {
               }
-            }, 250);
+            }, 30_000);
+          } else {
+
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = fileName;
+            link.rel = 'noopener noreferrer';
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            try {
+              link.click();
+            } finally {
+              try {
+                document.body.removeChild(link);
+              } catch {
+              }
+              try {
+                decryptedBytes.fill(0);
+              } catch {
+              }
+              setTimeout(() => {
+                try {
+                  URL.revokeObjectURL(objectUrl);
+                } catch {
+                }
+              }, 250);
+            }
           }
         }
       }
