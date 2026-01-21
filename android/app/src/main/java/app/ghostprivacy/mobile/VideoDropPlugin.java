@@ -5,6 +5,7 @@ import android.content.ContentValues;
 import android.os.Build;
 import android.net.Uri;
 import android.provider.MediaStore;
+import android.os.ParcelFileDescriptor;
 
 import androidx.core.content.FileProvider;
 
@@ -15,12 +16,10 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.io.File;
-import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.file.Files;
-import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import android.util.Base64;
+import java.io.InputStream;
 
 @CapacitorPlugin(name = "VideoDrop")
 public class VideoDropPlugin extends Plugin {
@@ -71,12 +70,12 @@ public class VideoDropPlugin extends Plugin {
       } catch (Exception ignored) {
       }
 
-      try (OutputStream out = Files.newOutputStream(
-        f.toPath(),
-        StandardOpenOption.CREATE,
-        StandardOpenOption.TRUNCATE_EXISTING,
-        StandardOpenOption.WRITE
-      )) {
+      try (ParcelFileDescriptor pfd = ParcelFileDescriptor.open(
+        f,
+        ParcelFileDescriptor.MODE_CREATE |
+          ParcelFileDescriptor.MODE_TRUNCATE |
+          ParcelFileDescriptor.MODE_WRITE_ONLY
+      ); OutputStream out = new ParcelFileDescriptor.AutoCloseOutputStream(pfd)) {
         out.flush();
       }
 
@@ -115,12 +114,13 @@ public class VideoDropPlugin extends Plugin {
       }
 
       File f = fileForId(id);
-      try (OutputStream out = Files.newOutputStream(
-        f.toPath(),
-        StandardOpenOption.CREATE,
-        StandardOpenOption.APPEND,
-        StandardOpenOption.WRITE
-      )) {
+
+      try (ParcelFileDescriptor pfd = ParcelFileDescriptor.open(
+        f,
+        ParcelFileDescriptor.MODE_CREATE |
+          ParcelFileDescriptor.MODE_APPEND |
+          ParcelFileDescriptor.MODE_WRITE_ONLY
+      ); OutputStream out = new ParcelFileDescriptor.AutoCloseOutputStream(pfd)) {
         out.write(bytes);
         out.flush();
       }
@@ -177,7 +177,8 @@ public class VideoDropPlugin extends Plugin {
           }
 
           try (OutputStream out = getContext().getContentResolver().openOutputStream(uri);
-               InputStream in = Files.newInputStream(f.toPath())) {
+               ParcelFileDescriptor inPfd = ParcelFileDescriptor.open(f, ParcelFileDescriptor.MODE_READ_ONLY);
+               InputStream in = new ParcelFileDescriptor.AutoCloseInputStream(inPfd)) {
             if (out == null) {
               throw new RuntimeException("openOutputStream failed");
             }
@@ -200,12 +201,14 @@ public class VideoDropPlugin extends Plugin {
         openedUri = FileProvider.getUriForFile(getContext(), authority, f);
       }
 
-      Intent intent = new Intent(Intent.ACTION_VIEW);
-      intent.setDataAndType(openedUri, mimeType);
-      intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
-      getContext().startActivity(intent);
+      try {
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.setDataAndType(openedUri, mimeType);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(intent);
+      } catch (Exception ignored) {
+      }
 
       JSObject ret = new JSObject();
       ret.put("ok", true);

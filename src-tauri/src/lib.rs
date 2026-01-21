@@ -1120,7 +1120,8 @@ fn video_drop_finish_open(app: tauri::AppHandle, id: String, mime_type: String) 
   let dest = downloads_dir.join(file_name);
 
   ghostfs::copy(&src, &dest).map_err(|_| "write failed".to_string())?;
-  open_in_default_app(&dest)
+  let _ = open_in_default_app(&dest);
+  Ok(())
 }
 
 #[tauri::command]
