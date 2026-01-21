@@ -2346,17 +2346,13 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                                   }
                                   void handleDownloadVideoDrop(message.id);
                                 }}
-                                disabled={(() => {
-                                  const t = fileTransfersRef.current.get(message.id);
-                                  return !t || t.sealedKind !== 'video-drop' || t.total <= 0 || t.received < t.total;
-                                })()}
                                 className={cn(
                                   "p-2 rounded-full transition-colors active:scale-95",
                                   "bg-accent/20 text-accent hover:bg-accent/30",
                                   (() => {
                                     const t = fileTransfersRef.current.get(message.id);
                                     if (!t || t.sealedKind !== 'video-drop' || t.total <= 0 || t.received < t.total) {
-                                      return 'opacity-50 cursor-not-allowed hover:bg-accent/20';
+                                      return 'opacity-80';
                                     }
                                     return '';
                                   })()
