@@ -1818,31 +1818,54 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               }, 5 * 60 * 1000);
             } else {
 
-              const link = document.createElement('a');
-              link.href = objectUrl;
-              link.download = fileName;
-              link.target = '_blank';
-              link.rel = 'noopener noreferrer';
-              link.style.display = 'none';
-              document.body.appendChild(link);
-              try {
-                link.click();
-              } finally {
+              if (likelyMobile && typeof window !== 'undefined') {
+                let opened: Window | null = null;
                 try {
-                  document.body.removeChild(link);
+                  opened = window.open(objectUrl, '_blank');
                 } catch {
+                  opened = null;
                 }
-                try {
-                  decryptedBytes.fill(0);
-                } catch {
-                }
-                setTimeout(() => {
+
+                if (!opened) {
                   try {
-                    URL.revokeObjectURL(objectUrl);
+                    window.location.href = objectUrl;
+                    toast.success('Video opened');
+                  } catch {
+                    // fall through to anchor
+                  }
+                } else {
+                  toast.success('Video opened');
+                }
+              }
+
+              if (!likelyMobile || (typeof window !== 'undefined' && typeof window.location !== 'undefined' && String(window.location.href).startsWith('blob:') === false)) {
+                const link = document.createElement('a');
+                link.href = objectUrl;
+                link.download = fileName;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                try {
+                  link.click();
+                } finally {
+                  try {
+                    document.body.removeChild(link);
                   } catch {
                   }
-                }, 250);
+                }
               }
+
+              try {
+                decryptedBytes.fill(0);
+              } catch {
+              }
+              setTimeout(() => {
+                try {
+                  URL.revokeObjectURL(objectUrl);
+                } catch {
+                }
+              }, 30 * 1000);
             }
           }
         }
