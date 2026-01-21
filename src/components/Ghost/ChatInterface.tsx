@@ -1634,12 +1634,34 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       }
 
       let preOpened: Window | null = null;
+      let likelyMobile = false;
+      let preferWebShare = false;
       try {
         if (!isTauriRuntime() && !isCapacitorNative() && typeof window !== 'undefined' && typeof navigator !== 'undefined') {
           const ua = String(navigator.userAgent || '');
-          const likelyMobile = /Android|iPhone|iPad|iPod/i.test(ua);
-          if (likelyMobile && typeof window.open === 'function') {
-            preOpened = window.open('about:blank', '_blank');
+          likelyMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+          if (likelyMobile) {
+            try {
+              const nav: any = navigator;
+              if (typeof nav.share === 'function' && typeof File !== 'undefined') {
+                if (typeof nav.canShare === 'function') {
+                  try {
+                    const probe = new File([], 'probe.mp4', { type: 'video/mp4' });
+                    preferWebShare = !!nav.canShare({ files: [probe] });
+                  } catch {
+                    preferWebShare = true;
+                  }
+                } else {
+                  preferWebShare = true;
+                }
+              }
+            } catch {
+              preferWebShare = false;
+            }
+
+            if (!preferWebShare && typeof window.open === 'function') {
+              preOpened = window.open('about:blank', '_blank');
+            }
           }
         }
       } catch {
@@ -1724,56 +1746,66 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
         if (!handledNative) {
           const blob = new Blob([decryptedBytes], { type: 'video/mp4' });
-          const objectUrl = URL.createObjectURL(blob);
 
-          if (typeof document === 'undefined') {
+          let handledWeb = false;
+          if (likelyMobile && typeof navigator !== 'undefined') {
             try {
-              URL.revokeObjectURL(objectUrl);
+              const nav: any = navigator;
+              if (typeof nav.share === 'function' && typeof File !== 'undefined') {
+                const f = new File([blob], fileName, { type: 'video/mp4' });
+                if (typeof nav.canShare === 'function') {
+                  if (nav.canShare({ files: [f] })) {
+                    await nav.share({ files: [f], title: fileName });
+                    handledWeb = true;
+                  }
+                } else {
+                  await nav.share({ files: [f], title: fileName });
+                  handledWeb = true;
+                }
+              }
             } catch {
             }
-            toast.error('Download failed');
-            return;
           }
 
-          if (preOpened) {
+          if (handledWeb) {
             try {
-              preOpened.location.href = objectUrl;
-              toast.success('Video opened');
+              decryptedBytes.fill(0);
             } catch {
+            }
+
+            if (preOpened) {
               try {
                 preOpened.close();
               } catch {
               }
               preOpened = null;
             }
-          }
+          } else {
+            const objectUrl = URL.createObjectURL(blob);
 
-          if (preOpened) {
-            try {
-              decryptedBytes.fill(0);
-            } catch {
-            }
-            setTimeout(() => {
+            if (typeof document === 'undefined') {
               try {
                 URL.revokeObjectURL(objectUrl);
               } catch {
               }
-            }, 30_000);
-          } else {
+              toast.error('Download failed');
+              return;
+            }
 
-            const link = document.createElement('a');
-            link.href = objectUrl;
-            link.download = fileName;
-            link.rel = 'noopener noreferrer';
-            link.style.display = 'none';
-            document.body.appendChild(link);
-            try {
-              link.click();
-            } finally {
+            if (preOpened) {
               try {
-                document.body.removeChild(link);
+                preOpened.location.href = objectUrl;
+                toast.success('Video opened');
               } catch {
+                try {
+                  preOpened.close();
+                } catch {
+                }
+                preOpened = null;
               }
+            }
+
+            if (preOpened) {
               try {
                 decryptedBytes.fill(0);
               } catch {
@@ -1783,7 +1815,34 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                   URL.revokeObjectURL(objectUrl);
                 } catch {
                 }
-              }, 250);
+              }, 5 * 60 * 1000);
+            } else {
+
+              const link = document.createElement('a');
+              link.href = objectUrl;
+              link.download = fileName;
+              link.target = '_blank';
+              link.rel = 'noopener noreferrer';
+              link.style.display = 'none';
+              document.body.appendChild(link);
+              try {
+                link.click();
+              } finally {
+                try {
+                  document.body.removeChild(link);
+                } catch {
+                }
+                try {
+                  decryptedBytes.fill(0);
+                } catch {
+                }
+                setTimeout(() => {
+                  try {
+                    URL.revokeObjectURL(objectUrl);
+                  } catch {
+                  }
+                }, 250);
+              }
             }
           }
         }
