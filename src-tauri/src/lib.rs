@@ -1094,7 +1094,7 @@ fn video_drop_append(id: String, chunk_base64: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn video_drop_finish_open(id: String, mime_type: String) -> Result<(), String> {
+fn video_drop_finish_open(app: tauri::AppHandle, id: String, mime_type: String) -> Result<(), String> {
   if !is_safe_video_drop_id(&id) {
     return Err("invalid id".to_string());
   }
@@ -1106,7 +1106,21 @@ fn video_drop_finish_open(id: String, mime_type: String) -> Result<(), String> {
   let map = map.lock().unwrap_or_else(|e| e.into_inner());
   let p = map.get(&id).ok_or_else(|| "missing".to_string())?.to_string();
 
-  open_in_default_app(Path::new(&p))
+  let src = PathBuf::from(&p);
+  let file_name = src
+    .file_name()
+    .ok_or_else(|| "missing".to_string())?
+    .to_string_lossy()
+    .to_string();
+
+  let downloads_dir = app
+    .path()
+    .download_dir()
+    .map_err(|_| "open failed".to_string())?;
+  let dest = downloads_dir.join(file_name);
+
+  ghostfs::copy(&src, &dest).map_err(|_| "write failed".to_string())?;
+  open_in_default_app(&dest)
 }
 
 #[tauri::command]

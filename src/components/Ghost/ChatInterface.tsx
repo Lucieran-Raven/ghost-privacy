@@ -1708,6 +1708,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           }
           await tauriInvoke('video_drop_finish_open', { id: fileId, mime_type: 'video/mp4' });
           activeNativeVideoDropIdsRef.current.add(fileId);
+          toast.success('Video saved');
         } catch {
           toast.error('Download failed');
           return;
@@ -1743,6 +1744,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             await VideoDrop.finishAndOpen({ id: fileId, mimeType: 'video/mp4' });
             activeNativeVideoDropIdsRef.current.add(fileId);
             handledNative = true;
+            toast.success('Video saved');
           }
         } catch {
           if (isNativePlatform) {
