@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from 'react';
+﻿import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Ghost, Send, Paperclip, Shield, X, Loader2, Trash2, HardDrive, FileText, FileSpreadsheet, FileImage, FileArchive, FileCode, File, AlertTriangle, Clock, Download, Video } from 'lucide-react';
 import { toast } from 'sonner';
@@ -108,6 +108,15 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   const isTerminatingRef = useRef(false);
   const verificationShownRef = useRef(false);
   const systemMessagesShownRef = useRef<Set<string>>(new Set());
+
+  const isCapacitorNativeShadow = (): boolean => {
+    try {
+      const c = (window as any).Capacitor;
+      return Boolean(c && typeof c.isNativePlatform === 'function' && c.isNativePlatform());
+    } catch {
+      return false;
+    }
+  };
   const lastTerminationRef = useRef<number>(0);
 
   const replayProtectionRef = useRef(getReplayProtection());
@@ -511,7 +520,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         }
       }, 60 * 1000);
 
-      addSystemMessage('🔐 Secure connection established');
+      addSystemMessage('ðŸ” Secure connection established');
 
     } catch {
       setConnectionState({ status: 'error', progress: 0, error: 'Connection failed' });
@@ -542,7 +551,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         }
         partnerDisconnectTimeoutRef.current = setTimeout(() => {
           if (partnerCountRef.current === 0 && partnerWasPresentRef.current) {
-            addSystemMessage('👋 Partner left the session');
+            addSystemMessage('ðŸ‘‹ Partner left the session');
           }
         }, 3000);
         return;
@@ -822,12 +831,12 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           const pinRes = checkOrPinFingerprint(pinKey, remoteFingerprint);
           if (pinRes.status === 'mismatch') {
             toast.error('Security alert: partner key changed. Session blocked.');
-            addSystemMessage('🚫 Security alert: partner fingerprint changed — session ended');
+            addSystemMessage('ðŸš« Security alert: partner fingerprint changed â€” session ended');
             await handleEndSession();
             return;
           }
           if (pinRes.status === 'pinned') {
-            addSystemMessage('📌 Fingerprint pinned (TOFU). Always verify codes for high-risk conversations.');
+            addSystemMessage('ðŸ“Œ Fingerprint pinned (TOFU). Always verify codes for high-risk conversations.');
           }
         }
 
@@ -910,7 +919,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             }));
           }
 
-          addSystemMessage('🔐 Encryption established - verify security codes');
+          addSystemMessage('ðŸ” Encryption established - verify security codes');
         }
       } catch {
         toast.error('Failed to establish secure connection');
@@ -1105,7 +1114,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   const handleVerificationConfirmed = () => {
     setVerificationState(prev => ({ ...prev, show: false, verified: true }));
     setVoiceVerified(true);
-    addSystemMessage('✅ Security verified - all features enabled');
+    addSystemMessage('âœ… Security verified - all features enabled');
     toast.success('Connection verified as secure');
   };
 
@@ -1582,7 +1591,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
         const initAck = await waitForFileAck(`${messageId}:init`, 4000);
         if (!initAck) {
-          toast.warning('Receiver may be slow to acknowledge; continuing…');
+          toast.warning('Receiver may be slow to acknowledge; continuingâ€¦');
         }
 
         for (let i = 0; i < totalChunks; i++) {
@@ -1709,8 +1718,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           await tauriInvoke('video_drop_finish_open', { id: fileId, mime_type: 'video/mp4' });
           activeNativeVideoDropIdsRef.current.add(fileId);
           toast.success('Video saved');
-        } catch {
-          toast.error('Download failed');
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : '';
+          toast.error(msg ? `Download failed: ${msg}` : 'Download failed');
           return;
         } finally {
           try {
@@ -1893,6 +1903,151 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         next.add(fileId);
         return next;
       });
+    } catch {
+      toast.error('Download failed');
+    }
+  };
+
+  const handleDownloadFileDrop = async (fileId: string) => {
+    try {
+      if (!encryptionEngineRef.current) {
+        toast.error('Download failed');
+        return;
+      }
+
+      const t = fileTransfersRef.current.get(fileId);
+      if (!t) {
+        toast.error('Download failed');
+        return;
+      }
+      if (t.sealedKind !== 'file' || t.total <= 0) {
+        toast.error('Download failed');
+        return;
+      }
+      if (t.received < t.total) {
+        toast.info(`File still receiving (${t.received}/${t.total})`);
+        return;
+      }
+
+      const encrypted = t.chunks.join('');
+      const aad = buildFileAad({ senderId: t.senderId, fileId });
+      const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, t.iv, aad);
+      try {
+        aad.fill(0);
+      } catch {
+      }
+
+      const decryptedBytes = new Uint8Array(decrypted);
+      const sniffedType = sniffMimeFromBytes(decryptedBytes) || t.fileType || 'application/octet-stream';
+      const fileName = normalizeFileNameForMime(t.fileName || 'download', sniffedType);
+
+      if (isTauriRuntime()) {
+        try {
+          await tauriInvoke('file_drop_start', { id: fileId, file_name: fileName });
+          const chunkBytes = 48 * 1024;
+          for (let i = 0; i < decryptedBytes.length; i += chunkBytes) {
+            const slice = decryptedBytes.slice(i, Math.min(decryptedBytes.length, i + chunkBytes));
+            const chunkBase64 = bytesToBase64(slice);
+            try {
+              slice.fill(0);
+            } catch {
+            }
+            await tauriInvoke('file_drop_append', { id: fileId, chunk_base64: chunkBase64 });
+          }
+          await tauriInvoke('file_drop_finish_open', { id: fileId, mime_type: sniffedType });
+          toast.success('File saved');
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : '';
+          toast.error(msg ? `Download failed: ${msg}` : 'Download failed');
+          return;
+        } finally {
+          try {
+            decryptedBytes.fill(0);
+          } catch {
+          }
+        }
+      } else {
+        let handledNative = false;
+        let isNativePlatform = false;
+        try {
+          const mod = await import('@capacitor/core');
+          isNativePlatform = Boolean(mod.Capacitor?.isNativePlatform?.());
+          if (isNativePlatform) {
+            const VideoDrop = mod.registerPlugin('VideoDrop') as {
+              start: (args: { id: string; fileName: string; mimeType: string }) => Promise<{ ok?: boolean }>;
+              append: (args: { id: string; chunkBase64: string }) => Promise<{ ok?: boolean }>;
+              finishAndOpen: (args: { id: string; mimeType: string }) => Promise<{ ok?: boolean }>;
+            };
+            await VideoDrop.start({ id: fileId, fileName, mimeType: sniffedType });
+            const chunkBytes = 48 * 1024;
+            for (let i = 0; i < decryptedBytes.length; i += chunkBytes) {
+              const slice = decryptedBytes.slice(i, Math.min(decryptedBytes.length, i + chunkBytes));
+              const chunkBase64 = bytesToBase64(slice);
+              try {
+                slice.fill(0);
+              } catch {
+              }
+              await VideoDrop.append({ id: fileId, chunkBase64 });
+            }
+            await VideoDrop.finishAndOpen({ id: fileId, mimeType: sniffedType });
+            handledNative = true;
+            toast.success('File saved');
+          }
+        } catch (error) {
+          if (isNativePlatform) {
+            const msg = error instanceof Error ? error.message : '';
+            toast.error(msg ? `Download failed: ${msg}` : 'Download failed');
+            return;
+          }
+        } finally {
+          if (handledNative) {
+            try {
+              decryptedBytes.fill(0);
+            } catch {
+            }
+          }
+        }
+
+        if (!handledNative) {
+          const blob = new Blob([decryptedBytes], { type: sniffedType || 'application/octet-stream' });
+          const objectUrl = URL.createObjectURL(blob);
+          try {
+            if (typeof document === 'undefined') {
+              toast.error('Download failed');
+              return;
+            }
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = fileName;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            try {
+              link.click();
+            } finally {
+              try {
+                document.body.removeChild(link);
+              } catch {
+              }
+            }
+            toast.success('File downloaded');
+          } finally {
+            try {
+              decryptedBytes.fill(0);
+            } catch {
+            }
+            setTimeout(() => {
+              try {
+                URL.revokeObjectURL(objectUrl);
+              } catch {
+              }
+            }, 30 * 1000);
+          }
+        }
+      }
+
+      purgeFileTransfer(fileId);
     } catch {
       toast.error('Download failed');
     }
@@ -2311,7 +2466,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                                 "text-sm",
                                 message.sender === 'me' ? "text-primary-foreground" : "text-foreground"
                               )}>
-                                {message.sender === 'me' ? '📹 Secure video sent' : '📹 Secure video received'}
+                                {message.sender === 'me' ? 'ðŸ“¹ Secure video sent' : 'ðŸ“¹ Secure video received'}
                               </p>
                               <p className={cn(
                                 "text-xs mt-0.5",
@@ -2374,7 +2529,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                           </div>
                           {message.sender !== 'me' && downloadedVideoDrops.has(message.id) && (
                             <div className="mt-2 text-xs text-muted-foreground/70">
-                              ☢️ Securely destroyed after download
+                              â˜¢ï¸ Securely destroyed after download
                             </div>
                           )}
                           <div className={cn(
@@ -2640,3 +2795,4 @@ const ConnectionStatusIndicator = ({ state }: { state: ConnectionState }) => {
 };
 
 export default ChatInterface;
+

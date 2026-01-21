@@ -25,6 +25,29 @@ import java.io.InputStream;
 public class VideoDropPlugin extends Plugin {
   private final HashMap<String, String> fileNames = new HashMap<>();
 
+  private static String sanitizeCacheFileName(String fileName) {
+    if (fileName == null) return "file.bin";
+    String trimmed = fileName.trim();
+    if (trimmed.length() == 0) return "file.bin";
+
+    StringBuilder out = new StringBuilder(Math.min(trimmed.length(), 128));
+    for (int i = 0; i < trimmed.length() && out.length() < 128; i++) {
+      char c = trimmed.charAt(i);
+      boolean ok =
+        (c >= 'a' && c <= 'z') ||
+        (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') ||
+        c == '-' || c == '_' || c == '.';
+      if (ok) out.append(c);
+    }
+
+    // Avoid hidden/empty names
+    while (out.length() > 0 && out.charAt(0) == '.') out.deleteCharAt(0);
+    while (out.length() > 0 && out.charAt(out.length() - 1) == '.') out.deleteCharAt(out.length() - 1);
+    if (out.length() == 0) return "file.bin";
+    return out.toString();
+  }
+
   private static boolean isSafeId(String id) {
     if (id == null) return false;
     if (id.length() < 1 || id.length() > 128) return false;
@@ -42,7 +65,9 @@ public class VideoDropPlugin extends Plugin {
 
   private File fileForId(String id) {
     File dir = getContext().getCacheDir();
-    return new File(dir, "ghost_video_drop_" + id + ".mp4");
+    String fileName = fileNames.get(id);
+    String safeName = sanitizeCacheFileName(fileName);
+    return new File(dir, "ghost_drop_" + id + "_" + safeName);
   }
 
   @PluginMethod
@@ -236,6 +261,8 @@ public class VideoDropPlugin extends Plugin {
         }
       } catch (Exception ignored) {
       }
+
+      fileNames.remove(id);
 
       JSObject ret = new JSObject();
       ret.put("ok", true);

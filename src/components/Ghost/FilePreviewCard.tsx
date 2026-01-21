@@ -7,9 +7,10 @@ interface FilePreviewCardProps {
   fileName: string;
   content: string;
   sender: 'me' | 'partner';
+  onDownload?: () => void;
 }
 
-const FilePreviewCard = ({ fileName, content, sender }: FilePreviewCardProps) => {
+const FilePreviewCard = ({ fileName, content, sender, onDownload }: FilePreviewCardProps) => {
   const safeName = sanitizeFileName(fileName);
   const iconType = getFileIconType(safeName);
   const extension = safeName.split('.').pop()?.toUpperCase() || 'FILE';
@@ -62,6 +63,14 @@ const FilePreviewCard = ({ fileName, content, sender }: FilePreviewCardProps) =>
   const handleDownload = (e?: MouseEvent) => {
     if (e) {
       e.stopPropagation();
+    }
+
+    if (typeof onDownload === 'function') {
+      try {
+        onDownload();
+      } catch {
+      }
+      return;
     }
 
     if (!(objectUrl.startsWith('blob:') || objectUrl.startsWith('data:'))) {

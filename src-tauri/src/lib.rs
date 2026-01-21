@@ -112,6 +112,7 @@ static MLOCK_WARNED: AtomicBool = AtomicBool::new(false);
 static VAULT_CAP_TAGS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 
 static VIDEO_DROP_FILES: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+static FILE_DROP_FILES: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 
 const MAX_SESSION_ID_LEN: usize = 32;
 const MAX_CAPABILITY_TOKEN_LEN: usize = 256;
@@ -967,6 +968,35 @@ fn is_safe_video_drop_id(id: &str) -> bool {
   id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+fn sanitize_file_drop_file_name(file_name: &str) -> String {
+  let mut out = String::with_capacity(file_name.len().min(128));
+  for c in file_name.chars() {
+    if out.len() >= 128 {
+      break;
+    }
+    if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
+      out.push(c);
+    }
+  }
+
+  let trimmed = out.trim_matches('.').to_string();
+  if trimmed.is_empty() {
+    return "file.bin".to_string();
+  }
+  trimmed
+}
+
+fn file_drop_temp_path(id: &str, file_name: &str) -> Result<PathBuf, String> {
+  if !is_safe_video_drop_id(id) {
+    return Err("invalid id".to_string());
+  }
+
+  let safe_name = sanitize_file_drop_file_name(file_name);
+  let dir = std::env::temp_dir();
+  let combined = format!("ghost-file-drop-{}-{}", id, safe_name);
+  Ok(dir.join(combined))
+}
+
 fn sanitize_video_drop_file_name(file_name: &str) -> String {
   let mut out = String::with_capacity(file_name.len().min(128));
   for c in file_name.chars() {
@@ -1032,6 +1062,111 @@ fn open_in_default_app(path: &Path) -> Result<(), String> {
       .map_err(|_| "open failed".to_string())?;
     Ok(())
   }
+}
+
+#[tauri::command]
+fn file_drop_start(id: String, file_name: String) -> Result<(), String> {
+  if !is_safe_video_drop_id(&id) {
+    return Err("invalid id".to_string());
+  }
+
+  let path = file_drop_temp_path(&id, &file_name)?;
+  {
+    let mut f = ghostfs::File::options()
+      .create(true)
+      .truncate(true)
+      .write(true)
+      .open(&path)
+      .map_err(|_| "write failed".to_string())?;
+    f.flush().map_err(|_| "write failed".to_string())?;
+  }
+
+  let map = FILE_DROP_FILES.get_or_init(|| Mutex::new(HashMap::new()));
+  let mut map = map.lock().unwrap_or_else(|e| e.into_inner());
+  map.insert(id, path.to_string_lossy().to_string());
+  Ok(())
+}
+
+#[tauri::command]
+fn file_drop_append(id: String, chunk_base64: String) -> Result<(), String> {
+  if !is_safe_video_drop_id(&id) {
+    return Err("invalid id".to_string());
+  }
+
+  if chunk_base64.len() > MAX_B64_INPUT_LEN {
+    return Err("chunk too large".to_string());
+  }
+
+  let bytes = BASE64
+    .decode(chunk_base64.as_bytes())
+    .map_err(|_| "invalid base64".to_string())?;
+
+  let map = FILE_DROP_FILES.get_or_init(|| Mutex::new(HashMap::new()));
+  let map = map.lock().unwrap_or_else(|e| e.into_inner());
+  let p = map.get(&id).ok_or_else(|| "missing".to_string())?.to_string();
+  drop(map);
+
+  let mut f = ghostfs::File::options()
+    .create(true)
+    .append(true)
+    .open(&p)
+    .map_err(|_| "write failed".to_string())?;
+  let mut written = 0usize;
+  while written < bytes.len() {
+    let n = f.write(&bytes[written..]).map_err(|_| "write failed".to_string())?;
+    if n == 0 {
+      return Err("write failed".to_string());
+    }
+    written += n;
+  }
+  Ok(())
+}
+
+#[tauri::command]
+fn file_drop_finish_open(app: tauri::AppHandle, id: String, mime_type: String) -> Result<(), String> {
+  if !is_safe_video_drop_id(&id) {
+    return Err("invalid id".to_string());
+  }
+  if mime_type.len() > 256 {
+    return Err("unsupported mime".to_string());
+  }
+
+  let map = FILE_DROP_FILES.get_or_init(|| Mutex::new(HashMap::new()));
+  let map = map.lock().unwrap_or_else(|e| e.into_inner());
+  let p = map.get(&id).ok_or_else(|| "missing".to_string())?.to_string();
+
+  let src = PathBuf::from(&p);
+  let file_name = src
+    .file_name()
+    .ok_or_else(|| "missing".to_string())?
+    .to_string_lossy()
+    .to_string();
+
+  let downloads_dir = app
+    .path()
+    .download_dir()
+    .map_err(|_| "open failed".to_string())?;
+  let dest = downloads_dir.join(file_name);
+
+  ghostfs::copy(&src, &dest).map_err(|_| "write failed".to_string())?;
+  let _ = open_in_default_app(&dest);
+  Ok(())
+}
+
+#[tauri::command]
+fn file_drop_purge(id: String) -> Result<(), String> {
+  if !is_safe_video_drop_id(&id) {
+    return Err("invalid id".to_string());
+  }
+
+  let map = FILE_DROP_FILES.get_or_init(|| Mutex::new(HashMap::new()));
+  let mut map = map.lock().unwrap_or_else(|e| e.into_inner());
+  if let Some(p) = map.remove(&id) {
+    if !p.is_empty() {
+      let _ = ghostfs::remove_file(&p);
+    }
+  }
+  Ok(())
 }
 
 #[tauri::command]
@@ -1200,7 +1335,11 @@ pub fn run() {
       video_drop_start,
       video_drop_append,
       video_drop_finish_open,
-      video_drop_purge
+      video_drop_purge,
+      file_drop_start,
+      file_drop_append,
+      file_drop_finish_open,
+      file_drop_purge
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application");

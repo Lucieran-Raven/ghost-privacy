@@ -42,6 +42,7 @@ public class MainActivity extends BridgeActivity {
       registerPlugin(BuildIntegrityPlugin.class);
       registerPlugin(VersionGuardPlugin.class);
       registerPlugin(AndroidKeystorePlugin.class);
+      registerPlugin(VideoDropPlugin.class);
     } catch (Exception e) {
     }
     hardenWebView();
