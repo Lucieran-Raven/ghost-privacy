@@ -1007,9 +1007,9 @@ fn open_in_default_app(path: &Path) -> Result<(), String> {
 
   #[cfg(target_os = "windows")]
   {
-    // Use `cmd /C start` to delegate to the OS default handler.
-    std::process::Command::new("cmd")
-      .args(["/C", "start", "", &p])
+    // Use explorer.exe which reliably handles paths with spaces and delegates to the default handler.
+    std::process::Command::new("explorer")
+      .arg(&p)
       .spawn()
       .map_err(|_| "open failed".to_string())?;
     Ok(())

@@ -1719,9 +1719,11 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         }
       } else {
         let handledNative = false;
+        let isNativePlatform = false;
         try {
           const mod = await import('@capacitor/core');
-          if (mod.Capacitor?.isNativePlatform?.()) {
+          isNativePlatform = Boolean(mod.Capacitor?.isNativePlatform?.());
+          if (isNativePlatform) {
             const VideoDrop = mod.registerPlugin('VideoDrop') as {
               start: (args: { id: string; fileName: string; mimeType: string }) => Promise<{ ok?: boolean }>;
               append: (args: { id: string; chunkBase64: string }) => Promise<{ ok?: boolean }>;
@@ -1743,6 +1745,10 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             handledNative = true;
           }
         } catch {
+          if (isNativePlatform) {
+            toast.error('Download failed');
+            return;
+          }
         } finally {
           if (handledNative) {
             try {
