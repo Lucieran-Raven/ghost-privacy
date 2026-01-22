@@ -1510,7 +1510,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         syncMessagesFromQueue();
 
         const MAX_FILE_CHUNKS = 4096;
-        const chunkSize = 12_000;
+        const chunkSize = 16_000;
         const totalChunks = Math.ceil(encrypted.length / chunkSize);
 
         if (!Number.isFinite(totalChunks) || totalChunks <= 0 || totalChunks > MAX_FILE_CHUNKS) {
@@ -1563,13 +1563,10 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         }
 
         if (sent) {
-          for (let i = 0; i < totalChunks; i++) {
-            const chunk = encrypted.slice(i * chunkSize, (i + 1) * chunkSize);
-
-            let delivered = false;
-            for (let attempt = 0; attempt < 3; attempt++) {
-              const ackPromise = legacyPeer ? null : waitForFileAck(`${messageId}:${i}`, 6000);
-              debugStage = `send_chunk_${i}_attempt_${attempt}`;
+          if (legacyPeer) {
+            for (let i = 0; i < totalChunks; i++) {
+              const chunk = encrypted.slice(i * chunkSize, (i + 1) * chunkSize);
+              debugStage = `send_chunk_${i}_legacy`;
               const ok = (await realtimeManagerRef.current?.send('file', {
                 kind: 'chunk',
                 fileId: messageId,
@@ -1583,16 +1580,38 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               })) ?? false;
 
               if (!ok) {
-                continue;
+                toast.error(`File send failed at chunk ${i + 1}/${totalChunks}`);
+                sent = false;
+                break;
               }
 
-              if (legacyPeer) {
-                // Best-effort for older peers: send a duplicate to reduce drop risk.
-                try {
-                  await new Promise(resolve => setTimeout(resolve, 120));
-                } catch {
-                }
-                await realtimeManagerRef.current?.send('file', {
+              // Best-effort duplicate to reduce drop risk.
+              try {
+                await new Promise(resolve => setTimeout(resolve, 80));
+              } catch {
+              }
+              await realtimeManagerRef.current?.send('file', {
+                kind: 'chunk',
+                fileId: messageId,
+                index: i,
+                chunk,
+                totalChunks,
+                iv,
+                fileName: sanitizedName,
+                fileType: file.type,
+                timestamp: displayTimestamp
+              });
+            }
+          } else {
+            const WINDOW = 6;
+            type InFlight = { i: number; p: Promise<{ i: number; ok: boolean }> };
+
+            const sendChunkWithRetry = async (i: number): Promise<boolean> => {
+              const chunk = encrypted.slice(i * chunkSize, (i + 1) * chunkSize);
+              for (let attempt = 0; attempt < 3; attempt++) {
+                const ackPromise = waitForFileAck(`${messageId}:${i}`, 6000);
+                debugStage = `send_chunk_${i}_attempt_${attempt}`;
+                const ok = (await realtimeManagerRef.current?.send('file', {
                   kind: 'chunk',
                   fileId: messageId,
                   index: i,
@@ -1602,23 +1621,45 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                   fileName: sanitizedName,
                   fileType: file.type,
                   timestamp: displayTimestamp
-                });
-                delivered = true;
-                break;
-              } else {
+                })) ?? false;
+
+                if (!ok) {
+                  continue;
+                }
+
                 debugStage = `wait_chunk_ack_${i}_attempt_${attempt}`;
-                const ackOk = await (ackPromise ?? Promise.resolve(false));
+                const ackOk = await ackPromise;
                 if (ackOk) {
-                  delivered = true;
-                  break;
+                  return true;
                 }
               }
-            }
+              return false;
+            };
 
-            if (!delivered) {
-              toast.error(`File send failed at chunk ${i + 1}/${totalChunks}`);
-              sent = false;
-              break;
+            let nextIndex = 0;
+            const inFlight: InFlight[] = [];
+            const startChunk = (i: number): InFlight => {
+              const p = (async () => ({ i, ok: await sendChunkWithRetry(i) }))();
+              return { i, p };
+            };
+
+            while (nextIndex < totalChunks || inFlight.length > 0) {
+              while (nextIndex < totalChunks && inFlight.length < WINDOW) {
+                inFlight.push(startChunk(nextIndex));
+                nextIndex += 1;
+              }
+
+              const res = await Promise.race(inFlight.map(x => x.p));
+              const idx = inFlight.findIndex(x => x.i === res.i);
+              if (idx >= 0) {
+                inFlight.splice(idx, 1);
+              }
+
+              if (!res.ok) {
+                toast.error(`File send failed at chunk ${res.i + 1}/${totalChunks}`);
+                sent = false;
+                break;
+              }
             }
           }
         }
@@ -1711,7 +1752,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         syncMessagesFromQueue();
 
         const MAX_FILE_CHUNKS = 4096;
-        const chunkSize = 12_000;
+        const chunkSize = 16_000;
         const totalChunks = Math.ceil(encrypted.length / chunkSize);
 
         if (!Number.isFinite(totalChunks) || totalChunks <= 0 || totalChunks > MAX_FILE_CHUNKS) {
@@ -1742,10 +1783,10 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           toast.warning('Receiver may be slow to acknowledge; continuing...');
         }
 
-        for (let i = 0; i < totalChunks; i++) {
+        const WINDOW = 6;
+        type InFlight = { i: number; p: Promise<{ i: number; ok: boolean }> };
+        const sendChunkWithRetry = async (i: number): Promise<boolean> => {
           const chunk = encrypted.slice(i * chunkSize, (i + 1) * chunkSize);
-
-          let delivered = false;
           for (let attempt = 0; attempt < 3; attempt++) {
             const ackPromise = waitForFileAck(`${messageId}:${i}`, 12000);
             debugStage = `send_chunk_${i}_attempt_${attempt}`;
@@ -1769,13 +1810,34 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             debugStage = `wait_chunk_ack_${i}_attempt_${attempt}`;
             const ackOk = await ackPromise;
             if (ackOk) {
-              delivered = true;
-              break;
+              return true;
             }
           }
 
-          if (!delivered) {
-            toast.error(`Video send failed at chunk ${i + 1}/${totalChunks}`);
+          return false;
+        };
+
+        let nextIndex = 0;
+        const inFlight: InFlight[] = [];
+        const startChunk = (i: number): InFlight => {
+          const p = (async () => ({ i, ok: await sendChunkWithRetry(i) }))();
+          return { i, p };
+        };
+
+        while (nextIndex < totalChunks || inFlight.length > 0) {
+          while (nextIndex < totalChunks && inFlight.length < WINDOW) {
+            inFlight.push(startChunk(nextIndex));
+            nextIndex += 1;
+          }
+
+          const res = await Promise.race(inFlight.map(x => x.p));
+          const idx = inFlight.findIndex(x => x.i === res.i);
+          if (idx >= 0) {
+            inFlight.splice(idx, 1);
+          }
+
+          if (!res.ok) {
+            toast.error(`Video send failed at chunk ${res.i + 1}/${totalChunks}`);
             return;
           }
         }
@@ -2853,7 +2915,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                   ref={fileInputRef}
                   id="ghost-file-input"
                   type="file"
-                  accept=".jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.pdf,.doc,.docx,.txt,.csv,.rtf,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.js,.json,.html,.css,.md,image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv,application/rtf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/zip,application/x-rar-compressed,text/javascript,application/json,text/html,text/css,text/markdown"
+                  accept="*/*"
                   onChange={handleFileUpload}
                   className="sr-only"
                 />
