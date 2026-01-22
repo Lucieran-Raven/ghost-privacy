@@ -1521,8 +1521,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         // Primary path: chunked file protocol with ACKs (new clients).
         // Compatibility fallback: legacy clients may not ACK or may not handle `file` events.
         let legacyPeer = false;
+        let fastPathStartIndex = 0;
 
-        const initAckPromise = waitForFileAck(`${messageId}:init`, 2500);
+        const initAckPromise = waitForFileAck(`${messageId}:init`, 6000);
         debugStage = 'send_init';
         let sent = (await realtimeManagerRef.current?.send('file', {
           kind: 'init',
@@ -1542,10 +1543,34 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         if (sent) {
           debugStage = 'wait_init_ack';
           const initAck = await initAckPromise;
-          legacyPeer = !initAck;
+          let ackCapable = initAck;
 
-          if (!initAck) {
+          if (!ackCapable && totalChunks > 0) {
+            const probeChunk = encrypted.slice(0, chunkSize);
+            const probeAckPromise = waitForFileAck(`${messageId}:0`, 6000);
+            debugStage = 'probe_chunk_0';
+            const probeOk = (await realtimeManagerRef.current?.send('file', {
+              kind: 'chunk',
+              fileId: messageId,
+              index: 0,
+              chunk: probeChunk,
+              totalChunks,
+              iv,
+              fileName: sanitizedName,
+              fileType: file.type,
+              timestamp: displayTimestamp
+            })) ?? false;
+
+            if (probeOk) {
+              debugStage = 'wait_probe_ack_0';
+              ackCapable = await probeAckPromise;
+              if (ackCapable) {
+                fastPathStartIndex = 1;
+              }
+            }
           }
+
+          legacyPeer = !ackCapable;
         }
 
         // If the peer is legacy and this fits in one chunk, use the old `chat-message` file path.
@@ -1636,7 +1661,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               return false;
             };
 
-            let nextIndex = 0;
+            let nextIndex = fastPathStartIndex;
             const inFlight: InFlight[] = [];
             const startChunk = (i: number): InFlight => {
               const p = (async () => ({ i, ok: await sendChunkWithRetry(i) }))();
