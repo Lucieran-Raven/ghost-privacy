@@ -603,27 +603,41 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
     manager.onPresenceChange((participants) => {
       const partnerCount = Math.max(0, participants.length - 1); // Exclude self
-      setIsPartnerConnected(partnerCount > 0);
       partnerCountRef.current = partnerCount;
+
+      if (partnerCount > 0) {
+        setIsPartnerConnected(true);
+        partnerWasPresentRef.current = true;
+        if (partnerDisconnectTimeoutRef.current) {
+          clearTimeout(partnerDisconnectTimeoutRef.current);
+          partnerDisconnectTimeoutRef.current = null;
+        }
+        return;
+      }
+
+      if (!partnerWasPresentRef.current) {
+        setIsPartnerConnected(false);
+        return;
+      }
+
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
 
       if (partnerCount === 0 && partnerWasPresentRef.current) {
         if (partnerDisconnectTimeoutRef.current) {
           clearTimeout(partnerDisconnectTimeoutRef.current);
         }
         partnerDisconnectTimeoutRef.current = setTimeout(() => {
+          if (typeof document !== 'undefined' && document.hidden) {
+            return;
+          }
           if (partnerCountRef.current === 0 && partnerWasPresentRef.current) {
+            setIsPartnerConnected(false);
             addSystemMessage('Partner left the session');
           }
-        }, 3000);
+        }, 12000);
         return;
-      }
-
-      if (partnerCount > 0) {
-        partnerWasPresentRef.current = true;
-        if (partnerDisconnectTimeoutRef.current) {
-          clearTimeout(partnerDisconnectTimeoutRef.current);
-          partnerDisconnectTimeoutRef.current = null;
-        }
       }
     });
 
@@ -766,16 +780,21 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             syncMessagesFromQueue();
           }
 
-          if (effectiveSealedKind === 'file' && (isTauriRuntime() || isCapacitorNative())) {
+          if (effectiveSealedKind === 'file') {
+            const fileName = sanitizeFileName(String(data.fileName || 'unknown_file')).slice(0, 256);
+            const fileType = String(data.fileType || 'application/octet-stream').slice(0, 128);
+            const isImage = fileType.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(fileName);
+            if (!isImage) {
             messageQueueRef.current.addMessage(sessionId, {
               id: fileId,
               content: '',
               sender: 'partner',
               timestamp: Number(data.timestamp) || payload.timestamp,
               type: 'file',
-              fileName: sanitizeFileName(String(data.fileName || 'unknown_file')).slice(0, 256)
+                fileName
             });
             syncMessagesFromQueue();
+            }
           }
 
           void manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
@@ -831,6 +850,21 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               });
               syncMessagesFromQueue();
             }
+
+            if (effectiveSealedKind === 'file') {
+              const isImage = t.fileType.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(t.fileName);
+              if (!isImage) {
+                messageQueueRef.current.addMessage(sessionId, {
+                  id: fileId,
+                  content: '',
+                  sender: 'partner',
+                  timestamp: t.timestamp,
+                  type: 'file',
+                  fileName: t.fileName
+                });
+                syncMessagesFromQueue();
+              }
+            }
           }
 
           try {
@@ -875,6 +909,14 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             if (isTauriRuntime() || isCapacitorNative()) {
               syncMessagesFromQueue();
               return;
+            }
+
+            if (t.sealedKind === 'file') {
+              const isImage = t.fileType.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(t.fileName);
+              if (!isImage) {
+              syncMessagesFromQueue();
+              return;
+              }
             }
 
             const encrypted = t.chunks.join('');
@@ -2836,7 +2878,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                                 sender={message.sender}
                                 onDownload={(() => {
                                   if (message.sender === 'me') return undefined;
-                                  if (!(isTauriRuntime() || isCapacitorNative())) return undefined;
                                   if (typeof message.content !== 'string' || message.content.length !== 0) return undefined;
                                   if (downloadedFileDrops.has(message.id)) return undefined;
                                   return () => {
@@ -2940,7 +2981,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                   ref={fileInputRef}
                   id="ghost-file-input"
                   type="file"
-                  accept="*/*"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,image/jpeg,image/png"
                   onChange={handleFileUpload}
                   className="sr-only"
                 />

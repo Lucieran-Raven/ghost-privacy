@@ -47,11 +47,13 @@ const FilePreviewCard = ({ fileName, content, sender, onDownload }: FilePreviewC
 
   // Estimate file size from base64 content
   const base64Length = content.split(',')[1]?.length || content.length;
-  const estimatedSize = content.startsWith('data:') 
-    ? Math.round((base64Length * 3) / 4)
-    : content.startsWith('blob:')
-      ? null
-      : base64Length;
+  const estimatedSize = content.length === 0
+    ? null
+    : content.startsWith('data:')
+      ? Math.round((base64Length * 3) / 4)
+      : content.startsWith('blob:')
+        ? null
+        : base64Length;
   const formattedSize = estimatedSize === null
     ? 'Unknown'
     : estimatedSize < 1024 

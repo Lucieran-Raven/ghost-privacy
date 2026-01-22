@@ -223,8 +223,6 @@ export const FILE_VALIDATION = {
     'mp4', // Video - MP4 only
     'pdf', 'doc', 'docx', 'txt', 'csv', 'rtf',
     'xls', 'xlsx', 'ppt', 'pptx',
-    'zip', 'rar',
-    'js', 'json', 'html', 'css', 'md'
   ] as const
 };
 
@@ -254,11 +252,31 @@ export const validateFile = (file: File): { valid: boolean; error?: string; warn
     };
   }
 
-  if (extension && FILE_VALIDATION.WARN_EXTENSIONS.includes(extension as typeof FILE_VALIDATION.WARN_EXTENSIONS[number])) {
-    return { valid: true, warning: 'This looks like a script file. Do not run it unless you trust the sender.' };
+  const allowedByExtension = extension
+    ? ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png', 'mp4'].includes(extension)
+    : false;
+
+  const allowedByMime = file.type
+    ? [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'image/jpeg',
+        'image/png',
+        'video/mp4'
+      ].includes(file.type)
+    : false;
+
+  if (!allowedByExtension && !allowedByMime) {
+    return {
+      valid: false,
+      error: 'Only PDF, Word, PowerPoint, JPEG/PNG images, and MP4 videos are supported'
+    };
   }
 
-  // Allow all non-dangerous types. Warn when we cannot confidently identify MIME.
+  // Warn when we cannot confidently identify MIME.
   if (!file.type || file.type === 'application/octet-stream') {
     return { valid: true, warning: 'File type could not be detected (mobile limitation). Ensure this file is safe.' };
   }
@@ -268,8 +286,8 @@ export const validateFile = (file: File): { valid: boolean; error?: string; warn
 
 // Get user-friendly file type name
 export const getFileTypeName = (file: File): string => {
-  return FILE_VALIDATION.TYPE_NAMES[file.type] || 
-         file.type || 
+  return FILE_VALIDATION.TYPE_NAMES[file.type] ||
+         file.type ||
          `File (${file.name.split('.').pop()?.toUpperCase() || 'Unknown'})`;
 };
 
