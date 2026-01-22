@@ -79,6 +79,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   const [isWindowVisible, setIsWindowVisible] = useState(true);
   const [showTimestampSettings, setShowTimestampSettings] = useState(false);
   const [downloadedVideoDrops, setDownloadedVideoDrops] = useState<Set<string>>(new Set());
+  const [downloadedFileDrops, setDownloadedFileDrops] = useState<Set<string>>(new Set());
   const sessionKeyRef = useRef<CryptoKey | null>(null);
 
   const realtimeManagerRef = useRef<RealtimeManager | null>(null);
@@ -520,7 +521,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         }
       }, 60 * 1000);
 
-      addSystemMessage('ðŸ” Secure connection established');
+      addSystemMessage('Secure connection established');
 
     } catch {
       setConnectionState({ status: 'error', progress: 0, error: 'Connection failed' });
@@ -551,7 +552,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         }
         partnerDisconnectTimeoutRef.current = setTimeout(() => {
           if (partnerCountRef.current === 0 && partnerWasPresentRef.current) {
-            addSystemMessage('ðŸ‘‹ Partner left the session');
+            addSystemMessage('Partner left the session');
           }
         }, 3000);
         return;
@@ -669,6 +670,18 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             syncMessagesFromQueue();
           }
 
+          if (effectiveSealedKind === 'file' && (isTauriRuntime() || isCapacitorNative())) {
+            messageQueueRef.current.addMessage(sessionId, {
+              id: fileId,
+              content: '',
+              sender: 'partner',
+              timestamp: Number(data.timestamp) || payload.timestamp,
+              type: 'file',
+              fileName: sanitizeFileName(String(data.fileName || 'unknown_file')).slice(0, 256)
+            });
+            syncMessagesFromQueue();
+          }
+
           await manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
           return;
         }
@@ -756,6 +769,11 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               return;
             }
 
+            if (isTauriRuntime() || isCapacitorNative()) {
+              syncMessagesFromQueue();
+              return;
+            }
+
             const encrypted = t.chunks.join('');
             const aad = buildFileAad({ senderId: t.senderId || payload.senderId, fileId });
             const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, t.iv, aad);
@@ -804,7 +822,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       try {
         const seq = Number(payload.data?.sequence);
         const rp = replayProtectionRef.current;
-        const replayRes = rp.validateMessage(payload.senderId, payload.nonce, seq, payload.timestamp);
+        const replayRes = rp.validateMessage(sessionId, payload.nonce, seq, payload.timestamp);
         if (!replayRes.valid) {
           return;
         }
@@ -814,8 +832,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           const pkB64 = String(payload.data?.publicKey || '');
           if (pkB64) {
             const pkBytes = base64ToBytes(pkB64);
-            const pkBuf = pkBytes.buffer.slice(pkBytes.byteOffset, pkBytes.byteOffset + pkBytes.byteLength);
-            const hash = await crypto.subtle.digest('SHA-256', pkBuf);
+            const hash = await crypto.subtle.digest('SHA-256', pkBytes);
             remoteFingerprint = Array.from(new Uint8Array(hash))
               .slice(0, 16)
               .map((b) => b.toString(16).padStart(2, '0'))
@@ -831,12 +848,12 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           const pinRes = checkOrPinFingerprint(pinKey, remoteFingerprint);
           if (pinRes.status === 'mismatch') {
             toast.error('Security alert: partner key changed. Session blocked.');
-            addSystemMessage('ðŸš« Security alert: partner fingerprint changed â€” session ended');
+            addSystemMessage('Security alert: partner fingerprint changed — session ended');
             await handleEndSession();
             return;
           }
           if (pinRes.status === 'pinned') {
-            addSystemMessage('ðŸ“Œ Fingerprint pinned (TOFU). Always verify codes for high-risk conversations.');
+            addSystemMessage('Fingerprint pinned (TOFU). Always verify codes for high-risk conversations.');
           }
         }
 
@@ -919,7 +936,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             }));
           }
 
-          addSystemMessage('ðŸ” Encryption established - verify security codes');
+          addSystemMessage('Encryption established - verify security codes');
         }
       } catch {
         toast.error('Failed to establish secure connection');
@@ -933,7 +950,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
         const seq = Number(payload.data?.sequence);
         const rp = replayProtectionRef.current;
-        const replayRes = rp.validateMessage(payload.senderId, payload.nonce, seq, payload.timestamp);
+        const replayRes = rp.validateMessage(sessionId, payload.nonce, seq, payload.timestamp);
         if (!replayRes.valid) {
           return;
         }
@@ -1025,7 +1042,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
         const seq = Number(payload.data?.sequence);
         const rp = replayProtectionRef.current;
-        const replayRes = rp.validateMessage(payload.senderId, payload.nonce, seq, payload.timestamp);
+        const replayRes = rp.validateMessage(sessionId, payload.nonce, seq, payload.timestamp);
         if (!replayRes.valid) {
           return;
         }
@@ -1114,7 +1131,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   const handleVerificationConfirmed = () => {
     setVerificationState(prev => ({ ...prev, show: false, verified: true }));
     setVoiceVerified(true);
-    addSystemMessage('âœ… Security verified - all features enabled');
+    addSystemMessage('Security verified - all features enabled');
     toast.success('Connection verified as secure');
   };
 
@@ -1344,7 +1361,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       try {
         markActivity();
         const sanitizedName = sanitizeFileName(file.name);
-        const messageId = generateNonce();
+        const messageId = generateSafeFileTransferId();
 
         const { displayTimestamp } = generatePlausibleTimestamp();
 
@@ -1531,7 +1548,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       try {
         markActivity();
         const sanitizedName = sanitizeFileName(file.name);
-        const messageId = generateNonce();
+        const messageId = generateSafeFileTransferId();
 
         const { displayTimestamp } = generatePlausibleTimestamp();
 
@@ -1591,7 +1608,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
         const initAck = await waitForFileAck(`${messageId}:init`, 4000);
         if (!initAck) {
-          toast.warning('Receiver may be slow to acknowledge; continuingâ€¦');
+          toast.warning('Receiver may be slow to acknowledge; continuing...');
         }
 
         for (let i = 0; i < totalChunks; i++) {
@@ -1940,10 +1957,11 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       const decryptedBytes = new Uint8Array(decrypted);
       const sniffedType = sniffMimeFromBytes(decryptedBytes) || t.fileType || 'application/octet-stream';
       const fileName = normalizeFileNameForMime(t.fileName || 'download', sniffedType);
+      const nativeId = toNativeDropId(fileId);
 
       if (isTauriRuntime()) {
         try {
-          await tauriInvoke('file_drop_start', { id: fileId, file_name: fileName });
+          await tauriInvoke('file_drop_start', { id: nativeId, file_name: fileName });
           const chunkBytes = 48 * 1024;
           for (let i = 0; i < decryptedBytes.length; i += chunkBytes) {
             const slice = decryptedBytes.slice(i, Math.min(decryptedBytes.length, i + chunkBytes));
@@ -1952,9 +1970,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               slice.fill(0);
             } catch {
             }
-            await tauriInvoke('file_drop_append', { id: fileId, chunk_base64: chunkBase64 });
+            await tauriInvoke('file_drop_append', { id: nativeId, chunk_base64: chunkBase64 });
           }
-          await tauriInvoke('file_drop_finish_open', { id: fileId, mime_type: sniffedType });
+          await tauriInvoke('file_drop_finish_open', { id: nativeId, mime_type: sniffedType });
           toast.success('File saved');
         } catch (error) {
           const msg = error instanceof Error ? error.message : '';
@@ -1978,7 +1996,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               append: (args: { id: string; chunkBase64: string }) => Promise<{ ok?: boolean }>;
               finishAndOpen: (args: { id: string; mimeType: string }) => Promise<{ ok?: boolean }>;
             };
-            await VideoDrop.start({ id: fileId, fileName, mimeType: sniffedType });
+            await VideoDrop.start({ id: nativeId, fileName, mimeType: sniffedType });
             const chunkBytes = 48 * 1024;
             for (let i = 0; i < decryptedBytes.length; i += chunkBytes) {
               const slice = decryptedBytes.slice(i, Math.min(decryptedBytes.length, i + chunkBytes));
@@ -1987,9 +2005,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                 slice.fill(0);
               } catch {
               }
-              await VideoDrop.append({ id: fileId, chunkBase64 });
+              await VideoDrop.append({ id: nativeId, chunkBase64 });
             }
-            await VideoDrop.finishAndOpen({ id: fileId, mimeType: sniffedType });
+            await VideoDrop.finishAndOpen({ id: nativeId, mimeType: sniffedType });
             handledNative = true;
             toast.success('File saved');
           }
@@ -2048,6 +2066,11 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       }
 
       purgeFileTransfer(fileId);
+      setDownloadedFileDrops(prev => {
+        const next = new Set(prev);
+        next.add(fileId);
+        return next;
+      });
     } catch {
       toast.error('Download failed');
     }
@@ -2445,7 +2468,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                       ) : message.type === 'video' ? (
                         <div
                           className={cn(
-                            "px-4 py-3 rounded-2xl",
+                            "message-bubble-mobile px-4 py-3 rounded-2xl",
                             message.sender === 'me'
                               ? "bg-primary/20 rounded-br-md"
                               : "glass border border-border/50 rounded-bl-md"
@@ -2466,7 +2489,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                                 "text-sm",
                                 message.sender === 'me' ? "text-primary-foreground" : "text-foreground"
                               )}>
-                                {message.sender === 'me' ? 'ðŸ“¹ Secure video sent' : 'ðŸ“¹ Secure video received'}
+                                {message.sender === 'me' ? 'Secure video sent' : 'Secure video received'}
                               </p>
                               <p className={cn(
                                 "text-xs mt-0.5",
@@ -2529,7 +2552,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                           </div>
                           {message.sender !== 'me' && downloadedVideoDrops.has(message.id) && (
                             <div className="mt-2 text-xs text-muted-foreground/70">
-                              â˜¢ï¸ Securely destroyed after download
+                              Securely destroyed after download
                             </div>
                           )}
                           <div className={cn(
@@ -2591,6 +2614,24 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                                 fileName={message.fileName || 'Unknown File'}
                                 content={typeof message.content === 'string' ? message.content : ''}
                                 sender={message.sender}
+                                onDownload={(() => {
+                                  if (message.sender === 'me') return undefined;
+                                  if (!(isTauriRuntime() || isCapacitorNative())) return undefined;
+                                  if (typeof message.content !== 'string' || message.content.length !== 0) return undefined;
+                                  if (downloadedFileDrops.has(message.id)) return undefined;
+                                  return () => {
+                                    const t = fileTransfersRef.current.get(message.id);
+                                    if (!t || t.sealedKind !== 'file' || t.total <= 0) {
+                                      toast.error('Download failed');
+                                      return;
+                                    }
+                                    if (t.received < t.total) {
+                                      toast.info(`File still receiving (${t.received}/${t.total})`);
+                                      return;
+                                    }
+                                    void handleDownloadFileDrop(message.id);
+                                  };
+                                })()}
                               />
                             )
                           ) : typeof message.content === 'string' && message.content.startsWith('https://') ? (
