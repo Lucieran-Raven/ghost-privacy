@@ -694,18 +694,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           const sealedKind = String((data as any).sealedKind || '');
           const effectiveSealedKind = sealedKind === 'video-drop' ? 'video-drop' : 'file';
 
-          try {
-            console.info('[ghost:rx] file init', {
-              kind: effectiveSealedKind,
-              fileId,
-              totalChunks: total,
-              fileName: String(data.fileName || ''),
-              fileType: String(data.fileType || ''),
-              from: payload.senderId
-            });
-          } catch {
-          }
-
           const existing = fileTransfersRef.current.get(fileId);
           if (existing) {
             if (existing.cleanupTimer) {
@@ -720,15 +708,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             // This avoids progress "jumping back" mid-transfer.
             if (existing.received > 0) {
               if (existing.total !== total || existing.iv !== iv) {
-                try {
-                  console.warn('[ghost:rx] duplicate init ignored (mismatch)', {
-                    fileId,
-                    received: existing.received,
-                    existingTotal: existing.total,
-                    incomingTotal: total
-                  });
-                } catch {
-                }
               } else {
                 existing.fileName = sanitizeFileName(String(data.fileName || existing.fileName || 'unknown_file')).slice(0, 256);
                 existing.fileType = String(data.fileType || existing.fileType || 'application/octet-stream').slice(0, 128);
@@ -740,10 +719,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               }
 
               const ackOk = await manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
-              try {
-                console.info('[ghost:rx] file init ack sent', { fileId, ok: ackOk });
-              } catch {
-              }
               return;
             }
 
@@ -756,10 +731,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               existing.senderId = payload.senderId || existing.senderId;
 
               const ackOk = await manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
-              try {
-                console.info('[ghost:rx] file init ack sent', { fileId, ok: ackOk });
-              } catch {
-              }
               return;
             }
           }
@@ -806,10 +777,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           }
 
           const ackOk = await manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
-          try {
-            console.info('[ghost:rx] file init ack sent', { fileId, ok: ackOk });
-          } catch {
-          }
           return;
         }
 
@@ -888,32 +855,11 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           t.chunks[idx] = chunk;
           t.received += 1;
 
-          if (t.received === 1 || t.received === t.total || t.received % 25 === 0) {
-            try {
-              console.info('[ghost:rx] file chunk', {
-                fileId,
-                index: idx,
-                received: t.received,
-                total: t.total,
-                sealedKind: t.sealedKind
-              });
-            } catch {
-            }
-          }
-
           const ackOk = await manager.send('file', { kind: 'ack', ackKind: 'chunk', fileId, index: idx });
           if (!ackOk) {
-            try {
-              console.warn('[ghost:rx] file chunk ack failed', { fileId, index: idx });
-            } catch {
-            }
           }
 
           if (t.received >= t.total && t.total > 0) {
-            try {
-              console.info('[ghost:rx] file complete', { fileId, total: t.total, sealedKind: t.sealedKind });
-            } catch {
-            }
             if (t.sealedKind === 'video-drop') {
               syncMessagesFromQueue();
               return;
@@ -925,7 +871,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             }
 
             const encrypted = t.chunks.join('');
-            const aad = buildFileAad({ senderId: t.senderId || payload.senderId, fileId });
+            const aad = buildFileAad({ senderId: t.senderId, fileId });
             const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, t.iv, aad);
             try {
               aad.fill(0);
@@ -963,10 +909,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           return;
         }
       } catch (error) {
-        try {
-          console.error('[ghost:rx] file handler failed', error);
-        } catch {
-        }
         toast.error('File transfer failed - please try again');
       }
     });
@@ -1521,11 +1463,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         const messageId = generateSafeFileTransferId();
         debugFileId = messageId;
 
-        try {
-          console.info('[ghost:file] selected', { name: sanitizedName, size: file.size, type: file.type || '' });
-        } catch {
-        }
-
         const { displayTimestamp } = generatePlausibleTimestamp();
 
         debugStage = 'read_arraybuffer';
@@ -1543,11 +1480,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           const crypto = window.crypto;
           secureZeroArrayBuffer({ getRandomValues: (arr) => crypto.getRandomValues(arr) }, arrayBuffer);
         } catch {
-          // Fallback: simple zero fill
           try {
             new Uint8Array(arrayBuffer).fill(0);
           } catch {
-            // Ignore
           }
         }
 
@@ -1603,10 +1538,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           legacyPeer = !initAck;
 
           if (!initAck) {
-            try {
-              console.warn('[ghost:file] init ack missing; continuing in legacy mode', { fileId: messageId, totalChunks });
-            } catch {
-            }
           }
         }
 
@@ -1689,16 +1620,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           toast.error('File may not have been delivered');
         }
       } catch (error) {
-        try {
-          console.error('[ghost:file] send failed', {
-            stage: debugStage,
-            fileId: debugFileId,
-            name: file?.name,
-            size: file?.size,
-            type: file?.type
-          }, error);
-        } catch {
-        }
         toast.error('Failed to send file');
       }
     })();
@@ -1852,16 +1773,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           }
         }
       } catch (error) {
-        try {
-          console.error('[ghost:video] send failed', {
-            stage: debugStage,
-            fileId: debugFileId,
-            name: file?.name,
-            size: file?.size,
-            type: file?.type
-          }, error);
-        } catch {
-        }
         toast.error('Failed to send video');
       }
     })();
