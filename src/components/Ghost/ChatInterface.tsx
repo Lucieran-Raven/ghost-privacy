@@ -707,8 +707,61 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           }
 
           const existing = fileTransfersRef.current.get(fileId);
-          if (existing?.cleanupTimer) {
-            clearTimeout(existing.cleanupTimer);
+          if (existing) {
+            if (existing.cleanupTimer) {
+              clearTimeout(existing.cleanupTimer);
+            }
+
+            existing.cleanupTimer = setTimeout(() => {
+              purgeFileTransfer(fileId);
+            }, 5 * 60 * 1000);
+
+            // Idempotency: do not reset an in-progress transfer if we receive a duplicate init.
+            // This avoids progress "jumping back" mid-transfer.
+            if (existing.received > 0) {
+              if (existing.total !== total || existing.iv !== iv) {
+                try {
+                  console.warn('[ghost:rx] duplicate init ignored (mismatch)', {
+                    fileId,
+                    received: existing.received,
+                    existingTotal: existing.total,
+                    incomingTotal: total
+                  });
+                } catch {
+                }
+              } else {
+                existing.fileName = sanitizeFileName(String(data.fileName || existing.fileName || 'unknown_file')).slice(0, 256);
+                existing.fileType = String(data.fileType || existing.fileType || 'application/octet-stream').slice(0, 128);
+                if (effectiveSealedKind === 'video-drop') {
+                  existing.sealedKind = 'video-drop';
+                }
+                existing.timestamp = Number(data.timestamp) || existing.timestamp || payload.timestamp;
+                existing.senderId = payload.senderId || existing.senderId;
+              }
+
+              const ackOk = await manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
+              try {
+                console.info('[ghost:rx] file init ack sent', { fileId, ok: ackOk });
+              } catch {
+              }
+              return;
+            }
+
+            // If transfer exists but has not started yet, keep it and just update metadata.
+            if (existing.total === total && existing.iv === iv) {
+              existing.fileName = sanitizeFileName(String(data.fileName || existing.fileName || 'unknown_file')).slice(0, 256);
+              existing.fileType = String(data.fileType || existing.fileType || 'application/octet-stream').slice(0, 128);
+              existing.sealedKind = effectiveSealedKind;
+              existing.timestamp = Number(data.timestamp) || existing.timestamp || payload.timestamp;
+              existing.senderId = payload.senderId || existing.senderId;
+
+              const ackOk = await manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
+              try {
+                console.info('[ghost:rx] file init ack sent', { fileId, ok: ackOk });
+              } catch {
+              }
+              return;
+            }
           }
 
           const cleanupTimer = setTimeout(() => {
