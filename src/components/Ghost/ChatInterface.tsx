@@ -2338,6 +2338,119 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     }
   };
 
+  const handleDownloadEncryptedFile = async (fileId: string) => {
+    try {
+      if (!encryptionEngineRef.current) {
+        toast.error('Download failed');
+        return;
+      }
+
+      const t = fileTransfersRef.current.get(fileId);
+      if (!t || t.sealedKind !== 'file' || t.total <= 0) {
+        toast.error('Download failed');
+        return;
+      }
+      if (t.received < t.total) {
+        toast.info(`File still receiving (${t.received}/${t.total})`);
+        return;
+      }
+
+      const encrypted = t.chunks.join('');
+      const aad = buildFileAad({ senderId: t.senderId, fileId });
+      const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, t.iv, aad);
+      try {
+        aad.fill(0);
+      } catch {
+      }
+
+      const decryptedBytes = new Uint8Array(decrypted);
+      const sniffedType = sniffMimeFromBytes(decryptedBytes) || t.fileType || 'application/octet-stream';
+      const fileName = normalizeFileNameForMime(t.fileName || 'download', sniffedType);
+
+      let handledNative = false;
+      let isNativePlatform = false;
+      try {
+        const mod = await import('@capacitor/core');
+        isNativePlatform = Boolean(mod.Capacitor?.isNativePlatform?.());
+        if (isNativePlatform) {
+          const VideoDrop = mod.registerPlugin('VideoDrop') as {
+            start: (args: { id: string; fileName: string; mimeType: string }) => Promise<{ ok?: boolean }>;
+            append: (args: { id: string; chunkBase64: string }) => Promise<{ ok?: boolean }>;
+            finishAndOpen: (args: { id: string; mimeType: string }) => Promise<{ ok?: boolean }>;
+          };
+          const nativeId = toNativeDropId(fileId);
+          await VideoDrop.start({ id: nativeId, fileName, mimeType: sniffedType });
+          const chunkBytes = 48 * 1024;
+          for (let i = 0; i < decryptedBytes.length; i += chunkBytes) {
+            const slice = decryptedBytes.slice(i, Math.min(decryptedBytes.length, i + chunkBytes));
+            const chunkBase64 = bytesToBase64(slice);
+            try {
+              slice.fill(0);
+            } catch {
+            }
+            await VideoDrop.append({ id: nativeId, chunkBase64 });
+          }
+          await VideoDrop.finishAndOpen({ id: nativeId, mimeType: sniffedType });
+          handledNative = true;
+          toast.success('File saved');
+        }
+      } catch (error) {
+        if (isNativePlatform) {
+          const msg = error instanceof Error ? error.message : '';
+          toast.error(msg ? `Download failed: ${msg}` : 'Download failed');
+          return;
+        }
+      } finally {
+        if (handledNative) {
+          try {
+            decryptedBytes.fill(0);
+          } catch {
+          }
+        }
+      }
+
+      if (!handledNative) {
+        const blob = new Blob([decryptedBytes], { type: sniffedType || 'application/octet-stream' });
+        const objectUrl = URL.createObjectURL(blob);
+        try {
+          if (typeof document === 'undefined') {
+            toast.error('Download failed');
+            return;
+          }
+          const link = document.createElement('a');
+          link.href = objectUrl;
+          link.download = fileName;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.style.display = 'none';
+          document.body.appendChild(link);
+          try {
+            link.click();
+          } finally {
+            try {
+              document.body.removeChild(link);
+            } catch {
+            }
+          }
+          toast.success('File downloaded');
+        } finally {
+          try {
+            decryptedBytes.fill(0);
+          } catch {
+          }
+          setTimeout(() => {
+            try {
+              URL.revokeObjectURL(objectUrl);
+            } catch {
+            }
+          }, 30 * 1000);
+        }
+      }
+    } catch {
+      toast.error('Download failed');
+    }
+  };
+
   const triggerSessionTermination = async (reason: TerminationReason) => {
     try {
       await realtimeManagerRef.current?.send('session-terminated', {
@@ -2890,7 +3003,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                                       toast.info(`File still receiving (${t.received}/${t.total})`);
                                       return;
                                     }
-                                    void handleDownloadFileDrop(message.id);
+                                    void handleDownloadEncryptedFile(message.id);
                                   };
                                 })()}
                               />
