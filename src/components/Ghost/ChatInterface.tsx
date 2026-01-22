@@ -105,6 +105,8 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   const pendingFileAcksRef = useRef<Map<string, (ok: boolean) => void>>(new Map());
   const seenFileAcksRef = useRef<Map<string, number>>(new Map());
   const activeNativeVideoDropIdsRef = useRef<Set<string>>(new Set());
+
+  const FILE_TRANSFER_TTL_MS = 15 * 60 * 1000;
   const localFingerprintRef = useRef<string>('');
   const isTerminatingRef = useRef(false);
   const verificationShownRef = useRef(false);
@@ -702,7 +704,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
             existing.cleanupTimer = setTimeout(() => {
               purgeFileTransfer(fileId);
-            }, 5 * 60 * 1000);
+            }, FILE_TRANSFER_TTL_MS);
 
             // Idempotency: do not reset an in-progress transfer if we receive a duplicate init.
             // This avoids progress "jumping back" mid-transfer.
@@ -718,7 +720,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                 existing.senderId = payload.senderId || existing.senderId;
               }
 
-              const ackOk = await manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
+              void manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
               return;
             }
 
@@ -730,14 +732,14 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               existing.timestamp = Number(data.timestamp) || existing.timestamp || payload.timestamp;
               existing.senderId = payload.senderId || existing.senderId;
 
-              const ackOk = await manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
+              void manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
               return;
             }
           }
 
           const cleanupTimer = setTimeout(() => {
             purgeFileTransfer(fileId);
-          }, 5 * 60 * 1000);
+          }, FILE_TRANSFER_TTL_MS);
 
           fileTransfersRef.current.set(fileId, {
             chunks: new Array(total).fill(''),
@@ -776,7 +778,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             syncMessagesFromQueue();
           }
 
-          const ackOk = await manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
+          void manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
           return;
         }
 
@@ -802,7 +804,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
             const cleanupTimer = setTimeout(() => {
               purgeFileTransfer(fileId);
-            }, 5 * 60 * 1000);
+            }, FILE_TRANSFER_TTL_MS);
 
             t = {
               chunks: new Array(total).fill(''),
@@ -842,7 +844,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           if (!Number.isFinite(idx) || idx < 0 || idx >= t.total) return;
 
           if (t.chunks[idx]) {
-            await manager.send('file', { kind: 'ack', ackKind: 'chunk', fileId, index: idx });
+            void manager.send('file', { kind: 'ack', ackKind: 'chunk', fileId, index: idx });
             return;
           }
 
@@ -852,12 +854,17 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             return;
           }
 
+          if (t.cleanupTimer) {
+            clearTimeout(t.cleanupTimer);
+          }
+          t.cleanupTimer = setTimeout(() => {
+            purgeFileTransfer(fileId);
+          }, FILE_TRANSFER_TTL_MS);
+
           t.chunks[idx] = chunk;
           t.received += 1;
 
-          const ackOk = await manager.send('file', { kind: 'ack', ackKind: 'chunk', fileId, index: idx });
-          if (!ackOk) {
-          }
+          void manager.send('file', { kind: 'ack', ackKind: 'chunk', fileId, index: idx });
 
           if (t.received >= t.total && t.total > 0) {
             if (t.sealedKind === 'video-drop') {
