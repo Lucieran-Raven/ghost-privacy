@@ -24,8 +24,10 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          persist-credentials: false
-          fetch-depth: 1
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
       
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -52,8 +54,10 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          persist-credentials: false
-          fetch-depth: 1
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
 
       - name: Run Semgrep SAST
         uses: returntocorp/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d
@@ -67,8 +71,10 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          persist-credentials: false
-          fetch-depth: 1
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
       
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -90,8 +96,10 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          persist-credentials: false
-          fetch-depth: 1
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
       
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -141,8 +149,10 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          persist-credentials: false
-          fetch-depth: 1
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
       
       - name: Validate CSP headers
         run: |
@@ -193,8 +203,10 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          persist-credentials: false
-          fetch-depth: 1
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
       
       - name: Check for .env file in repository
         run: |
@@ -217,8 +229,10 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          persist-credentials: false
-          fetch-depth: 1
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
       
       - name: Dependency Review
         uses: actions/dependency-review-action@3c4e3dcb1aa7874d2c16be7d79418e9b7efd6261
@@ -235,8 +249,10 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          persist-credentials: false
-          fetch-depth: 1
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
       
       - name: Verify deployment security
         run: |
