@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Ghost, Send, Paperclip, Shield, X, Loader2, Trash2, HardDrive, FileText, FileSpreadsheet, FileImage, FileArchive, FileCode, File, AlertTriangle, Clock, Download, Video } from 'lucide-react';
 import { toast } from 'sonner';
@@ -126,6 +126,52 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   const publicKeyResendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const publicKeyResendAttemptsRef = useRef<number>(0);
   const isKeyExchangeCompleteRef = useRef<boolean>(false);
+
+  const openFileInputPicker = (input: HTMLInputElement | null): void => {
+    if (!input) return;
+    try {
+      const maybeShowPicker = (input as any).showPicker;
+      if (typeof maybeShowPicker === 'function') {
+        maybeShowPicker.call(input);
+        return;
+      }
+    } catch {
+    }
+    try {
+      input.click();
+    } catch {
+    }
+  };
+
+  const handleFilePickerGate = (event: React.MouseEvent): void => {
+    if (!isKeyExchangeComplete) {
+      event.preventDefault();
+      return;
+    }
+    if (!verificationState.verified) {
+      event.preventDefault();
+      toast.error('Please verify security codes before sending files');
+      if (!verificationState.show) {
+        setVerificationState(prev => ({ ...prev, show: true }));
+      }
+      return;
+    }
+  };
+
+  const handleVideoPickerGate = (event: React.MouseEvent): void => {
+    if (!isKeyExchangeComplete) {
+      event.preventDefault();
+      return;
+    }
+    if (!verificationState.verified) {
+      event.preventDefault();
+      toast.error('Please verify security codes before sending videos');
+      if (!verificationState.show) {
+        setVerificationState(prev => ({ ...prev, show: true }));
+      }
+      return;
+    }
+  };
 
   const markActivity = () => {
     lastActivityRef.current = Date.now();
@@ -621,7 +667,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         }
 
         if (data.kind === 'init') {
-          const MAX_FILE_CHUNKS = 512;
+          const MAX_FILE_CHUNKS = 2048;
           const MAX_FILE_ID_CHARS = 128;
           const MAX_IV_CHARS = 256;
           const total = Math.max(0, Number(data.totalChunks) || 0);
@@ -635,6 +681,18 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
           const sealedKind = String((data as any).sealedKind || '');
           const effectiveSealedKind = sealedKind === 'video-drop' ? 'video-drop' : 'file';
+
+          try {
+            console.info('[ghost:rx] file init', {
+              kind: effectiveSealedKind,
+              fileId,
+              totalChunks: total,
+              fileName: String(data.fileName || ''),
+              fileType: String(data.fileType || ''),
+              from: payload.senderId
+            });
+          } catch {
+          }
 
           const existing = fileTransfersRef.current.get(fileId);
           if (existing?.cleanupTimer) {
@@ -682,13 +740,17 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             syncMessagesFromQueue();
           }
 
-          await manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
+          const ackOk = await manager.send('file', { kind: 'ack', ackKind: 'init', fileId });
+          try {
+            console.info('[ghost:rx] file init ack sent', { fileId, ok: ackOk });
+          } catch {
+          }
           return;
         }
 
         if (data.kind === 'chunk') {
-          const MAX_FILE_CHUNKS = 512;
-          const MAX_CHUNK_CHARS = 60000;
+          const MAX_FILE_CHUNKS = 2048;
+          const MAX_CHUNK_CHARS = 20000;
           const MAX_FILE_ID_CHARS = 128;
           const MAX_IV_CHARS = 256;
 
@@ -761,9 +823,32 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           t.chunks[idx] = chunk;
           t.received += 1;
 
-          await manager.send('file', { kind: 'ack', ackKind: 'chunk', fileId, index: idx });
+          if (t.received === 1 || t.received === t.total || t.received % 25 === 0) {
+            try {
+              console.info('[ghost:rx] file chunk', {
+                fileId,
+                index: idx,
+                received: t.received,
+                total: t.total,
+                sealedKind: t.sealedKind
+              });
+            } catch {
+            }
+          }
+
+          const ackOk = await manager.send('file', { kind: 'ack', ackKind: 'chunk', fileId, index: idx });
+          if (!ackOk) {
+            try {
+              console.warn('[ghost:rx] file chunk ack failed', { fileId, index: idx });
+            } catch {
+            }
+          }
 
           if (t.received >= t.total && t.total > 0) {
+            try {
+              console.info('[ghost:rx] file complete', { fileId, total: t.total, sealedKind: t.sealedKind });
+            } catch {
+            }
             if (t.sealedKind === 'video-drop') {
               syncMessagesFromQueue();
               return;
@@ -813,7 +898,10 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           return;
         }
       } catch (error) {
-        // Show user-friendly error for file transfer failures
+        try {
+          console.error('[ghost:rx] file handler failed', error);
+        } catch {
+        }
         toast.error('File transfer failed - please try again');
       }
     });
@@ -1358,14 +1446,26 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     }
 
     void (async () => {
+      let debugStage = 'start';
+      let debugFileId = '';
       try {
         markActivity();
+        debugStage = 'sanitize';
         const sanitizedName = sanitizeFileName(file.name);
+        debugStage = 'generate_id';
         const messageId = generateSafeFileTransferId();
+        debugFileId = messageId;
+
+        try {
+          console.info('[ghost:file] selected', { name: sanitizedName, size: file.size, type: file.type || '' });
+        } catch {
+        }
 
         const { displayTimestamp } = generatePlausibleTimestamp();
 
+        debugStage = 'read_arraybuffer';
         const arrayBuffer = await file.arrayBuffer();
+        debugStage = 'encrypt';
         const aad = buildFileAad({ senderId: participantIdRef.current, fileId: messageId });
         const { encrypted, iv } = await encryptionEngineRef.current!.encryptBytes(arrayBuffer, aad);
         try {
@@ -1402,8 +1502,8 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         });
         syncMessagesFromQueue();
 
-        const MAX_FILE_CHUNKS = 512;
-        const chunkSize = 45_000;
+        const MAX_FILE_CHUNKS = 2048;
+        const chunkSize = 12_000;
         const totalChunks = Math.ceil(encrypted.length / chunkSize);
 
         if (!Number.isFinite(totalChunks) || totalChunks <= 0 || totalChunks > MAX_FILE_CHUNKS) {
@@ -1416,6 +1516,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         let legacyPeer = false;
 
         const initAckPromise = waitForFileAck(`${messageId}:init`, 2500);
+        debugStage = 'send_init';
         let sent = (await realtimeManagerRef.current?.send('file', {
           kind: 'init',
           fileId: messageId,
@@ -1426,9 +1527,22 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           timestamp: displayTimestamp
         })) ?? false;
 
+        if (!sent) {
+          toast.error('File send failed at init (transport)');
+          return;
+        }
+
         if (sent) {
+          debugStage = 'wait_init_ack';
           const initAck = await initAckPromise;
           legacyPeer = !initAck;
+
+          if (!initAck) {
+            try {
+              console.warn('[ghost:file] init ack missing; continuing in legacy mode', { fileId: messageId, totalChunks });
+            } catch {
+            }
+          }
         }
 
         // If the peer is legacy and this fits in one chunk, use the old `chat-message` file path.
@@ -1452,6 +1566,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             let delivered = false;
             for (let attempt = 0; attempt < 3; attempt++) {
               const ackPromise = legacyPeer ? null : waitForFileAck(`${messageId}:${i}`, 6000);
+              debugStage = `send_chunk_${i}_attempt_${attempt}`;
               const ok = (await realtimeManagerRef.current?.send('file', {
                 kind: 'chunk',
                 fileId: messageId,
@@ -1488,6 +1603,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                 delivered = true;
                 break;
               } else {
+                debugStage = `wait_chunk_ack_${i}_attempt_${attempt}`;
                 const ackOk = await (ackPromise ?? Promise.resolve(false));
                 if (ackOk) {
                   delivered = true;
@@ -1497,6 +1613,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             }
 
             if (!delivered) {
+              toast.error(`File send failed at chunk ${i + 1}/${totalChunks}`);
               sent = false;
               break;
             }
@@ -1506,7 +1623,17 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         if (!sent) {
           toast.error('File may not have been delivered');
         }
-      } catch {
+      } catch (error) {
+        try {
+          console.error('[ghost:file] send failed', {
+            stage: debugStage,
+            fileId: debugFileId,
+            name: file?.name,
+            size: file?.size,
+            type: file?.type
+          }, error);
+        } catch {
+        }
         toast.error('Failed to send file');
       }
     })();
@@ -1524,7 +1651,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       return;
     }
 
-    if (file.type !== 'video/mp4') {
+    const lowerName = (file.name || '').toLowerCase();
+    const isMp4 = file.type === 'video/mp4' || lowerName.endsWith('.mp4');
+    if (!isMp4) {
       toast.error('Only MP4 videos are supported');
       return;
     }
@@ -1545,14 +1674,21 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     }
 
     void (async () => {
+      let debugStage = 'start';
+      let debugFileId = '';
       try {
         markActivity();
+        debugStage = 'sanitize';
         const sanitizedName = sanitizeFileName(file.name);
+        debugStage = 'generate_id';
         const messageId = generateSafeFileTransferId();
+        debugFileId = messageId;
 
         const { displayTimestamp } = generatePlausibleTimestamp();
 
+        debugStage = 'read_arraybuffer';
         const arrayBuffer = await file.arrayBuffer();
+        debugStage = 'encrypt';
         const aad = buildFileAad({ senderId: participantIdRef.current, fileId: messageId });
         const { encrypted, iv } = await encryptionEngineRef.current!.encryptBytes(arrayBuffer, aad);
         try {
@@ -1581,8 +1717,8 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         });
         syncMessagesFromQueue();
 
-        const MAX_FILE_CHUNKS = 512;
-        const chunkSize = 45_000;
+        const MAX_FILE_CHUNKS = 2048;
+        const chunkSize = 12_000;
         const totalChunks = Math.ceil(encrypted.length / chunkSize);
 
         if (!Number.isFinite(totalChunks) || totalChunks <= 0 || totalChunks > MAX_FILE_CHUNKS) {
@@ -1590,6 +1726,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           return;
         }
 
+        debugStage = 'send_init';
         const sentInit = (await realtimeManagerRef.current?.send('file', {
           kind: 'init',
           fileId: messageId,
@@ -1602,10 +1739,11 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         })) ?? false;
 
         if (!sentInit) {
-          toast.error('Video may not have been delivered');
+          toast.error('Video send failed at init (transport)');
           return;
         }
 
+        debugStage = 'wait_init_ack';
         const initAck = await waitForFileAck(`${messageId}:init`, 4000);
         if (!initAck) {
           toast.warning('Receiver may be slow to acknowledge; continuing...');
@@ -1617,6 +1755,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           let delivered = false;
           for (let attempt = 0; attempt < 3; attempt++) {
             const ackPromise = waitForFileAck(`${messageId}:${i}`, 12000);
+            debugStage = `send_chunk_${i}_attempt_${attempt}`;
             const ok = (await realtimeManagerRef.current?.send('file', {
               kind: 'chunk',
               fileId: messageId,
@@ -1634,6 +1773,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               continue;
             }
 
+            debugStage = `wait_chunk_ack_${i}_attempt_${attempt}`;
             const ackOk = await ackPromise;
             if (ackOk) {
               delivered = true;
@@ -1642,11 +1782,21 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           }
 
           if (!delivered) {
-            toast.error('Video may not have been delivered');
+            toast.error(`Video send failed at chunk ${i + 1}/${totalChunks}`);
             return;
           }
         }
-      } catch {
+      } catch (error) {
+        try {
+          console.error('[ghost:video] send failed', {
+            stage: debugStage,
+            fileId: debugFileId,
+            name: file?.name,
+            size: file?.size,
+            type: file?.type
+          }, error);
+        } catch {
+        }
         toast.error('Failed to send video');
       }
     })();
@@ -2718,61 +2868,39 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               <div className="flex items-center justify-center gap-3 pb-1">
                 <input
                   ref={fileInputRef}
+                  id="ghost-file-input"
                   type="file"
-                  accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.txt,.csv,.rtf,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.js,.json,.html,.css,.md,image/jpeg,image/png,image/gif,image/webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv,application/rtf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/zip,application/x-rar-compressed,text/javascript,application/json,text/html,text/css,text/markdown"
+                  accept=".jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.pdf,.doc,.docx,.txt,.csv,.rtf,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.js,.json,.html,.css,.md,image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv,application/rtf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/zip,application/x-rar-compressed,text/javascript,application/json,text/html,text/css,text/markdown"
                   onChange={handleFileUpload}
-                  className="hidden"
+                  className="sr-only"
                 />
                 <input
                   ref={videoInputRef}
+                  id="ghost-video-input"
                   type="file"
                   accept=".mp4,video/mp4"
                   onChange={handleVideoUpload}
-                  className="hidden"
+                  className="sr-only"
                 />
-                <button
-                  onClick={() => {
-                    if (!isKeyExchangeComplete) {
-                      return;
-                    }
-                    if (!verificationState.verified) {
-                      toast.error('Please verify security codes before sending files');
-                      if (!verificationState.show) {
-                        setVerificationState(prev => ({ ...prev, show: true }));
-                      }
-                      return;
-                    }
-                    fileInputRef.current?.click();
-                  }}
-                  disabled={!isKeyExchangeComplete}
+                <label
+                  htmlFor="ghost-file-input"
+                  onClick={handleFilePickerGate}
                   className="action-button-mobile border border-border/50 bg-secondary/30"
                   aria-label="Attach file"
                   title="Attach file"
                 >
                   <Paperclip className="h-5 w-5 text-muted-foreground" />
-                </button>
+                </label>
 
-                <button
-                  onClick={() => {
-                    if (!isKeyExchangeComplete) {
-                      return;
-                    }
-                    if (!verificationState.verified) {
-                      toast.error('Please verify security codes before sending videos');
-                      if (!verificationState.show) {
-                        setVerificationState(prev => ({ ...prev, show: true }));
-                      }
-                      return;
-                    }
-                    videoInputRef.current?.click();
-                  }}
-                  disabled={!isKeyExchangeComplete}
+                <label
+                  htmlFor="ghost-video-input"
+                  onClick={handleVideoPickerGate}
                   className="action-button-mobile border border-border/50 bg-secondary/30"
                   aria-label="Secure Video Drop"
                   title="Secure Video Drop"
                 >
                   <Video className="h-5 w-5 text-muted-foreground" />
-                </button>
+                </label>
 
                 <button
                   onClick={() => setShowTimestampSettings(true)}

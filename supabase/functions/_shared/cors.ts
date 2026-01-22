@@ -16,6 +16,12 @@ export function getAllowedOrigins(): Set<string> {
     'https://localhost',
     'http://127.0.0.1',
     'https://127.0.0.1',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://[::1]:5173',
+    'http://localhost:4173',
+    'http://127.0.0.1:4173',
+    'http://[::1]:4173',
     'http://10.0.2.2',
     'http://localhost:1420',
     'http://127.0.0.1:1420'
@@ -65,7 +71,15 @@ export function isAllowedOrigin(origin: string, allowedOrigins?: Set<string>): b
   const env = Deno.env.get('ENVIRONMENT') || 'development';
   if (env === 'production') return false;
 
-  void safeHostname;
+  const hostname = safeHostname(origin);
+  if (!hostname) return false;
+
+  // Development/staging: allow localhost origins on any port.
+  // This avoids hardcoding Vite dev ports and keeps production strict.
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+    return true;
+  }
+
   return false;
 }
 

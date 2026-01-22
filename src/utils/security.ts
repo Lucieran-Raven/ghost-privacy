@@ -125,7 +125,7 @@ export const validateMessage = (text: string): { valid: boolean; error?: string 
 
 // File validation - EXPANDED for professional document types
 export const FILE_VALIDATION = {
-  MAX_SIZE: 16 * 1024 * 1024, // 16MB
+  MAX_SIZE: 20 * 1024 * 1024, // 20MB
   
   // Allowed file types - expanded for professionals
   ALLOWED_TYPES: [

@@ -58,13 +58,30 @@ serve(async (req: Request) => {
     try {
       body = await req.json();
     } catch {
-      return errorResponse(req, 'INVALID_REQUEST');
+      try {
+        const raw = await req.clone().text();
+        body = raw ? JSON.parse(raw) : {};
+      } catch {
+        try {
+          console.warn('[create-session] invalid request: body parse failed', {
+            hasOrigin: !!origin,
+            contentType: req.headers.get('content-type') || '',
+            contentLength: req.headers.get('content-length') || ''
+          });
+        } catch {
+        }
+        return errorResponse(req, 'INVALID_REQUEST');
+      }
     }
 
     const { sessionId } = body;
 
     // Strict input validation - no details leaked
     if (!sessionId || typeof sessionId !== 'string' || !/^GHOST-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(sessionId)) {
+      try {
+        console.warn('[create-session] invalid request: bad sessionId', { sessionId: typeof sessionId === 'string' ? sessionId : '' });
+      } catch {
+      }
       return errorResponse(req, 'INVALID_REQUEST');
     }
 
