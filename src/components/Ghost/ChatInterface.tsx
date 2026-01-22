@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from 'react';
+﻿import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Ghost, Send, Paperclip, Shield, X, Loader2, Trash2, HardDrive, FileText, FileSpreadsheet, FileImage, FileArchive, FileCode, File, AlertTriangle, Clock, Download, Video } from 'lucide-react';
 import { toast } from 'sonner';
@@ -229,6 +229,18 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   const buildFileAad = (params: { senderId: string; fileId: string }): Uint8Array => {
     const te = new TextEncoder();
     return te.encode(`ghost:aad:v1|file|${sessionId}|${params.senderId}|${params.fileId}`);
+  };
+
+  const generateSafeFileTransferId = (): string => {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    try {
+      return bytesToBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    } finally {
+      try {
+        bytes.fill(0);
+      } catch {
+      }
+    }
   };
 
   const MAX_VOICE_MESSAGES = 50;
@@ -667,7 +679,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         }
 
         if (data.kind === 'init') {
-          const MAX_FILE_CHUNKS = 2048;
+          const MAX_FILE_CHUNKS = 4096;
           const MAX_FILE_ID_CHARS = 128;
           const MAX_IV_CHARS = 256;
           const total = Math.max(0, Number(data.totalChunks) || 0);
@@ -749,7 +761,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         }
 
         if (data.kind === 'chunk') {
-          const MAX_FILE_CHUNKS = 2048;
+          const MAX_FILE_CHUNKS = 4096;
           const MAX_CHUNK_CHARS = 20000;
           const MAX_FILE_ID_CHARS = 128;
           const MAX_IV_CHARS = 256;
@@ -1502,7 +1514,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         });
         syncMessagesFromQueue();
 
-        const MAX_FILE_CHUNKS = 2048;
+        const MAX_FILE_CHUNKS = 4096;
         const chunkSize = 12_000;
         const totalChunks = Math.ceil(encrypted.length / chunkSize);
 
@@ -1717,7 +1729,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         });
         syncMessagesFromQueue();
 
-        const MAX_FILE_CHUNKS = 2048;
+        const MAX_FILE_CHUNKS = 4096;
         const chunkSize = 12_000;
         const totalChunks = Math.ceil(encrypted.length / chunkSize);
 
