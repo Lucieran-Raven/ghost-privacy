@@ -62,6 +62,27 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     }
   };
 
+  const capacitorNativeCachedRef = useRef<boolean | null>(null);
+  const getIsCapacitorNative = async (): Promise<boolean> => {
+    const cached = capacitorNativeCachedRef.current;
+    if (cached !== null) {
+      return cached;
+    }
+
+    let isNative = isCapacitorNative();
+    if (!isNative) {
+      try {
+        const mod = await import('@capacitor/core');
+        isNative = Boolean(mod.Capacitor?.isNativePlatform?.());
+      } catch {
+        isNative = false;
+      }
+    }
+
+    capacitorNativeCachedRef.current = isNative;
+    return isNative;
+  };
+
   const [messages, setMessages] = useState<QueuedMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isPartnerConnected, setIsPartnerConnected] = useState(false);
@@ -792,7 +813,8 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             const fileName = sanitizeFileName(String(data.fileName || 'unknown_file')).slice(0, 256);
             const fileType = String(data.fileType || 'application/octet-stream').slice(0, 128);
             const isImage = fileType.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(fileName);
-            const shouldPlaceholder = (isTauriRuntime() || isCapacitorNative()) || !isImage;
+            const capNative = await getIsCapacitorNative();
+            const shouldPlaceholder = (isTauriRuntime() || capNative) || !isImage;
             if (shouldPlaceholder) {
               messageQueueRef.current.addMessage(sessionId, {
                 id: fileId,
@@ -862,7 +884,8 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
             if (effectiveSealedKind === 'file') {
               const isImage = t.fileType.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(t.fileName);
-              const shouldPlaceholder = (isTauriRuntime() || isCapacitorNative()) || !isImage;
+              const capNative = await getIsCapacitorNative();
+              const shouldPlaceholder = (isTauriRuntime() || capNative) || !isImage;
               if (shouldPlaceholder) {
                 messageQueueRef.current.addMessage(sessionId, {
                   id: fileId,
@@ -916,7 +939,8 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               return;
             }
 
-            if (isTauriRuntime() || isCapacitorNative()) {
+            const capNative = await getIsCapacitorNative();
+            if (isTauriRuntime() || capNative) {
               syncMessagesFromQueue();
               return;
             }
@@ -2047,17 +2071,14 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               await VideoDrop.append({ id: nativeId, chunkBase64 });
             }
             await VideoDrop.finishAndOpen({ id: nativeId, mimeType: 'video/mp4' });
-            try {
-              await VideoDrop.purge({ id: nativeId });
-            } catch {
-            }
             activeNativeVideoDropIdsRef.current.add(nativeId);
             handledNative = true;
             toast.success('Video saved');
           }
-        } catch {
+        } catch (error) {
           if (isNativePlatform) {
-            toast.error('Download failed');
+            const msg = error instanceof Error ? error.message : '';
+            toast.error(msg ? `Download failed: ${msg}` : 'Download failed');
             return;
           }
         } finally {
@@ -2295,10 +2316,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               await VideoDrop.append({ id: nativeId, chunkBase64 });
             }
             await VideoDrop.finishAndOpen({ id: nativeId, mimeType: sniffedType });
-            try {
-              await VideoDrop.purge({ id: nativeId });
-            } catch {
-            }
+            activeNativeVideoDropIdsRef.current.add(nativeId);
             handledNative = true;
             toast.success('File saved');
           }
@@ -2417,10 +2435,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             await VideoDrop.append({ id: nativeId, chunkBase64 });
           }
           await VideoDrop.finishAndOpen({ id: nativeId, mimeType: sniffedType });
-          try {
-            await VideoDrop.purge({ id: nativeId });
-          } catch {
-          }
+          activeNativeVideoDropIdsRef.current.add(nativeId);
           handledNative = true;
           toast.success('File saved');
         }
@@ -3015,28 +3030,47 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                                 )}
                               </div>
                             ) : (
-                              <FilePreviewCard
-                                fileName={message.fileName || 'Unknown File'}
-                                content={typeof message.content === 'string' ? message.content : ''}
-                                sender={message.sender}
-                                onDownload={(() => {
-                                  if (message.sender === 'me') return undefined;
-                                  if (typeof message.content !== 'string' || message.content.length !== 0) return undefined;
-                                  if (downloadedFileDrops.has(message.id)) return undefined;
-                                  return () => {
-                                    const t = fileTransfersRef.current.get(message.id);
-                                    if (!t || t.sealedKind !== 'file' || t.total <= 0) {
-                                      toast.error('Download failed');
-                                      return;
-                                    }
-                                    if (t.received < t.total) {
-                                      toast.info(`File still receiving (${t.received}/${t.total})`);
-                                      return;
-                                    }
-                                    void handleDownloadEncryptedFile(message.id);
-                                  };
-                                })()}
-                              />
+                              <div className="space-y-1">
+                                {message.sender !== 'me' && typeof message.content === 'string' && message.content.length === 0 && (
+                                  <p className={cn(
+                                    "text-xs",
+                                    "text-muted-foreground"
+                                  )}>
+                                    {(() => {
+                                      const t = fileTransfersRef.current.get(message.id);
+                                      if (!t || t.sealedKind !== 'file' || t.total <= 0) {
+                                        return 'Download-only';
+                                      }
+                                      if (t.received < t.total) {
+                                        return `Receiving ${t.received}/${t.total}`;
+                                      }
+                                      return 'Ready to download';
+                                    })()}
+                                  </p>
+                                )}
+                                <FilePreviewCard
+                                  fileName={message.fileName || 'Unknown File'}
+                                  content={typeof message.content === 'string' ? message.content : ''}
+                                  sender={message.sender}
+                                  onDownload={(() => {
+                                    if (message.sender === 'me') return undefined;
+                                    if (typeof message.content !== 'string' || message.content.length !== 0) return undefined;
+                                    if (downloadedFileDrops.has(message.id)) return undefined;
+                                    return () => {
+                                      const t = fileTransfersRef.current.get(message.id);
+                                      if (!t || t.sealedKind !== 'file' || t.total <= 0) {
+                                        toast.error('Download failed');
+                                        return;
+                                      }
+                                      if (t.received < t.total) {
+                                        toast.info(`File still receiving (${t.received}/${t.total})`);
+                                        return;
+                                      }
+                                      void handleDownloadEncryptedFile(message.id);
+                                    };
+                                  })()}
+                                />
+                              </div>
                             )
                           ) : typeof message.content === 'string' && message.content.startsWith('https://') ? (
                             <FilePreviewCard
