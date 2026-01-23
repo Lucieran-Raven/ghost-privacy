@@ -2327,12 +2327,8 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         }
       }
 
-      purgeFileTransfer(fileId);
-      setDownloadedFileDrops(prev => {
-        const next = new Set(prev);
-        next.add(fileId);
-        return next;
-      });
+      // Keep transfer alive for re-download (like web/PWA)
+      // Do NOT purgeFileTransfer here
     } catch {
       toast.error('Download failed');
     }
