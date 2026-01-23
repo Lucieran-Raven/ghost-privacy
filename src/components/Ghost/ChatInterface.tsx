@@ -245,6 +245,14 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     }
   };
 
+  const makeNativeDropId = (baseId: string): string => {
+    const base = String(baseId || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    const safeBase = base.length > 0 ? base : 'drop';
+    const suffix = generateSafeFileTransferId().slice(0, 10);
+    const combined = `${safeBase}-${suffix}`;
+    return combined.length > 128 ? combined.slice(0, 128) : combined;
+  };
+
   const MAX_VOICE_MESSAGES = 50;
 
   const waitForFileAck = (key: string, timeoutMs: number): Promise<boolean> => {
@@ -784,16 +792,17 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             const fileName = sanitizeFileName(String(data.fileName || 'unknown_file')).slice(0, 256);
             const fileType = String(data.fileType || 'application/octet-stream').slice(0, 128);
             const isImage = fileType.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(fileName);
-            if (!isImage) {
-            messageQueueRef.current.addMessage(sessionId, {
-              id: fileId,
-              content: '',
-              sender: 'partner',
-              timestamp: Number(data.timestamp) || payload.timestamp,
-              type: 'file',
+            const shouldPlaceholder = (isTauriRuntime() || isCapacitorNative()) || !isImage;
+            if (shouldPlaceholder) {
+              messageQueueRef.current.addMessage(sessionId, {
+                id: fileId,
+                content: '',
+                sender: 'partner',
+                timestamp: Number(data.timestamp) || payload.timestamp,
+                type: 'file',
                 fileName
-            });
-            syncMessagesFromQueue();
+              });
+              syncMessagesFromQueue();
             }
           }
 
@@ -853,7 +862,8 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
             if (effectiveSealedKind === 'file') {
               const isImage = t.fileType.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(t.fileName);
-              if (!isImage) {
+              const shouldPlaceholder = (isTauriRuntime() || isCapacitorNative()) || !isImage;
+              if (shouldPlaceholder) {
                 messageQueueRef.current.addMessage(sessionId, {
                   id: fileId,
                   content: '',
@@ -1980,10 +1990,11 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       const decryptedBytes = new Uint8Array(decrypted);
 
       const fileName = t.fileName || 'secure_video.mp4';
+      const nativeId = makeNativeDropId(fileId);
 
       if (isTauriRuntime()) {
         try {
-          await tauriInvoke('video_drop_start', { id: fileId, file_name: fileName });
+          await tauriInvoke('video_drop_start', { id: nativeId, file_name: fileName });
           const chunkBytes = 48 * 1024;
           for (let i = 0; i < decryptedBytes.length; i += chunkBytes) {
             const slice = decryptedBytes.slice(i, Math.min(decryptedBytes.length, i + chunkBytes));
@@ -1992,10 +2003,14 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               slice.fill(0);
             } catch {
             }
-            await tauriInvoke('video_drop_append', { id: fileId, chunk_base64: chunkBase64 });
+            await tauriInvoke('video_drop_append', { id: nativeId, chunk_base64: chunkBase64 });
           }
-          await tauriInvoke('video_drop_finish_open', { id: fileId, mime_type: 'video/mp4' });
-          activeNativeVideoDropIdsRef.current.add(fileId);
+          await tauriInvoke('video_drop_finish_open', { id: nativeId, mime_type: 'video/mp4' });
+          try {
+            await tauriInvoke('video_drop_purge', { id: nativeId });
+          } catch {
+          }
+          activeNativeVideoDropIdsRef.current.add(nativeId);
           toast.success('Video saved');
         } catch (error) {
           const msg = error instanceof Error ? error.message : '';
@@ -2018,8 +2033,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               start: (args: { id: string; fileName: string; mimeType: string }) => Promise<{ ok?: boolean }>;
               append: (args: { id: string; chunkBase64: string }) => Promise<{ ok?: boolean }>;
               finishAndOpen: (args: { id: string; mimeType: string }) => Promise<{ ok?: boolean }>;
+              purge: (args: { id: string }) => Promise<{ ok?: boolean }>;
             };
-            await VideoDrop.start({ id: fileId, fileName, mimeType: 'video/mp4' });
+            await VideoDrop.start({ id: nativeId, fileName, mimeType: 'video/mp4' });
             const chunkBytes = 48 * 1024;
             for (let i = 0; i < decryptedBytes.length; i += chunkBytes) {
               const slice = decryptedBytes.slice(i, Math.min(decryptedBytes.length, i + chunkBytes));
@@ -2028,10 +2044,14 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                 slice.fill(0);
               } catch {
               }
-              await VideoDrop.append({ id: fileId, chunkBase64 });
+              await VideoDrop.append({ id: nativeId, chunkBase64 });
             }
-            await VideoDrop.finishAndOpen({ id: fileId, mimeType: 'video/mp4' });
-            activeNativeVideoDropIdsRef.current.add(fileId);
+            await VideoDrop.finishAndOpen({ id: nativeId, mimeType: 'video/mp4' });
+            try {
+              await VideoDrop.purge({ id: nativeId });
+            } catch {
+            }
+            activeNativeVideoDropIdsRef.current.add(nativeId);
             handledNative = true;
             toast.success('Video saved');
           }
@@ -2219,7 +2239,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       const decryptedBytes = new Uint8Array(decrypted);
       const sniffedType = sniffMimeFromBytes(decryptedBytes) || t.fileType || 'application/octet-stream';
       const fileName = normalizeFileNameForMime(t.fileName || 'download', sniffedType);
-      const nativeId = toNativeDropId(fileId);
+      const nativeId = makeNativeDropId(fileId);
 
       if (isTauriRuntime()) {
         try {
@@ -2235,6 +2255,10 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             await tauriInvoke('file_drop_append', { id: nativeId, chunk_base64: chunkBase64 });
           }
           await tauriInvoke('file_drop_finish_open', { id: nativeId, mime_type: sniffedType });
+          try {
+            await tauriInvoke('file_drop_purge', { id: nativeId });
+          } catch {
+          }
           toast.success('File saved');
         } catch (error) {
           const msg = error instanceof Error ? error.message : '';
@@ -2257,6 +2281,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               start: (args: { id: string; fileName: string; mimeType: string }) => Promise<{ ok?: boolean }>;
               append: (args: { id: string; chunkBase64: string }) => Promise<{ ok?: boolean }>;
               finishAndOpen: (args: { id: string; mimeType: string }) => Promise<{ ok?: boolean }>;
+              purge: (args: { id: string }) => Promise<{ ok?: boolean }>;
             };
             await VideoDrop.start({ id: nativeId, fileName, mimeType: sniffedType });
             const chunkBytes = 48 * 1024;
@@ -2270,6 +2295,10 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               await VideoDrop.append({ id: nativeId, chunkBase64 });
             }
             await VideoDrop.finishAndOpen({ id: nativeId, mimeType: sniffedType });
+            try {
+              await VideoDrop.purge({ id: nativeId });
+            } catch {
+            }
             handledNative = true;
             toast.success('File saved');
           }
@@ -2373,8 +2402,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             start: (args: { id: string; fileName: string; mimeType: string }) => Promise<{ ok?: boolean }>;
             append: (args: { id: string; chunkBase64: string }) => Promise<{ ok?: boolean }>;
             finishAndOpen: (args: { id: string; mimeType: string }) => Promise<{ ok?: boolean }>;
+            purge: (args: { id: string }) => Promise<{ ok?: boolean }>;
           };
-          const nativeId = toNativeDropId(fileId);
+          const nativeId = makeNativeDropId(fileId);
           await VideoDrop.start({ id: nativeId, fileName, mimeType: sniffedType });
           const chunkBytes = 48 * 1024;
           for (let i = 0; i < decryptedBytes.length; i += chunkBytes) {
@@ -2387,6 +2417,10 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             await VideoDrop.append({ id: nativeId, chunkBase64 });
           }
           await VideoDrop.finishAndOpen({ id: nativeId, mimeType: sniffedType });
+          try {
+            await VideoDrop.purge({ id: nativeId });
+          } catch {
+          }
           handledNative = true;
           toast.success('File saved');
         }
