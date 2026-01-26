@@ -78,5 +78,8 @@ android/app/src/main/assets/public/
 android/app/src/main/assets/capacitor.config.json
 android/.idea/
 
+# Local duplicate/experimental copy (do not commit)
+ghost-privacy-main-git-fixed/
+
 # Sensitive files (auto-detected)
 
