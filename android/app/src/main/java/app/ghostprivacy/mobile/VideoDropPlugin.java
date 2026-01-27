@@ -9,8 +9,6 @@ import android.os.ParcelFileDescriptor;
 import android.content.ContentResolver;
 import android.os.Environment;
 
-import androidx.core.content.FileProvider;
-
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -22,8 +20,6 @@ import java.io.OutputStream;
 import java.util.HashMap;
 import android.util.Base64;
 import java.io.InputStream;
-import java.io.FileOutputStream;
-import android.media.MediaScannerConnection;
 
 @CapacitorPlugin(name = "VideoDrop")
 public class VideoDropPlugin extends Plugin {
@@ -266,53 +262,6 @@ public class VideoDropPlugin extends Plugin {
         }
         openedUri = null;
         savedToDownloads = false;
-      }
-
-      if (openedUri == null && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-        try {
-          File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-          File outDir = new File(downloadsDir, "GhostPrivacy");
-          if (!outDir.exists()) {
-            //noinspection ResultOfMethodCallIgnored
-            outDir.mkdirs();
-          }
-          File outFile = new File(outDir, sanitizeCacheFileName(fileName));
-
-          try (ParcelFileDescriptor inPfd = ParcelFileDescriptor.open(f, ParcelFileDescriptor.MODE_READ_ONLY);
-               InputStream in = new ParcelFileDescriptor.AutoCloseInputStream(inPfd);
-               OutputStream out = new FileOutputStream(outFile, false)) {
-            byte[] buf = new byte[64 * 1024];
-            int n;
-            while ((n = in.read(buf)) > 0) {
-              out.write(buf, 0, n);
-            }
-            out.flush();
-          }
-
-          try {
-            MediaScannerConnection.scanFile(
-              getContext(),
-              new String[] { outFile.getAbsolutePath() },
-              new String[] { mimeType },
-              null
-            );
-          } catch (Exception ignored) {
-          }
-
-          String authority = getContext().getPackageName() + ".fileprovider";
-          openedUri = FileProvider.getUriForFile(getContext(), authority, outFile);
-          savedToDownloads = true;
-
-          try {
-            // Best-effort cleanup of cached source file after persisting to Downloads.
-            //noinspection ResultOfMethodCallIgnored
-            f.delete();
-          } catch (Exception ignored) {
-          }
-        } catch (Exception ignored) {
-          openedUri = null;
-          savedToDownloads = false;
-        }
       }
 
       if (openedUri == null) {
