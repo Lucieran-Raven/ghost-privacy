@@ -2023,6 +2023,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       const nativeId = makeNativeDropId(fileId);
 
       let handledNative = false;
+      let nativeFailed = false;
       try {
         if (isTauriRuntime()) {
           try {
@@ -2063,7 +2064,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               const VideoDrop = mod.registerPlugin('VideoDrop') as {
                 start: (args: { id: string; fileName: string; mimeType: string }) => Promise<{ ok?: boolean }>;
                 append: (args: { id: string; chunkBase64: string }) => Promise<{ ok?: boolean }>;
-                finishAndOpen: (args: { id: string; mimeType: string }) => Promise<{ ok?: boolean }>;
+                finishAndOpen: (args: { id: string; mimeType: string }) => Promise<{ ok?: boolean; uri?: string; savedToDownloads?: boolean }>;
                 purge: (args: { id: string }) => Promise<{ ok?: boolean }>;
               };
               await VideoDrop.start({ id: nativeId, fileName, mimeType: 'video/mp4' });
@@ -2077,15 +2078,16 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                 }
                 await VideoDrop.append({ id: nativeId, chunkBase64 });
               }
-              await VideoDrop.finishAndOpen({ id: nativeId, mimeType: 'video/mp4' });
+              const finishRes = await VideoDrop.finishAndOpen({ id: nativeId, mimeType: 'video/mp4' });
+              if (!finishRes?.savedToDownloads) {
+                throw new Error('save failed');
+              }
               activeNativeVideoDropIdsRef.current.add(nativeId);
               handledNative = true;
               toast.success('Video saved');
             }
           } catch {
-            if (isNativePlatform && pluginAvailable) {
-              // Native path was available but failed; allow web fallback.
-            }
+            nativeFailed = Boolean(isNativePlatform && pluginAvailable);
           }
         }
       } finally {
@@ -2095,6 +2097,11 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           } catch {
           }
         }
+      }
+
+      if (nativeFailed) {
+        toast.error('Download failed');
+        return;
       }
 
       if (!handledNative) {
@@ -2269,6 +2276,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       const nativeId = makeNativeDropId(fileId);
 
       let handledNative = false;
+      let nativeFailed = false;
       try {
         if (isTauriRuntime()) {
           try {
@@ -2308,7 +2316,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               const VideoDrop = mod.registerPlugin('VideoDrop') as {
                 start: (args: { id: string; fileName: string; mimeType: string }) => Promise<{ ok?: boolean }>;
                 append: (args: { id: string; chunkBase64: string }) => Promise<{ ok?: boolean }>;
-                finishAndOpen: (args: { id: string; mimeType: string }) => Promise<{ ok?: boolean }>;
+                finishAndOpen: (args: { id: string; mimeType: string }) => Promise<{ ok?: boolean; uri?: string; savedToDownloads?: boolean }>;
                 purge: (args: { id: string }) => Promise<{ ok?: boolean }>;
               };
               await VideoDrop.start({ id: nativeId, fileName, mimeType: sniffedType });
@@ -2322,15 +2330,16 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                 }
                 await VideoDrop.append({ id: nativeId, chunkBase64 });
               }
-              await VideoDrop.finishAndOpen({ id: nativeId, mimeType: sniffedType });
+              const finishRes = await VideoDrop.finishAndOpen({ id: nativeId, mimeType: sniffedType });
+              if (!finishRes?.savedToDownloads) {
+                throw new Error('save failed');
+              }
               activeNativeVideoDropIdsRef.current.add(nativeId);
               handledNative = true;
               toast.success('File saved');
             }
           } catch {
-            if (isNativePlatform && pluginAvailable) {
-              // Native path was available but failed; allow web fallback.
-            }
+            nativeFailed = Boolean(isNativePlatform && pluginAvailable);
           }
         }
       } finally {
@@ -2340,6 +2349,11 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           } catch {
           }
         }
+      }
+
+      if (nativeFailed) {
+        toast.error('Download failed');
+        return;
       }
 
       if (!handledNative) {
@@ -2419,6 +2433,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
       let handledNative = false;
       let isNativePlatform = false;
       let pluginAvailable = false;
+      let nativeFailed = false;
       try {
         const mod = await import('@capacitor/core');
         isNativePlatform = Boolean(mod.Capacitor?.isNativePlatform?.());
@@ -2430,7 +2445,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           const VideoDrop = mod.registerPlugin('VideoDrop') as {
             start: (args: { id: string; fileName: string; mimeType: string }) => Promise<{ ok?: boolean }>;
             append: (args: { id: string; chunkBase64: string }) => Promise<{ ok?: boolean }>;
-            finishAndOpen: (args: { id: string; mimeType: string }) => Promise<{ ok?: boolean }>;
+            finishAndOpen: (args: { id: string; mimeType: string }) => Promise<{ ok?: boolean; uri?: string; savedToDownloads?: boolean }>;
             purge: (args: { id: string }) => Promise<{ ok?: boolean }>;
           };
           const nativeId = makeNativeDropId(fileId);
@@ -2445,16 +2460,16 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             }
             await VideoDrop.append({ id: nativeId, chunkBase64 });
           }
-          await VideoDrop.finishAndOpen({ id: nativeId, mimeType: sniffedType });
+          const finishRes = await VideoDrop.finishAndOpen({ id: nativeId, mimeType: sniffedType });
+          if (!finishRes?.savedToDownloads) {
+            throw new Error('save failed');
+          }
           activeNativeVideoDropIdsRef.current.add(nativeId);
           handledNative = true;
           toast.success('File saved');
         }
       } catch (error) {
-        if (isNativePlatform && pluginAvailable) {
-          const msg = error instanceof Error ? error.message : '';
-          void msg;
-        }
+        nativeFailed = Boolean(isNativePlatform && pluginAvailable);
       } finally {
         if (handledNative) {
           try {
@@ -2462,6 +2477,11 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           } catch {
           }
         }
+      }
+
+      if (nativeFailed) {
+        toast.error('Download failed');
+        return;
       }
 
       if (!handledNative) {

@@ -71,9 +71,7 @@ const VoiceRecorder = ({
     }
 
     try {
-      // CRITICAL: Always request fresh microphone stream
-      // This fixes the issue where first-time permission grant doesn't work
-      const testStream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -82,16 +80,14 @@ const VoiceRecorder = ({
       });
       
       // Check if we actually got permission and have tracks
-      if (testStream.getAudioTracks().length === 0) {
+      if (stream.getAudioTracks().length === 0) {
         throw new DOMException('No audio tracks found', 'NotFoundError');
       }
-      
-      // Stop the test stream immediately - we just needed to trigger permission
-      testStream.getTracks().forEach(track => track.stop());
-      
-      // Now create the secure recorder which will get its own stream
+
+      // Create secure recorder and reuse the same granted stream.
+      // Avoids double permission prompts / WebView race conditions on Android.
       recorderRef.current = new SecureVoiceRecorder(sessionKey);
-      await recorderRef.current.startRecording();
+      await recorderRef.current.startRecording(stream);
       setIsRecording(true);
       setRecordingTime(0);
       setRecordedBlob(null);

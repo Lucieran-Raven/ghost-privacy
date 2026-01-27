@@ -55,18 +55,22 @@ export class SecureVoiceRecorder {
     this.sessionKey = sessionKey;
   }
 
-  async startRecording(): Promise<void> {
+  async startRecording(stream?: MediaStream): Promise<void> {
     if (this.isRecording) return;
     
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      });
+      if (stream) {
+        this.stream = stream;
+      } else {
+        this.stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+      }
 
       const preferredMimeTypes = [
         'audio/webm;codecs=opus',
