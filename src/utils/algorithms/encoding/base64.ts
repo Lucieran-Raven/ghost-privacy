@@ -20,7 +20,11 @@ function assertValidBase64Char(code: number): number {
 }
 
 export function bytesToBase64(bytes: Uint8Array): string {
-  let out = '';
+  if (bytes.length === 0) return '';
+  const outLen = Math.ceil(bytes.length / 3) * 4;
+  const out = new Array<string>(outLen);
+  let outIdx = 0;
+
   for (let i = 0; i < bytes.length; i += 3) {
     const b0 = bytes[i];
     const b1 = i + 1 < bytes.length ? bytes[i + 1] : 0;
@@ -28,12 +32,12 @@ export function bytesToBase64(bytes: Uint8Array): string {
 
     const triplet = (b0 << 16) | (b1 << 8) | b2;
 
-    out += BASE64_ALPHABET[(triplet >>> 18) & 0x3f];
-    out += BASE64_ALPHABET[(triplet >>> 12) & 0x3f];
-    out += i + 1 < bytes.length ? BASE64_ALPHABET[(triplet >>> 6) & 0x3f] : '=';
-    out += i + 2 < bytes.length ? BASE64_ALPHABET[triplet & 0x3f] : '=';
+    out[outIdx++] = BASE64_ALPHABET[(triplet >>> 18) & 0x3f];
+    out[outIdx++] = BASE64_ALPHABET[(triplet >>> 12) & 0x3f];
+    out[outIdx++] = i + 1 < bytes.length ? BASE64_ALPHABET[(triplet >>> 6) & 0x3f] : '=';
+    out[outIdx++] = i + 2 < bytes.length ? BASE64_ALPHABET[triplet & 0x3f] : '=';
   }
-  return out;
+  return out.join('');
 }
 
 export function base64ToBytes(input: string): Uint8Array {

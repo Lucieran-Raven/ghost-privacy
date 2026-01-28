@@ -136,23 +136,26 @@ export function cleanupOldNonces(
     return state;
   }
 
-  const toDelete: string[] = [];
-  state.nonceMetadata.forEach((metadata, nonce) => {
+  let hasExpired = false;
+  for (const metadata of state.nonceMetadata.values()) {
     if (now - metadata.receivedAt > config.nonceRetentionMs) {
-      toDelete.push(nonce);
+      hasExpired = true;
+      break;
     }
-  });
+  }
 
-  if (toDelete.length === 0) {
+  if (!hasExpired) {
     return state;
   }
 
   const seenNonces = new Set(state.seenNonces);
   const nonceMetadata = new Map(state.nonceMetadata);
 
-  for (const nonce of toDelete) {
-    seenNonces.delete(nonce);
-    nonceMetadata.delete(nonce);
+  for (const [nonce, metadata] of state.nonceMetadata) {
+    if (now - metadata.receivedAt > config.nonceRetentionMs) {
+      seenNonces.delete(nonce);
+      nonceMetadata.delete(nonce);
+    }
   }
 
   return { ...state, seenNonces, nonceMetadata };

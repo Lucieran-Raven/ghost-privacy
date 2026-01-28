@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/publicClient';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { generateNonce } from '@/utils/encryption';
 import { deriveRealtimeChannelName } from '@/utils/realtimeChannel';
+import { base64ToBytes, base64UrlToBytes, bytesToBase64 } from '@/utils/algorithms/encoding/base64';
 
 const PADDED_FRAME_TOTAL_CHARS = 1024;
 const PADDED_FRAME_HEADER_CHARS = 6;
@@ -23,41 +24,26 @@ const COVER_TRAFFIC_HEARTBEAT_INTERVAL_MS = 30 * 1000;
 
 const DIRECT_BROADCAST_MAX_CHARS = 90_000;
 
+const TEXT_ENCODER = new TextEncoder();
+const TEXT_DECODER = new TextDecoder();
+
 function encodeUtf8ToBase64(s: string): string {
-  const bytes = new TextEncoder().encode(s);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
+  const bytes = TEXT_ENCODER.encode(s);
+  return bytesToBase64(bytes);
 }
 
 function decodeBase64ToUtf8(b64: string): string {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return new TextDecoder().decode(bytes);
+  const bytes = base64ToBytes(b64);
+  return TEXT_DECODER.decode(bytes);
 }
 
 function base64UrlEncodeBytes(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  const base64 = btoa(binary);
+  const base64 = bytesToBase64(bytes);
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
 function base64UrlDecodeToBytes(value: string): Uint8Array {
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
+  return base64UrlToBytes(value);
 }
 
 function concatBytes(chunks: Uint8Array[]): Uint8Array {
@@ -167,6 +153,7 @@ export class RealtimeManager {
   private channelToken: string;
   private participantId: string;
   private outbox: Array<{ payload: BroadcastPayload; retries: number; enqueuedAt: number }> = [];
+  private outboxHead = 0;
   private readonly outboxMaxItems = 64;
   private readonly outboxMaxPayloadChars = 200_000;
   private readonly incomingMaxPayloadChars = 250_000;
@@ -321,23 +308,37 @@ export class RealtimeManager {
     return true;
   }
 
+  private outboxSize(): number {
+    return Math.max(0, this.outbox.length - this.outboxHead);
+  }
+
+  private compactOutboxIfNeeded(): void {
+    if (this.outboxHead <= 0) return;
+    if (this.outboxHead < 32 && this.outboxHead * 2 <= this.outbox.length) return;
+    this.outbox = this.outbox.slice(this.outboxHead);
+    this.outboxHead = 0;
+  }
+
   private enqueuePayload(payload: BroadcastPayload, retries: number): boolean {
     if (this.isDestroyed) return false;
     if (!this.shouldQueuePayload(payload)) return false;
 
     // Coalesce typing events to avoid outbox growth during unstable networks.
     if (payload.type === 'typing') {
-      this.outbox = this.outbox.filter((item) => item.payload.type !== 'typing');
+      const active = this.outboxHead > 0 ? this.outbox.slice(this.outboxHead) : this.outbox;
+      this.outbox = active.filter((item) => item.payload.type !== 'typing');
+      this.outboxHead = 0;
     }
 
-    if (this.outbox.length >= this.outboxMaxItems) {
+    if (this.outboxSize() >= this.outboxMaxItems) {
       // Fail-closed for user content; don't silently drop.
       if (payload.type === 'chat-message' || payload.type === 'voice-message' || payload.type === 'video-message' || payload.type === 'file') {
         return false;
       }
 
       // Best-effort for non-critical messages (acks/typing/etc): drop oldest.
-      this.outbox.shift();
+      this.outboxHead++;
+      this.compactOutboxIfNeeded();
     }
 
     this.outbox.push({ payload, retries, enqueuedAt: Date.now() });
@@ -565,7 +566,7 @@ export class RealtimeManager {
 
     const chunksB64: string[] = [];
     for (let i = 0; i < bucketFrames; i++) {
-      const chunkBytes = ctBytes.slice(i * SEALED_CHUNK_BYTES, (i + 1) * SEALED_CHUNK_BYTES);
+      const chunkBytes = ctBytes.subarray(i * SEALED_CHUNK_BYTES, (i + 1) * SEALED_CHUNK_BYTES);
       const chunkB64 = base64UrlEncodeBytes(chunkBytes);
       if (chunkB64.length !== SEALED_CHUNK_B64_CHARS) {
         throw new Error('unexpected chunk encoding');
@@ -634,7 +635,7 @@ export class RealtimeManager {
     const msgLen = dv.getUint32(0, false);
     if (!Number.isFinite(msgLen) || msgLen <= 0 || msgLen > plaintext.length - SEALED_LEN_PREFIX_BYTES) return null;
 
-    const msgBytes = plaintext.slice(SEALED_LEN_PREFIX_BYTES, SEALED_LEN_PREFIX_BYTES + msgLen);
+    const msgBytes = plaintext.subarray(SEALED_LEN_PREFIX_BYTES, SEALED_LEN_PREFIX_BYTES + msgLen);
 
     let json: string;
     try {
@@ -801,15 +802,20 @@ export class RealtimeManager {
     }
 
     // Flush oldest-first. Stop on first failure to avoid tight loops while unstable.
-    while (this.outbox.length > 0 && this.channel && this.connectionState.status === 'connected') {
-      const next = this.outbox.shift();
+    let advanced = 0;
+    while (this.outboxHead < this.outbox.length && this.channel && this.connectionState.status === 'connected') {
+      const next = this.outbox[this.outboxHead];
       if (!next) break;
       const ok = await this.sendNow(next.payload, next.retries);
       if (!ok) {
-        // Put it back at the front and stop; we'll retry after reconnect.
-        this.outbox.unshift(next);
         break;
       }
+      this.outboxHead++;
+      advanced++;
+    }
+
+    if (advanced > 0) {
+      this.compactOutboxIfNeeded();
     }
   }
 
@@ -1015,7 +1021,7 @@ export class RealtimeManager {
 
     const ok = await this.sendNow(payload, retries);
     if (ok) {
-      if (this.outbox.length > 0) {
+      if (this.outboxSize() > 0) {
         void this.flushOutbox().catch(() => {
         });
       }
@@ -1062,6 +1068,7 @@ export class RealtimeManager {
 
     this.stopCoverTraffic();
     this.outbox = [];
+    this.outboxHead = 0;
     this.seenIncoming.clear();
     this.partnerCount = 0;
     

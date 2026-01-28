@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from 'react';
+﻿import { useState, useEffect, useRef, useCallback, useMemo, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Ghost, Send, Paperclip, Shield, X, Loader2, Trash2, HardDrive, FileText, FileSpreadsheet, FileImage, FileArchive, FileCode, File, AlertTriangle, Clock, Download, Video } from 'lucide-react';
 import { toast } from 'sonner';
@@ -16,6 +16,7 @@ import { base64ToBytes, bytesToBase64 } from '@/utils/algorithms/encoding/base64
 import { secureZeroUint8Array } from '@/utils/algorithms/memory/zeroization';
 import { getReplayProtection, destroyReplayProtection } from '@/utils/replayProtection';
 import { usePlausibleDeniability } from '@/hooks/usePlausibleDeniability';
+import { createMinDelay } from '@/utils/interactionTiming';
 import KeyVerificationModal from './KeyVerificationModal';
 import VoiceRecorder from './VoiceRecorder';
 import VoiceMessage from './VoiceMessage';
@@ -52,6 +53,12 @@ interface VoiceMessageData {
 const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEndSession }: ChatInterfaceProps) => {
   const navigate = useNavigate();
   const { fullCleanup } = useMemoryCleanup();
+
+  const textEncoderRef = useRef<TextEncoder | null>(null);
+  const textDecoderRef = useRef<TextDecoder | null>(null);
+  const aadPrefixesRef = useRef<{ sessionId: string; chat: string; voice: string; file: string } | null>(null);
+  const decodedTextCacheRef = useRef<Map<string, string>>(new Map());
+  const syncScheduledRef = useRef(false);
 
   const isCapacitorNative = (): boolean => {
     try {
@@ -245,19 +252,50 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     purgeActiveNativeVideoDropsBestEffort();
   });
 
+  const getTextEncoder = (): TextEncoder => {
+    const cached = textEncoderRef.current;
+    if (cached) return cached;
+    const next = new TextEncoder();
+    textEncoderRef.current = next;
+    return next;
+  };
+
+  const getTextDecoder = (): TextDecoder => {
+    const cached = textDecoderRef.current;
+    if (cached) return cached;
+    const next = new TextDecoder();
+    textDecoderRef.current = next;
+    return next;
+  };
+
+  const getAadPrefixes = (): { sessionId: string; chat: string; voice: string; file: string } => {
+    const cached = aadPrefixesRef.current;
+    if (cached && cached.sessionId === sessionId) {
+      return cached;
+    }
+    const next = {
+      sessionId,
+      chat: `ghost:aad:v1|chat|${sessionId}|`,
+      voice: `ghost:aad:v1|voice|${sessionId}|`,
+      file: `ghost:aad:v1|file|${sessionId}|`,
+    };
+    aadPrefixesRef.current = next;
+    return next;
+  };
+
   const buildChatAad = (params: { senderId: string; messageId: string; sequence: number; type: string }): Uint8Array => {
-    const te = new TextEncoder();
-    return te.encode(`ghost:aad:v1|chat|${sessionId}|${params.senderId}|${params.messageId}|${params.sequence}|${params.type}`);
+    const prefixes = getAadPrefixes();
+    return getTextEncoder().encode(`${prefixes.chat}${params.senderId}|${params.messageId}|${params.sequence}|${params.type}`);
   };
 
   const buildVoiceAad = (params: { senderId: string; messageId: string; sequence: number; duration: number }): Uint8Array => {
-    const te = new TextEncoder();
-    return te.encode(`ghost:aad:v1|voice|${sessionId}|${params.senderId}|${params.messageId}|${params.sequence}|${params.duration}`);
+    const prefixes = getAadPrefixes();
+    return getTextEncoder().encode(`${prefixes.voice}${params.senderId}|${params.messageId}|${params.sequence}|${params.duration}`);
   };
 
   const buildFileAad = (params: { senderId: string; fileId: string }): Uint8Array => {
-    const te = new TextEncoder();
-    return te.encode(`ghost:aad:v1|file|${sessionId}|${params.senderId}|${params.fileId}`);
+    const prefixes = getAadPrefixes();
+    return getTextEncoder().encode(`${prefixes.file}${params.senderId}|${params.fileId}`);
   };
 
   const generateSafeFileTransferId = (): string => {
@@ -367,9 +405,58 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
   const syncMessagesFromQueue = useCallback(() => {
     const queuedMessages = messageQueueRef.current.getMessages(sessionId);
-    setMessages([...queuedMessages]);
+    const decoder = getTextDecoder();
+    const cache = decodedTextCacheRef.current;
+    const currentIds = new Set<string>();
+
+    const nextMessages = queuedMessages.map((m) => {
+      currentIds.add(m.id);
+      if (m.content instanceof Uint8Array) {
+        let decoded = cache.get(m.id);
+        if (typeof decoded !== 'string') {
+          decoded = decoder.decode(m.content);
+          cache.set(m.id, decoded);
+        }
+        return { ...m, content: decoded };
+      }
+      return m;
+    });
+
+    if (cache.size > currentIds.size) {
+      for (const key of cache.keys()) {
+        if (!currentIds.has(key)) {
+          cache.delete(key);
+        }
+      }
+    }
+
+    setMessages(nextMessages);
     setMemoryStats(messageQueueRef.current.getMemoryStats(sessionId));
   }, [sessionId]);
+
+  const scheduleSyncMessagesFromQueue = useCallback(() => {
+    if (syncScheduledRef.current) return;
+    syncScheduledRef.current = true;
+
+    const flush = () => {
+      syncScheduledRef.current = false;
+      syncMessagesFromQueue();
+    };
+
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(flush);
+    } else {
+      void Promise.resolve().then(flush);
+    }
+  }, [syncMessagesFromQueue]);
+
+  const voiceMessagesById = useMemo(() => {
+    const map = new Map<string, VoiceMessageData>();
+    for (const vm of voiceMessages) {
+      map.set(vm.id, vm);
+    }
+    return map;
+  }, [voiceMessages]);
 
   useEffect(() => {
     try {
@@ -812,7 +899,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               type: 'video',
               fileName: sanitizeFileName(String(data.fileName || 'secure_video.mp4')).slice(0, 256)
             });
-            syncMessagesFromQueue();
+            scheduleSyncMessagesFromQueue();
           }
 
           if (effectiveSealedKind === 'file') {
@@ -830,7 +917,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                 type: 'file',
                 fileName
               });
-              syncMessagesFromQueue();
+              scheduleSyncMessagesFromQueue();
             }
           }
 
@@ -885,7 +972,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                 type: 'video',
                 fileName: sanitizeFileName(String(data.fileName || 'secure_video.mp4')).slice(0, 256)
               });
-              syncMessagesFromQueue();
+              scheduleSyncMessagesFromQueue();
             }
 
             if (effectiveSealedKind === 'file') {
@@ -901,7 +988,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                   type: 'file',
                   fileName: t.fileName
                 });
-                syncMessagesFromQueue();
+                scheduleSyncMessagesFromQueue();
               }
             }
           }
@@ -941,21 +1028,21 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
           if (t.received >= t.total && t.total > 0) {
             if (t.sealedKind === 'video-drop') {
-              syncMessagesFromQueue();
+              scheduleSyncMessagesFromQueue();
               return;
             }
 
             const capNative = await getIsCapacitorNative();
             if (isTauriRuntime() || capNative) {
-              syncMessagesFromQueue();
+              scheduleSyncMessagesFromQueue();
               return;
             }
 
             if (t.sealedKind === 'file') {
               const isImage = t.fileType.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(t.fileName);
               if (!isImage) {
-              syncMessagesFromQueue();
-              return;
+                scheduleSyncMessagesFromQueue();
+                return;
               }
             }
 
@@ -986,12 +1073,12 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               type: 'file',
               fileName: displayFileName
             });
-            syncMessagesFromQueue();
+            scheduleSyncMessagesFromQueue();
           }
 
           if (t.sealedKind === 'video-drop') {
             if (t.received === 1 || t.received === t.total || t.received % 8 === 0) {
-              syncMessagesFromQueue();
+              scheduleSyncMessagesFromQueue();
             }
           }
 
@@ -1128,6 +1215,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     });
 
     manager.onMessage('chat-message', async (payload) => {
+      const ensureMinAckDelay = createMinDelay(35);
       try {
         markActivity();
         if (!encryptionEngineRef.current) return;
@@ -1141,19 +1229,20 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
         if (payload.data.type === 'file') {
           const MAX_SINGLE_FILE_ENCRYPTED_CHARS = 60000;
+          const MAX_IV_CHARS = 256;
+
           const encrypted = String(payload.data.encrypted || '');
           const iv = String(payload.data.iv || '');
-          const rawFileName = String(payload.data.fileName || 'unknown_file');
-          const safeFileName = sanitizeFileName(rawFileName).slice(0, 256);
+          const safeFileName = sanitizeFileName(String(payload.data.fileName || 'unknown_file')).slice(0, 256);
 
           if (encrypted.length === 0 || encrypted.length > MAX_SINGLE_FILE_ENCRYPTED_CHARS) {
             return;
           }
-          if (iv.length === 0 || iv.length > 256) {
+          if (iv.length === 0 || iv.length > MAX_IV_CHARS) {
             return;
           }
 
-          const aad = buildFileAad({ senderId: payload.senderId, fileId: payload.nonce });
+          const aad = buildChatAad({ senderId: payload.senderId, messageId: payload.nonce, sequence: seq, type: 'file', fileName: safeFileName });
           const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, iv, aad);
           try {
             aad.fill(0);
@@ -1162,9 +1251,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           const decryptedBytes = new Uint8Array(decrypted);
           const sniffedMime = sniffMimeFromBytes(decryptedBytes);
           const displayFileName = normalizeFileNameForMime(safeFileName, sniffedMime);
+
           const blob = new Blob([decryptedBytes], { type: sniffedMime || 'application/octet-stream' });
           const objectUrl = URL.createObjectURL(blob);
-
           decryptedBytes.fill(0);
 
           messageQueueRef.current.addMessage(sessionId, {
@@ -1178,6 +1267,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         } else {
           const MAX_TEXT_ENCRYPTED_CHARS = 60000;
           const MAX_IV_CHARS = 256;
+
           const encrypted = String(payload.data.encrypted || '');
           const iv = String(payload.data.iv || '');
 
@@ -1211,15 +1301,16 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           });
         }
 
-        syncMessagesFromQueue();
+        scheduleSyncMessagesFromQueue();
+        await ensureMinAckDelay();
         await manager.send('message-ack', { messageId: payload.nonce });
-
       } catch {
         // Silent - message decryption failed
       }
     });
 
     manager.onMessage('voice-message', async (payload) => {
+      const ensureMinAckDelay = createMinDelay(35);
       try {
         markActivity();
         if (!encryptionEngineRef.current) return;
@@ -1241,7 +1332,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
         const decryptedBytes = new Uint8Array(decrypted);
         const blob = new Blob([decryptedBytes], { type: 'audio/webm;codecs=opus' });
-
         decryptedBytes.fill(0);
 
         setVoiceMessages(prev => {
@@ -1264,7 +1354,8 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           type: 'voice',
           fileName: undefined
         });
-        syncMessagesFromQueue();
+        scheduleSyncMessagesFromQueue();
+        await ensureMinAckDelay();
         await manager.send('message-ack', { messageId: payload.nonce });
       } catch {
         // Silent
@@ -1390,7 +1481,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         timestamp: Date.now(),
         type: 'voice'
       });
-      syncMessagesFromQueue();
+      scheduleSyncMessagesFromQueue();
 
       const sent = await realtimeManagerRef.current?.send('voice-message', {
         encrypted,
@@ -1437,7 +1528,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     };
 
     messageQueueRef.current.addMessage(sessionId, systemMessage);
-    syncMessagesFromQueue();
+    scheduleSyncMessagesFromQueue();
   };
 
   const sendMessage = async () => {
@@ -1494,7 +1585,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         timestamp: displayTimestamp,
         type: 'text'
       });
-      syncMessagesFromQueue();
+      scheduleSyncMessagesFromQueue();
 
       const sent = await realtimeManagerRef.current?.send('chat-message', {
         encrypted,
@@ -1589,7 +1680,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           type: 'file',
           fileName: sanitizedName
         });
-        syncMessagesFromQueue();
+        scheduleSyncMessagesFromQueue();
 
         const MAX_FILE_CHUNKS = 4096;
         const chunkSize = 16_000;
@@ -1856,7 +1947,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           type: 'video',
           fileName: sanitizedName
         });
-        syncMessagesFromQueue();
+        scheduleSyncMessagesFromQueue();
 
         const MAX_FILE_CHUNKS = 4096;
         const chunkSize = 16_000;
@@ -2603,6 +2694,14 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     messageQueueRef.current.nuclearPurge();
 
     try {
+      decodedTextCacheRef.current.clear();
+    } catch {
+    }
+    aadPrefixesRef.current = null;
+    textEncoderRef.current = null;
+    textDecoderRef.current = null;
+
+    try {
       SecurityManager.clearHostToken(sessionId);
     } catch {
       // Ignore
@@ -2763,6 +2862,10 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
   const handleNuclearPurge = () => {
     messageQueueRef.current.destroySession(sessionId);
+    try {
+      decodedTextCacheRef.current.clear();
+    } catch {
+    }
     setMessages([]);
     setMemoryStats({ messageCount: 0, estimatedBytes: 0 });
     toast.success('All messages purged from memory');
@@ -2887,12 +2990,10 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
               )}>
                 {messages.map((message) => {
                   const voiceMessage = message.type === 'voice'
-                    ? voiceMessages.find(vm => vm.id === message.id)
+                    ? (voiceMessagesById.get(message.id) || null)
                     : null;
 
-                  const contentText = message.content instanceof Uint8Array
-                    ? new TextDecoder().decode(message.content)
-                    : message.content;
+                  const contentText = message.content as string;
 
                   return (
                     <div
