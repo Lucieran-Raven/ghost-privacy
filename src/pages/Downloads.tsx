@@ -4,7 +4,7 @@ import PageTransition from '@/components/Ghost/PageTransition';
 import { useMemo } from 'react';
 
 const Downloads = () => {
-  const releaseTag = 'v0.1.32';
+  const releaseTag = 'v0.1.33';
   const androidApk = 'ghost-privacy-android-release.apk';
 
   const releasePageUrl = `https://github.com/Lucieran-Raven/ghost-privacy/releases/tag/${releaseTag}`;

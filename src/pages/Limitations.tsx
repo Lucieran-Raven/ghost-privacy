@@ -32,7 +32,7 @@ const Limitations = () => {
                     <div className="p-4 font-mono text-[12px] leading-relaxed text-white/70 space-y-2">
                       <div>[✓] MESSAGE CONTENT (AES-256-GCM)</div>
                       <div>[✓] KEY EXCHANGE (ECDH P-256)</div>
-                      <div>[✓] RAM-ONLY MESSAGE STORAGE</div>
+                      <div>[✓] MESSAGE STORAGE: MEMORY-FIRST (NO INTENTIONAL PERSISTENCE)</div>
                       <div>[✓] NO ACCOUNTS / NO PHONE NUMBER</div>
                       <div>[✓] FINGERPRINT DISPLAY FOR MITM VERIFICATION</div>
                     </div>
@@ -48,7 +48,7 @@ const Limitations = () => {
                       <div>[!] SCREEN CAPTURE BY RECIPIENT</div>
                       <div>[!] BROWSER / EXTENSION EXPLOITS</div>
                       <div>[!] MEMORY TRACES UNTIL GC</div>
-                      <div>[✓] STATE-LEVEL DEVICE SEIZURE: PROTECTED VIA RAM-ONLY DESIGN AND DENIABLE ENCRYPTION</div>
+                      <div>[!] DEVICE SEIZURE/FORENSICS: APP AIMS TO MINIMIZE ARTIFACTS (BEST-EFFORT), NOT A GUARANTEE</div>
                       <div className="text-[#ff0a2a]">[!] CLEARNET IP EXPOSURE: USE TOR BROWSER FOR FULL ANONYMITY</div>
                     </div>
                   </div>

@@ -14,13 +14,13 @@ Available on **Web (PWA)**, **Windows/macOS/Linux (Tauri Desktop)**, and **Andro
 
 ## What Ghost Is
 
-Ghost is a **browser-native, zero-knowledge messaging platform** where conversations exist **only in RAM** and vanish when you're done. Built for lawyers, doctors, journalists, activists, and anyone who believes some words should never persist.
+Ghost is a **browser-native, privacy-focused messaging platform** designed to keep conversation state **in memory** and to avoid *intentional* plaintext persistence. Built for lawyers, doctors, journalists, activists, and anyone who believes some words should not outlive the session.
 
 ### Core Guarantees
 - **End-to-end encryption** — AES-256-GCM + ECDH P-256 (Web Crypto API)
-- **RAM-only storage** — No disk-backed browser storage, no disk writes
+- **Memory-first design** — Avoids disk-backed browser storage by design; best-effort cleanup/zeroization on session end
 - **Zero accounts** — No phone numbers, no emails, no identity correlation
-- **Automatic expiration** — Sessions self-destruct; no recovery possible
+- **Automatic expiration** — Sessions expire; recovery is not supported by the application
 - **Open source** — Full codebase available for audit
 
 ### What Ghost Does NOT Do
@@ -45,7 +45,7 @@ Here’s what happens when you send a message:
    - You type → message encrypted with **AES-256-GCM**  
    - Key derived from **ECDH P-256** (via Web Crypto API)  
    - IV generated → unique per message  
-   - All data lives in **RAM only** — no disk writes  
+   - Data is handled in memory; the app avoids intentional plaintext persistence  
 
 2. **To Supabase**  
    - Only **ciphertext + metadata** sent (no plaintext, no keys)  
@@ -55,11 +55,11 @@ Here’s what happens when you send a message:
 3. **On Recipient’s Device**  
    - Message decrypted using same key  
    - Displayed → vanishes when session ends  
-   - No history, no logs, no trace  
+   - No built-in message history; external capture (screenshots/recording) is always possible  
 
 4. **When You Close**  
    - `nuclearPurge()` triggers → zeroize keys, clear queues, kill workers  
-   - Session destroyed → **nothing left to find**
+   - Session ends → best-effort cleanup/zeroization runs (OS/browser behavior may still leave artifacts outside app control)
 
 > 🧊 **That’s it. No magic. Just math that vanishes.**
 
@@ -72,7 +72,7 @@ Here’s what happens when you send a message:
 - **Encryption**: AES-256-GCM + ECDH P-256 via Web Crypto API
 - **Key Derivation**: PBKDF2-SHA256, **600,000 iterations** (OWASP 2023)
 - **Session Binding**: Capability tokens + truncated IP hashes (no raw IPs stored)
-- **Infrastructure**: Supabase (realtime ciphertext delivery only — **no plaintext ever**)
+- **Infrastructure**: Supabase (ciphertext relay; plaintext is not required for server operation)
 
 ---
 

@@ -2852,7 +2852,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     // 4. Disconnect realtime
     await cleanup();
 
-    // 5. Redirect with no trace (history.replace)
+    // 5. Redirect without adding a new history entry (history.replace)
     onEndSession(false);
 
     if (!deleted) {

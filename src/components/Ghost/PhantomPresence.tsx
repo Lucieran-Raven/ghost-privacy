@@ -4,7 +4,7 @@ import { User, LogIn, LogOut } from 'lucide-react';
 import { getRandomPhantomUser } from '@/utils/decoyContent';
 import { trapState } from '@/utils/trapState';
 import { trapAudio } from '@/utils/trapAudio';
-import { secureRandomInt } from '@/utils/secureRng';
+import { bestEffortRandomInt, bestEffortRandomUint32 } from '@/utils/secureRng';
 
 interface PhantomPresenceProps {
   isActive: boolean;
@@ -32,10 +32,10 @@ const PhantomPresence = ({ isActive }: PhantomPresenceProps) => {
 
     const createPhantomEvent = () => {
       const username = getRandomPhantomUser();
-      const type = secureRandomInt(10) >= 4 ? 'join' : 'leave';
+      const type = bestEffortRandomInt(10) >= 4 ? 'join' : 'leave';
       
       const event: PhantomEvent = {
-        id: `phantom-${Date.now()}-${secureRandomInt(0x100000000)}`,
+        id: `phantom-${Date.now()}-${bestEffortRandomUint32()}`,
         type,
         username,
         timestamp: Date.now(),
@@ -58,14 +58,14 @@ const PhantomPresence = ({ isActive }: PhantomPresenceProps) => {
     };
 
     // Initial event after 10-30 seconds
-    const initialTimeout = setTimeout(createPhantomEvent, 10000 + secureRandomInt(20001));
+    const initialTimeout = setTimeout(createPhantomEvent, 10000 + bestEffortRandomInt(20001));
 
     // Subsequent events every 30-90 seconds
     const interval = setInterval(() => {
-      if (secureRandomInt(10) >= 3) { // 70% chance each interval
+      if (bestEffortRandomInt(10) >= 3) { // 70% chance each interval
         createPhantomEvent();
       }
-    }, 30000 + secureRandomInt(60001));
+    }, 30000 + bestEffortRandomInt(60001));
 
     return () => {
       clearTimeout(initialTimeout);

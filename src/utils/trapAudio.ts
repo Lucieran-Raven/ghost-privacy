@@ -14,7 +14,7 @@
    type TrapAudioType
  } from '@/utils/algorithms/deception/trapAudio';
 
- import { secureRandomInt } from '@/utils/secureRng';
+ import { bestEffortRandomInt } from '@/utils/secureRng';
 
 class TrapAudioManager {
   private audioContext: AudioContext | null = null;
@@ -147,17 +147,17 @@ class TrapAudioManager {
       if (!running) return;
       this.playType();
       // Random interval between 100-400ms
-      loopTimeout = setTimeout(type, 100 + secureRandomInt(301));
+      loopTimeout = setTimeout(type, 100 + bestEffortRandomInt(301));
     };
 
-    const startTimeout = setTimeout(type, secureRandomInt(2000));
+    const startTimeout = setTimeout(type, bestEffortRandomInt(2000));
 
     // Stop after random duration (5-15 seconds)
     const stopTimeout = setTimeout(() => {
       running = false;
       if (loopTimeout) clearTimeout(loopTimeout);
       loopTimeout = null;
-    }, 5000 + secureRandomInt(10001));
+    }, 5000 + bestEffortRandomInt(10001));
 
     return () => {
       running = false;

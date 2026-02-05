@@ -8,7 +8,7 @@ import {
 import { getAdminStats, generateFakeErrorLogs } from '@/utils/decoyContent';
 import { trapState } from '@/utils/trapState';
 import { trapAudio } from '@/utils/trapAudio';
-import { secureRandomInt } from '@/utils/secureRng';
+import { bestEffortRandomInt } from '@/utils/secureRng';
 
 interface FakeAdminPanelProps {
   onTimeout: () => void;
@@ -63,10 +63,10 @@ const FakeAdminPanel = ({ onTimeout }: FakeAdminPanelProps) => {
     const interval = setInterval(() => {
       setStats(prev => ({
         ...prev,
-        activeUsers: prev.activeUsers + secureRandomInt(3) - 1,
-        messagesTotal: prev.messagesTotal + secureRandomInt(10),
-        cpuUsage: Math.min(95, Math.max(30, prev.cpuUsage + secureRandomInt(6) - 3)),
-        memoryUsage: Math.min(90, Math.max(50, prev.memoryUsage + secureRandomInt(4) - 2)),
+        activeUsers: prev.activeUsers + bestEffortRandomInt(3) - 1,
+        messagesTotal: prev.messagesTotal + bestEffortRandomInt(10),
+        cpuUsage: Math.min(95, Math.max(30, prev.cpuUsage + bestEffortRandomInt(6) - 3)),
+        memoryUsage: Math.min(90, Math.max(50, prev.memoryUsage + bestEffortRandomInt(4) - 2)),
       }));
     }, 3000);
 
@@ -228,23 +228,6 @@ const FakeAdminPanel = ({ onTimeout }: FakeAdminPanelProps) => {
             <div className="divide-y divide-border">
               {Array.from({ length: 10 }).map((_, i) => (
                 <div key={i} className="px-4 py-3 flex items-center justify-between hover:bg-muted/30 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                      <Users className="w-4 h-4 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground font-mono">
-                        anon_{(secureRandomInt(0x1000000) + 0x1000000).toString(36).slice(1)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Last seen: {secureRandomInt(60)}m ago
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Lock className="w-3.5 h-3.5 text-accent" />
-                    <span className="text-xs text-muted-foreground">Encrypted</span>
-                  </div>
                 </div>
               ))}
             </div>
