@@ -3,9 +3,6 @@
 This document maps core security claims to their enforcement points in the codebase.  
 All controls are implemented identically across Web, Desktop (Tauri), and Android (Capacitor).
 
-For externally visible claim wording (and its bounded, audit-ready scope), see:
-- `auditor/SECURITY_CLAIMS_MATRIX.md`
-
 ## Session Capability Tokens
 Joining a session requires a secret capability token. Possession proves authorization.
 

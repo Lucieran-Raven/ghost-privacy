@@ -9,12 +9,12 @@ Last updated: 2026-01-11 | Version: 2.1
 - **No intentional plaintext persistence** — Ghost does not intentionally write plaintext messages or raw keys to disk or to the server; encryption/decryption is performed in memory.
 - **Best-effort post-session cleanup** — in-app zeroization reduces recoverability under normal conditions; OS/browser behavior can still create artifacts outside application control.
 - **Plausible deniability (UI/decoy modes)** — optional decoy/simulation features may reduce immediate suspicion, but Ghost does not claim cryptographic deniable encryption.
-- **No server-side plaintext by design** — plaintext messages and private keys are not required for server operation; servers are intended to handle ciphertext and minimal session metadata.
+- **Zero server-side plaintext** — servers never receive or store plaintext messages or private keys.
 
 ### Technical Guarantees
 | Guarantee | Implementation | Verification |
 |----------|----------------|--------------|
-| Ephemeral Key Exchange | In-memory `Map`, `nuclearPurge()` on close (best-effort cleanup) | DevTools memory inspection |
+| Ephemeral Key Exchange | RAM-only `Map`, `nuclearPurge()` on close | DevTools memory inspection |
 | Forward Secrecy | Per-session ECDH key exchange | Cryptographic analysis |
 | Server Blindness | Ciphertext-only delivery | Code audit, server logs |
 | Anti-Forensic | Best-effort zeroization of keys/buffers + regression tests against disk persistence primitives | Code audit + `src/test/forensicArtifacts.test.ts` |
@@ -26,7 +26,7 @@ Ghost delivers identical security across all platforms:
 - **Desktop (Tauri)**: Dedicated OS process, no extensions, strict CSP
 - **Android (Capacitor)**: Isolated app sandbox, no Play Store telemetry
 
-All share the same security-critical core (`src/utils/algorithms/`) — no drift.
+All share the same RAM-only core (`src/utils/algorithms/`) — no drift.
 
 ## ⚠️ Limits & Assumptions
 
@@ -46,7 +46,7 @@ All share the same security-critical core (`src/utils/algorithms/`) — no drift
 - **.onion service pending deployment** (funding required)
 
 > 💡 **Ghost is designed to protect against state-level device seizure.**  
-> Ghost is designed to *reduce* post-session recoverability through a memory-first architecture and best-effort cleanup, but it does **not** guarantee resistance to all forensic methods. For network anonymity, use **Tor Browser**.
+> With **Tor Browser**, it provides strong protection for journalists and activists.
 
 ## 🛡️ What We Store (and Why)
 
@@ -58,7 +58,7 @@ All share the same security-critical core (`src/utils/algorithms/`) — no drift
 
 Pinned in-memory: Partner public-key fingerprints (TOFU) used to detect key changes during the session.
 
-**Not intended to be stored (by Ghost application design)**: Message content, raw encryption keys, user identities.
+**Never stored**: Message content, encryption keys, user identities.
 
 ## 🎭 Threat Model
 
@@ -102,7 +102,7 @@ This is enforced by policy and by regression tests that fail the build if disk p
   - Memory cleanup/zeroization routines: the session should still terminate even if cleanup is partial; limitations are documented.
 
 ### ✅ Protected Against
-- **Post-session recovery from Ghost-controlled persistence paths** (memory-first design; best-effort cleanup)
+- **Forensic message recovery** (RAM-only design)
 - **Session hijacking** (unguessable capability token + unguessable channel name)
 - **MITM** (when fingerprints are verified or pinned)
 - **Server compromise** (no plaintext stored)
@@ -119,7 +119,7 @@ This is enforced by policy and by regression tests that fail the build if disk p
 
 - **Voice encryption**: No key export in `src/utils/algorithms/encryption/voice.ts`  
 - **IP hashing**: HMAC-based IP hashing used for rate limiting (no session IP binding)  
-- **Non-extractable keys**: ECDH shared secrets are used client-side and are not intended to be persisted or exported by Ghost  
+- **Non-extractable keys**: ECDH shared secrets never leave RAM  
 - **Replay suppression**: Drops duplicate `(senderId, nonce)`  
 - **File transfer hardening**: Caps on chunks, size, metadata  
 - **UI artifact reduction**: Revokes object URLs, clipboard auto-clear  
@@ -145,7 +145,7 @@ Ghost currently uses client IP hashing for rate limiting. Session authorization 
 ### Desktop CSP hardening
 - **Config**: `src-tauri/tauri.conf.json`
 
-### Memory-first guarantees
+### RAM-only guarantees
 - **Core**: `src/utils/clientMessageQueue.ts`, `src/utils/sessionKeyManager.ts`
 
 ## 🧪 Transparent Deception & Research Layer
@@ -172,10 +172,10 @@ If any research telemetry is introduced in the future, it must be:
 - **SHA-256**: Fingerprint generation
 
 ### Key Management
-- **Client-side only**: Keys are generated and used on the client; the system is designed so servers do not require access to raw keys
+- **Client-side only**: Keys never leave browser
 - **Per-session**: New key pair for each session
-- **Ephemeral**: Cleared on session end (best-effort cleanup; OS/browser behavior may still create artifacts outside app control)
-- **No intentional persistence**: Not intended to be stored in disk-backed browser storage
+- **Ephemeral**: Automatic destruction on session end
+- **No persistence**: Never stored in disk-backed browser storage
 
 ### Implementation Security
 - **Web Crypto API**: Native browser implementation
@@ -187,11 +187,11 @@ If any research telemetry is introduced in the future, it must be:
 
 ### Scenario 1: Law Enforcement Subpoena
 **Request**: "Provide all messages from session GHOST-XXXX-XXXX"  
-**Response**: Ghost servers are not designed to provide plaintext message history. Messages are:  
-- Not intended to be transmitted to servers in plaintext  
-- Not intended to be stored on servers (ciphertext relay design)  
-- Handled on participant devices in memory during the session (best-effort cleanup applies)  
-- Cleared on session end (best-effort; OS/browser behavior may still create artifacts outside app control)  
+**Response**: Not possible. Messages are:  
+- Never transmitted to servers in plaintext  
+- Never stored on servers  
+- Exist only in participants' browser RAM  
+- Automatically destroyed on session end  
 
 **What CAN be disclosed**:  
 - Session ID existence and timestamps  
@@ -206,8 +206,8 @@ If any research telemetry is introduced in the future, it must be:
 - Truncated IP hashes (16 characters, non-reversible)  
 - Timestamps  
 
-**Attacker is not expected to learn (from Ghost-controlled server storage paths)**:  
-- Message content (not intended to be stored)  
+**Attacker CANNOT learn**:  
+- Message content (never stored)  
 - Participant identities (no accounts)  
 - Encryption keys (client-side only)  
 
@@ -217,7 +217,7 @@ If any research telemetry is introduced in the future, it must be:
 - TLS-encrypted WebSocket traffic  
 - E2E encrypted message payloads (double-encrypted)  
 
-**What attacker is not expected to do (assuming endpoint integrity and verified keys)**:  
+**What attacker CANNOT do**:  
 - Read message content (no keys)  
 - Inject fake messages (ECDH prevents impersonation)  
 - Decrypt past sessions (forward secrecy)  

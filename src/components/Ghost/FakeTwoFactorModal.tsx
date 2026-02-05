@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, AlertCircle, Loader2, Lock } from 'lucide-react';
 import { trapState } from '@/utils/trapState';
 import { trapAudio } from '@/utils/trapAudio';
-import { bestEffortRandomInt } from '@/utils/secureRng';
+import { secureRandomInt } from '@/utils/secureRng';
 
 interface FakeTwoFactorModalProps {
   isOpen: boolean;
@@ -53,7 +53,7 @@ const FakeTwoFactorModal = ({ isOpen, onClose }: FakeTwoFactorModalProps) => {
     setError(null);
 
     // Fake verification delay (3-5 seconds)
-    await new Promise(resolve => setTimeout(resolve, 3000 + bestEffortRandomInt(2001)));
+    await new Promise(resolve => setTimeout(resolve, 3000 + secureRandomInt(2001)));
 
     setIsVerifying(false);
     const newAttempts = attempts + 1;

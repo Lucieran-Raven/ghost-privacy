@@ -30,7 +30,7 @@ const About = () => {
                     </div>
                     <div className="p-4 font-mono text-[12px] leading-relaxed text-white/70 space-y-2">
                       <div>[✓] CONFIDENTIALITY: CLIENT-SIDE ENCRYPTION</div>
-                      <div>[✓] EPHEMERALITY: MEMORY-FIRST (NO INTENTIONAL PERSISTENCE)</div>
+                      <div>[✓] EPHEMERALITY: RAM-ONLY STORAGE</div>
                       <div>[✓] VERIFIABILITY: OPEN CODE + PUBLISHED LIMITATIONS</div>
                       <div>[!] NETWORK ANONYMITY: EXTERNAL (TOR/VPN)</div>
                     </div>

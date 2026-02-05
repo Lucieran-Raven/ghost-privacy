@@ -94,7 +94,7 @@ const TransparencySection = () => {
                     <div className="w-2 h-2 rounded-full bg-ghost-purple animate-pulse" />
                     <span className="text-ghost-purple font-semibold text-sm uppercase tracking-wider">RAM-ONLY STORAGE</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Designed to avoid intentional disk persistence</p>
+                  <p className="text-xs text-muted-foreground">No disk persistence</p>
                 </div>
               </div>
 

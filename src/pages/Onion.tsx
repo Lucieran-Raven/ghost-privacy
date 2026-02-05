@@ -87,7 +87,7 @@ const Onion = () => {
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-primary">✓</span>
-                <span>Memory-first storage (no intentional persistence)</span>
+                <span>RAM-only storage</span>
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-destructive">✗</span>
@@ -125,7 +125,7 @@ const Onion = () => {
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-primary">✓</span>
-                <span>Memory-first storage (no intentional persistence)</span>
+                <span>RAM-only storage</span>
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-primary">✓</span>

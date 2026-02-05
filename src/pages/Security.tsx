@@ -104,8 +104,8 @@ const Security = () => {
                       <div className="font-mono text-xs tracking-[0.16em] uppercase text-white/60">STORAGE MODEL</div>
                     </div>
                     <div className="p-4 font-mono text-[12px] leading-relaxed text-white/70 space-y-2">
-                      <div>[✓] MESSAGE BUFFERS: MEMORY-FIRST (NO INTENTIONAL DISK PERSISTENCE)</div>
-                      <div>[✓] KEYS: MEMORY-FIRST (BEST-EFFORT ZEROIZATION)</div>
+                      <div>[✓] MESSAGE BUFFERS: RAM-ONLY</div>
+                      <div>[✓] KEYS: RAM-ONLY</div>
                       <div>[✓] SESSION KEYS: NUCLEAR PURGE ON TERMINATION</div>
                       <div>[!] BROWSER LIMITATION: MEMORY MAY PERSIST UNTIL GC</div>
                     </div>

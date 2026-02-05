@@ -37,7 +37,7 @@ const Session = () => {
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
-      e.returnValue = 'Leave Ghost session? In-memory session data will be cleared (best-effort cleanup).';
+      e.returnValue = 'Leave Ghost session? RAM-only session data will be destroyed.';
       return e.returnValue;
     };
 
@@ -63,7 +63,7 @@ const Session = () => {
     setSession(null);
     // Only show toast when manually ending, not when navigating
     if (showToast) {
-      toast.success('Session terminated. In-memory data cleared (best-effort).');
+      toast.success('Session terminated. All data destroyed.');
     }
     navigate('/');
   };

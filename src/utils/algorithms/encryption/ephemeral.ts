@@ -24,18 +24,8 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return bytesToBase64(new Uint8Array(buffer));
 }
 
-function sliceToArrayBuffer(view: Uint8Array): ArrayBuffer {
+function sliceToArrayBuffer(view: Uint8Array<ArrayBufferLike>): ArrayBuffer {
   return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as unknown as ArrayBuffer;
-}
-
-function toBufferSource(view: Uint8Array): BufferSource {
-  // TypeScript's lib.dom types allow Uint8Array to be backed by SharedArrayBuffer in some targets,
-  // but WebCrypto expects a BufferSource. Normalize to an ArrayBuffer-backed view when needed.
-  const buf = view.buffer;
-  if (buf instanceof ArrayBuffer) {
-    return view as unknown as Uint8Array<ArrayBuffer>;
-  }
-  return new Uint8Array(view);
 }
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
@@ -169,7 +159,7 @@ export async function aesGcmEncryptString(
 
   try {
     const encrypted = await deps.subtle.encrypt(
-      aad ? { name: 'AES-GCM', iv, additionalData: toBufferSource(aad) } : { name: 'AES-GCM', iv },
+      aad ? { name: 'AES-GCM', iv, additionalData: aad } : { name: 'AES-GCM', iv },
       key,
       encoded
     );
@@ -194,7 +184,7 @@ export async function aesGcmEncryptBytes(
 ): Promise<EncryptResult> {
   const iv = deps.getRandomValues(new Uint8Array(12));
   const encrypted = await deps.subtle.encrypt(
-    aad ? { name: 'AES-GCM', iv, additionalData: toBufferSource(aad) } : { name: 'AES-GCM', iv },
+    aad ? { name: 'AES-GCM', iv, additionalData: aad } : { name: 'AES-GCM', iv },
     key,
     plaintext
   );
@@ -216,7 +206,7 @@ export async function aesGcmDecryptString(
 
   try {
     const decrypted = await deps.subtle.decrypt(
-      aad ? { name: 'AES-GCM', iv, additionalData: toBufferSource(aad) } : { name: 'AES-GCM', iv },
+      aad ? { name: 'AES-GCM', iv, additionalData: aad } : { name: 'AES-GCM', iv },
       key,
       encrypted
     );
@@ -256,7 +246,7 @@ export async function aesGcmDecryptBytes(
 
   try {
     return await deps.subtle.decrypt(
-      aad ? { name: 'AES-GCM', iv, additionalData: toBufferSource(aad) } : { name: 'AES-GCM', iv },
+      aad ? { name: 'AES-GCM', iv, additionalData: aad } : { name: 'AES-GCM', iv },
       key,
       encrypted
     );
