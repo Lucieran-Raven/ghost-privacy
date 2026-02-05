@@ -37,8 +37,11 @@ jobs:
       - name: Integrity suite
         run: npm run integrity
 
-      - name: Lint
-        run: npm run lint
+      - name: Lint (freeze warning baseline)
+        run: npx --no-install eslint . -f json | npm run -s lint:baseline
+
+      - name: Typecheck (strict, full app)
+        run: npm run typecheck
 
       - name: Typecheck security-critical code (strict)
         run: npx --no-install tsc -p tsconfig.security.json --noEmit

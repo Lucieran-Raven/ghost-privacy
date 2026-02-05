@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Shield, AlertTriangle, Clock } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { trapState } from '@/utils/trapState';
-import { trapAudio } from '@/utils/trapAudio';
+import { trapAudio } from '@/utils/deceptionAudioEngine';
 
 /**
  * GHOST QUARANTINE: Deep Trap Endpoint

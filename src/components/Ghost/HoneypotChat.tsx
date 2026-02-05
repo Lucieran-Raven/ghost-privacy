@@ -3,12 +3,12 @@ import { Ghost, Send, Loader2, AlertCircle, Shield, Paperclip, ChevronDown, More
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { trapState } from '@/utils/trapState';
-import { trapAudio } from '@/utils/trapAudio';
+import { trapAudio } from '@/utils/deceptionAudioEngine';
 import { getDecoyScenario, getRandomPhantomUser } from '@/utils/decoyContent';
-import { secureRandomInt } from '@/utils/secureRng';
-import FakeTwoFactorModal from './FakeTwoFactorModal';
+import { bestEffortRandomInt } from '@/utils/secureRng';
+import FakeTwoFactorModal from './DecoyTwoFactorModal';
 import FakeFileUpload from './FakeFileUpload';
-import FakeAdminPanel from './FakeAdminPanel';
+import DecoyAdminPanel from './DecoyAdminPanel';
 import FakeDebugConsole from './FakeDebugConsole';
 import FakeApiDocs from './FakeApiDocs';
 import QuarantineOverlay from './QuarantineOverlay';
@@ -55,8 +55,9 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
   
   // Psychological pressure state
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
-  const [activeSessionCount, setActiveSessionCount] = useState(secureRandomInt(30) + 20);
+  const [activeSessionCount, setActiveSessionCount] = useState(bestEffortRandomInt(30) + 20);
   const [isQuarantined, setIsQuarantined] = useState(false);
+  const [isWindowVisible, setIsWindowVisible] = useState(true);
   const [memoryWarning, setMemoryWarning] = useState(false);
   
   // Pagination trap
@@ -133,13 +134,13 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
         setIsPartnerTyping(false);
         phantomTypingStopRef.current?.();
         phantomTypingStopRef.current = null;
-      }, 3000 + secureRandomInt(7001));
+      }, 3000 + bestEffortRandomInt(7001));
     };
 
     // Start typing indicator randomly
     const interval = setInterval(() => {
-      if (secureRandomInt(2) === 1) typingLoop();
-    }, 15000 + secureRandomInt(30001));
+      if (bestEffortRandomInt(2) === 1) typingLoop();
+    }, 15000 + bestEffortRandomInt(30001));
 
     const initial = setTimeout(typingLoop, 10000);
 
@@ -155,7 +156,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveSessionCount(prev => {
-        const change = secureRandomInt(5) - 2;
+        const change = bestEffortRandomInt(5) - 2;
         return Math.max(15, prev + change);
       });
     }, 10000);
@@ -179,7 +180,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
           clearInterval(progressInterval);
           return 85;
         }
-        return prev + secureRandomInt(301) / 100;
+        return prev + bestEffortRandomInt(301) / 100;
       });
     }, 200);
 
@@ -216,7 +217,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
   const handleInputChange = (value: string) => {
     // Add slight delay to create "capture" feeling (but never store the content)
     const isNonEmpty = value.trim().length > 0;
-    setTimeout(() => setCanSend(isNonEmpty), 30 + secureRandomInt(51));
+    setTimeout(() => setCanSend(isNonEmpty), 30 + bestEffortRandomInt(51));
 
     if (value.length > lastInputLenRef.current) {
       trapState.recordKeystroke();
@@ -254,7 +255,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
     // Fake "read" receipt after delay
     setTimeout(() => {
       setMessages(prev => prev.map(m => m.id === newMsg.id ? { ...m, read: true } : m));
-    }, 2000 + secureRandomInt(3001));
+    }, 2000 + bestEffortRandomInt(3001));
 
     // Trigger connection lost after 2 messages
     if (userMessageCount >= 1) {
@@ -286,7 +287,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
       setIsConnecting(false);
       setIsConnectionLost(true);
     };
-    setTimeout(triggerConnectionLost, 5000 + secureRandomInt(3001));
+    setTimeout(triggerConnectionLost, 5000 + bestEffortRandomInt(3001));
   };
 
   // Infinite pagination trap
@@ -310,7 +311,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
         });
       });
       setIsLoadingMore(false);
-    }, 2000 + secureRandomInt(2001));
+    }, 2000 + bestEffortRandomInt(2001));
   };
 
   // Check for admin panel escalation
@@ -379,7 +380,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
 
   // Admin panel (escalation)
   if (showAdminPanel) {
-    return <FakeAdminPanel onTimeout={() => setIsQuarantined(true)} />;
+    return <DecoyAdminPanel onTimeout={() => setIsQuarantined(true)} />;
   }
 
   // Connecting

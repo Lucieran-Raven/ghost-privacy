@@ -8,21 +8,21 @@ const articles = [
     number: '01',
     icon: Lock,
     title: "WE DON'T STORE YOUR DATA",
-    content: "We physically cannot access your messages. They're encrypted in your browser before transmission and vanish when your session ends. Our servers are designed to be ignorant of your content.",
+    content: "We are designed so message plaintext is encrypted on your device before transmission, and server components process ciphertext rather than plaintext. Session data is handled as ephemeral in-app state on a best-effort basis.",
     color: 'primary'
   },
   {
     number: '02',
     icon: Eye,
     title: "WE DON'T TRACK YOU",
-    content: "No cookies. No analytics. No fingerprinting (except for security verification). We don't even know how many users we have. Your privacy is absolute.",
+    content: "By default we do not run advertising trackers and we minimize identifiers. Limited security telemetry and infrastructure metadata can still exist depending on runtime, hosting, and network layers.",
     color: 'accent'
   },
   {
     number: '03',
     icon: Shield,
     title: "WE CAN'T HELP AUTHORITIES SPY ON YOU",
-    content: "If served with a warrant, we'll provide the encryption keys we have: None. We designed the system so we can't betray you even if we wanted to.",
+    content: "If legally compelled, we can provide only data we actually possess. Ghost is engineered to keep message plaintext and private keys on client devices, but legal exposure can still include accountless metadata outside encrypted payloads.",
     color: 'ghost-red'
   },
   {
@@ -36,7 +36,7 @@ const articles = [
     number: '05',
     icon: Heart,
     title: "NO WARRANTIES, ONLY PROMISES",
-    content: "We promise to keep the code open for audit. We promise to fix security flaws immediately. We promise to never add backdoors. These aren't legal terms—they're our oath.",
+    content: "We commit to public auditability, transparent security updates, and rapid remediation. We cannot promise zero defects or instantaneous fixes, but we can document controls and respond quickly to verified issues.",
     color: 'ghost-gold'
   },
 ];

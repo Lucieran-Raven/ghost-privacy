@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Upload, File, Shield, CheckCircle, Loader2, X } from 'lucide-react';
 import { trapState } from '@/utils/trapState';
-import { trapAudio } from '@/utils/trapAudio';
+import { trapAudio } from '@/utils/deceptionAudioEngine';
 import { getRandomFakeFile } from '@/utils/decoyContent';
 
 interface FakeFileUploadProps {

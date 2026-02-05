@@ -1,41 +1,29 @@
-let fallbackState = 0;
+/**
+ * Security RNG API
+ *
+ * - `secure*` APIs are fail-closed and throw if CSPRNG is unavailable.
+ * - `bestEffort*` APIs are for UX-only randomness (animations, decoys, timers).
+ */
 
-function nextFallbackUint32(): number {
-  // xorshift32
-  if (fallbackState === 0) {
-    const seed = (Date.now() ^ (typeof performance !== 'undefined' ? Math.floor(performance.now() * 1000) : 0)) >>> 0;
-    fallbackState = seed === 0 ? 0x6d2b79f5 : seed;
+function requireCryptoOrThrow(): Crypto {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    return crypto;
   }
-  let x = fallbackState >>> 0;
-  x ^= x << 13;
-  x ^= x >>> 17;
-  x ^= x << 5;
-  fallbackState = x >>> 0;
-  return fallbackState;
-}
-
-function hasCrypto(): boolean {
-  return typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function';
+  throw new Error('Secure RNG unavailable: crypto.getRandomValues is required for security-sensitive randomness.');
 }
 
 export function randomUint32(): number {
-  if (hasCrypto()) {
-    const buf = new Uint32Array(1);
-    crypto.getRandomValues(buf);
-    return buf[0] >>> 0;
-  }
-  return nextFallbackUint32();
+  const c = requireCryptoOrThrow();
+  const buf = new Uint32Array(1);
+  c.getRandomValues(buf);
+  return buf[0] >>> 0;
 }
 
 export function fillRandomBytes(bytes: Uint8Array): void {
-  if (!(bytes instanceof Uint8Array)) return;
-  if (hasCrypto()) {
-    crypto.getRandomValues(bytes);
-    return;
+  if (!(bytes instanceof Uint8Array)) {
+    throw new TypeError('fillRandomBytes expects Uint8Array');
   }
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = randomUint32() & 0xff;
-  }
+  requireCryptoOrThrow().getRandomValues(bytes);
 }
 
 export function secureRandomInt(maxExclusive: number): number {
@@ -57,4 +45,26 @@ export function secureRandomFloat01(): number {
 export function pickRandom<T>(items: readonly T[]): T {
   const idx = secureRandomInt(items.length);
   return items[idx];
+}
+
+function fallbackUint32(): number {
+  // UX-only fallback entropy, intentionally non-cryptographic.
+  const now = Date.now() >>> 0;
+  const perf = typeof performance !== 'undefined' ? Math.floor(performance.now() * 1000) >>> 0 : 0;
+  const mixed = (now ^ perf ^ ((Math.random() * 0xffffffff) >>> 0)) >>> 0;
+  return mixed;
+}
+
+export function bestEffortRandomInt(maxExclusive: number): number {
+  if (!Number.isFinite(maxExclusive) || maxExclusive <= 0) return 0;
+  const max = Math.floor(maxExclusive);
+  if (max <= 1) return 0;
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    return secureRandomInt(max);
+  }
+  return fallbackUint32() % max;
+}
+
+export function bestEffortPickRandom<T>(items: readonly T[]): T {
+  return items[bestEffortRandomInt(items.length)];
 }

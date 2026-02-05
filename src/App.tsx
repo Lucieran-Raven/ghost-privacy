@@ -7,7 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import ErrorBoundary from "./components/ErrorBoundary";
 import AmbientAura from "./components/Ghost/AmbientAura";
 import InstallPrompt from "./components/Ghost/InstallPrompt";
-import DecoyRoutes from "./components/Ghost/DecoyRoutes";
+import DeceptionRoutes from "./components/Ghost/DeceptionRoutes";
 import SecurityStatusBar from "./components/Ghost/SecurityStatusBar";
 import { usePlausibleDeniability } from "./hooks/usePlausibleDeniability";
 import { usePrivacyShield } from "./hooks/usePrivacyShield";
@@ -61,13 +61,13 @@ const App = () => {
                     <Route path="/tor" element={<Tor />} />
                     <Route path="/onion" element={<Onion />} />
                     <Route path="/decoy" element={<Quarantine />} />
-                    <Route path="/ghost_debug/*" element={<DecoyRoutes type="debug" />} />
-                    <Route path="/api/docs" element={<DecoyRoutes type="api" />} />
-                    <Route path="/backup/*" element={<DecoyRoutes type="backup" />} />
-                    <Route path="/admin" element={<DecoyRoutes type="admin" />} />
-                    <Route path="/admin/*" element={<DecoyRoutes type="admin" />} />
-                    <Route path="/.env" element={<DecoyRoutes type="env" />} />
-                    <Route path="/config/*" element={<DecoyRoutes type="config" />} />
+                    <Route path="/ghost_debug/*" element={<DeceptionRoutes type="debug" />} />
+                    <Route path="/api/docs" element={<DeceptionRoutes type="api" />} />
+                    <Route path="/backup/*" element={<DeceptionRoutes type="backup" />} />
+                    <Route path="/admin" element={<DeceptionRoutes type="admin" />} />
+                    <Route path="/admin/*" element={<DeceptionRoutes type="admin" />} />
+                    <Route path="/.env" element={<DeceptionRoutes type="env" />} />
+                    <Route path="/config/*" element={<DeceptionRoutes type="config" />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>

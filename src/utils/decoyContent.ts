@@ -6,7 +6,7 @@
  * Creates illusion of accessing sensitive information.
  */
 
-import { pickRandom, secureRandomInt } from '@/utils/secureRng';
+import { bestEffortPickRandom, bestEffortRandomInt } from '@/utils/secureRng';
 
 type ContentTheme = 'legal' | 'medical' | 'financial' | 'diplomatic' | 'military' | 'journalistic';
 
@@ -156,14 +156,14 @@ let scenarioCache: DecoyScenario | null = null;
 // Get scenario for current run
 export function getDecoyScenario(): DecoyScenario {
   if (scenarioCache) return scenarioCache;
-  scenarioCache = pickRandom(SCENARIOS);
+  scenarioCache = bestEffortPickRandom(SCENARIOS);
   return scenarioCache;
 }
 
 // Get random fake filename
 export function getRandomFakeFile(): string {
   const scenario = getDecoyScenario();
-  return scenario.fakeFiles[secureRandomInt(scenario.fakeFiles.length)];
+  return scenario.fakeFiles[bestEffortRandomInt(scenario.fakeFiles.length)];
 }
 
 // Get random fake username for phantom presence
@@ -171,13 +171,13 @@ export function getRandomPhantomUser(): string {
   const scenario = getDecoyScenario();
   const baseUsers = scenario.fakeUsers;
   const genericUsers = [
-    'anon_' + secureRandomInt(10000),
+    'anon_' + bestEffortRandomInt(10000),
     'ghost_reviewer',
     'sys_monitor',
-    'audit_' + secureRandomInt(100)
+    'audit_' + bestEffortRandomInt(100)
   ];
   const allUsers = [...baseUsers, ...genericUsers];
-  return allUsers[secureRandomInt(allUsers.length)];
+  return allUsers[bestEffortRandomInt(allUsers.length)];
 }
 
 // Generate fake error log entries
@@ -199,11 +199,11 @@ export function generateFakeErrorLogs(count: number = 50): string[] {
   const now = Date.now();
   
   for (let i = 0; i < count; i++) {
-    const timestamp = new Date(now - secureRandomInt(86400000)).toISOString();
-    let log = errors[secureRandomInt(errors.length)];
-    log = log.replace('{IP}', `${secureRandomInt(256)}.${secureRandomInt(256)}.${secureRandomInt(256)}.${secureRandomInt(256)}`);
-    log = log.replace('{N}', String(secureRandomInt(1000)));
-    log = log.replace('{REGION}', ['US-East', 'EU-West', 'APAC', 'Unknown'][secureRandomInt(4)]);
+    const timestamp = new Date(now - bestEffortRandomInt(86400000)).toISOString();
+    let log = errors[bestEffortRandomInt(errors.length)];
+    log = log.replace('{IP}', `${bestEffortRandomInt(256)}.${bestEffortRandomInt(256)}.${bestEffortRandomInt(256)}.${bestEffortRandomInt(256)}`);
+    log = log.replace('{N}', String(bestEffortRandomInt(1000)));
+    log = log.replace('{REGION}', ['US-East', 'EU-West', 'APAC', 'Unknown'][bestEffortRandomInt(4)]);
     logs.push(`${timestamp} ${log}`);
   }
   
@@ -253,12 +253,12 @@ export function getAdminStats() {
   return {
     ...scenario.adminStats,
     // Add some randomization
-    activeUsers: scenario.adminStats.activeUsers + secureRandomInt(10) - 5,
-    messagesTotal: scenario.adminStats.messagesTotal + secureRandomInt(100),
-    sessionsActive: secureRandomInt(50) + 10,
-    cpuUsage: secureRandomInt(30) + 40,
-    memoryUsage: secureRandomInt(20) + 60,
-    uptime: `${secureRandomInt(30) + 1}d ${secureRandomInt(24)}h`,
+    activeUsers: scenario.adminStats.activeUsers + bestEffortRandomInt(10) - 5,
+    messagesTotal: scenario.adminStats.messagesTotal + bestEffortRandomInt(100),
+    sessionsActive: bestEffortRandomInt(50) + 10,
+    cpuUsage: bestEffortRandomInt(30) + 40,
+    memoryUsage: bestEffortRandomInt(20) + 60,
+    uptime: `${bestEffortRandomInt(30) + 1}d ${bestEffortRandomInt(24)}h`,
   };
 }
 

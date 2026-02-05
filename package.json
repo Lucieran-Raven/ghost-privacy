@@ -33,7 +33,9 @@
     "audit:fix": "npm audit fix",
     "security-check": "npm audit && npm outdated",
     "verify-security": "npm audit && npm run lint && npm run build",
-    "postinstall": "node scripts/postinstall.cjs"
+    "postinstall": "node scripts/postinstall.cjs",
+    "typecheck": "tsc -p tsconfig.security.json --noEmit",
+    "lint:baseline": "node scripts/lint-baseline.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

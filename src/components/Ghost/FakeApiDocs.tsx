@@ -4,7 +4,7 @@ import {
   Code, ChevronRight, Copy, CheckCircle, 
   Lock, Globe, Server, X 
 } from 'lucide-react';
-import { trapAudio } from '@/utils/trapAudio';
+import { trapAudio } from '@/utils/deceptionAudioEngine';
 import { writeEphemeralClipboard } from '@/utils/ephemeralClipboard';
 
 interface FakeApiDocsProps {
