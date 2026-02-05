@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Shield, AlertTriangle, Clock } from 'lucide-react';
 import { trapState } from '@/utils/trapState';
-import { trapAudio } from '@/utils/trapAudio';
+import { trapAudio } from '@/utils/deceptionAudioEngine';
 
 interface QuarantineOverlayProps {
   isActive: boolean;

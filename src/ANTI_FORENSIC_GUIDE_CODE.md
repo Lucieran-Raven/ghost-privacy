@@ -111,9 +111,9 @@ async function handleDeepTrapDetection() {
 
 /**
  * All fake components now include transparency labels:
- * - FakeAdminPanel.tsx
+ * - DecoyAdminPanel.tsx
  * - FakeDebugConsole
- * - FakeTwoFactorModal.tsx
+ * - DecoyTwoFactorModal.tsx
  * - FakeFileUpload.tsx
  * - FakeApiDocs.tsx
  * 
@@ -166,7 +166,7 @@ async function handleDeepTrapDetection() {
  * - reconnectAttempts > 10
  * - twoFactorAttempts > 20
  * 
- * Recommended integration in DecoyRoutes.tsx or similar:
+ * Recommended integration in DeceptionRoutes.tsx or similar:
  */
 
 import { useMemoryCleanup } from '@/hooks/useMemoryCleanup';
@@ -264,7 +264,7 @@ function DecoyComponent() {
  * 
  * 1. Open DevTools console
  * 2. Run: trapState.recordDecoyHit() multiple times (3+)
- * 3. Watch for FakeAdminPanel to appear
+ * 3. Watch for DecoyAdminPanel to appear
  * 4. Continue triggering decoy hits or wait 15 minutes
  * 5. Escalation level 3 should trigger
  * 6. Page redirects to /decoy?mode=quarantine

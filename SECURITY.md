@@ -45,8 +45,8 @@ All share the same RAM-only core (`src/utils/algorithms/`) — no drift.
 - **Clearnet exposes IP** — always use **Tor Browser** for anonymity
 - **.onion service pending deployment** (funding required)
 
-> 💡 **Ghost is designed to protect against state-level device seizure.**  
-> With **Tor Browser**, it provides strong protection for journalists and activists.
+> 💡 **Ghost is designed to reduce recoverable plaintext and key material under defined threat assumptions.**  
+> It does not guarantee protection against compromised operating systems, advanced physical forensics, or all state-level capabilities.
 
 ## 🛡️ What We Store (and Why)
 
@@ -343,3 +343,16 @@ Ghost IS:
 **Document Status**: Production Ready  
 **Maintained by**: Ghost Privacy Team  
 **Code**: https://github.com/Lucieran-Raven/ghost-privacy
+
+
+## Security Claims Matrix
+
+| Claim | Actual technical guarantee | Caveats / limitations | Evidence / file reference for verification |
+|---|---|---|---|
+| End-to-end encryption | Message payload encryption/decryption uses Web Crypto primitives in the client. | Endpoint compromise, screen capture, or keylogging bypasses E2EE protections. | `src/utils/encryption.ts`, `src/utils/algorithms/encryption/deniable.ts` |
+| Server plaintext exposure | App design avoids intentional plaintext processing/storage server-side for normal message flow. | Infrastructure/network metadata and logs may still exist outside payload ciphertext. | `docs/ARCHITECTURE.md`, `supabase/functions/*` |
+| Ephemeral lifecycle teardown | Session teardown executes memory cleanup/zeroization routines for in-app state. | Browser/OS swap, crash dumps, and extensions are outside app-level guarantees. | `src/components/Ghost/ChatInterfaceShell.tsx`, `src/components/Ghost/chat/useQuarantine.ts`, `src/utils/algorithms/memory/zeroization.ts` |
+| Replay protection | Message replay checks are applied using nonce/counter tracking. | Protection scope is bounded to active session context and retained state. | `src/utils/replayProtection.ts`, `src/utils/algorithms/integrity/replay.ts` |
+| Deniable encryption | Payload/container workflows support plausible alternate decrypt states when configured correctly. | Deniability is context-dependent and can be undermined by external evidence or user behavior. | `src/utils/algorithms/encryption/deniable.ts`, `src/utils/deniableEncryption.ts` |
+| Quarantine / deception UX | Decoy and quarantine routes can isolate suspicious interaction paths and provide controlled responses. | Client-side deception features are not legal proof and can be bypassed in compromised clients. | `src/components/Ghost/DeceptionRoutes.tsx`, `src/components/Ghost/DecoyAdminPanel.tsx` |
+| CSPRNG usage | Security RNG APIs fail closed when `crypto.getRandomValues` is unavailable. | Non-security UX randomness uses separate best-effort APIs and must not be used for cryptography. | `src/utils/secureRng.ts` |

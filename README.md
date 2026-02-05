@@ -1,7 +1,7 @@
 # Ghost Privacy
 
 **Private by design. Ephemeral by default.**  
-Available on **Web (PWA)**, **Windows/macOS/Linux (Tauri Desktop)**, and **Android (APK)** — same core, same guarantees.
+Available on **Web (PWA)**, **Windows/macOS/Linux (Tauri Desktop)**, and **Android (APK)** — same core security architecture with platform-specific limitations.
 
 🔗 **Live App**: https://ghostprivacy.netlify.app/  
 📄 **Source Code**: https://github.com/Lucieran-Raven/ghost-privacy  
@@ -14,13 +14,13 @@ Available on **Web (PWA)**, **Windows/macOS/Linux (Tauri Desktop)**, and **Andro
 
 ## What Ghost Is
 
-Ghost is a **browser-native, zero-knowledge messaging platform** where conversations exist **only in RAM** and vanish when you're done. Built for lawyers, doctors, journalists, activists, and anyone who believes some words should never persist.
+Ghost is a **browser-native, zero-knowledge messaging platform** where conversations are processed in ephemeral runtime memory and are purged when sessions end (best effort, runtime-dependent). Built for lawyers, doctors, journalists, activists, and anyone who believes some words should never persist.
 
 ### Core Guarantees
 - **End-to-end encryption** — AES-256-GCM + ECDH P-256 (Web Crypto API)
-- **RAM-only storage** — No disk-backed browser storage, no disk writes
+- **Ephemeral-first storage** — avoids intentional plaintext persistence; browser/OS behavior remains outside app control
 - **Zero accounts** — No phone numbers, no emails, no identity correlation
-- **Automatic expiration** — Sessions self-destruct; no recovery possible
+- **Automatic expiration** — session lifecycle teardown purges in-app state on a best-effort basis
 - **Open source** — Full codebase available for audit
 
 ### What Ghost Does NOT Do
@@ -34,6 +34,8 @@ Ghost is a **browser-native, zero-knowledge messaging platform** where conversat
 
 → **Read the full threat model**: [`SECURITY.md`](SECURITY.md)
 
+→ **Security Claims Matrix**: [`SECURITY.md#security-claims-matrix`](SECURITY.md#security-claims-matrix)
+
 ---
 
 
@@ -45,7 +47,7 @@ Here’s what happens when you send a message:
    - You type → message encrypted with **AES-256-GCM**  
    - Key derived from **ECDH P-256** (via Web Crypto API)  
    - IV generated → unique per message  
-   - All data lives in **RAM only** — no disk writes  
+   - Data is handled in runtime memory and the app avoids intentional plaintext persistence  
 
 2. **To Supabase**  
    - Only **ciphertext + metadata** sent (no plaintext, no keys)  
@@ -59,7 +61,7 @@ Here’s what happens when you send a message:
 
 4. **When You Close**  
    - `nuclearPurge()` triggers → zeroize keys, clear queues, kill workers  
-   - Session destroyed → **nothing left to find**
+   - Session destroyed → in-app state teardown and zeroization routines are executed
 
 > 🧊 **That’s it. No magic. Just math that vanishes.**
 
@@ -72,7 +74,8 @@ Here’s what happens when you send a message:
 - **Encryption**: AES-256-GCM + ECDH P-256 via Web Crypto API
 - **Key Derivation**: PBKDF2-SHA256, **600,000 iterations** (OWASP 2023)
 - **Session Binding**: Capability tokens + truncated IP hashes (no raw IPs stored)
-- **Infrastructure**: Supabase (realtime ciphertext delivery only — **no plaintext ever**)
+- **Infrastructure**: Supabase (realtime ciphertext delivery only — **plaintext is not intentionally processed server-side**)
+- **Client Chat Architecture**: `ChatInterfaceShell` + modular hooks (`useChatTransport`, `useMediaVoice`, `useQuarantine`) for auditable separation of concerns
 
 ---
 
@@ -107,6 +110,6 @@ Journalists, activists, and whistleblowers should:
 ---
 
 **© 2026 Ghost Privacy. All rights reserved.**  
-End-to-end encrypted. No message storage. Built for those who need conversations that never existed.
+End-to-end encrypted with scoped, testable claims. See `SECURITY.md` for guarantees, caveats, and verification evidence.
 
 ## Technical Architecture
