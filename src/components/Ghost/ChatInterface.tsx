@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ghost, Send, Paperclip, Shield, X, Loader2, Trash2, HardDrive, FileText, FileSpreadsheet, FileImage, FileArchive, FileCode, File, AlertTriangle, Clock, Download, Video } from 'lucide-react';
+import { Ghost, Send, Paperclip, Shield, X, Loader2, Trash2, HardDrive, FileText, FileSpreadsheet, FileImage, FileArchive, FileCode, File as FileIcon, AlertTriangle, Clock, Download, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { EncryptionEngine, KeyExchange, generateNonce } from '@/utils/encryption';
 import { SecurityManager, validateMessage, validateFile, sanitizeFileName } from '@/utils/security';
@@ -18,9 +18,18 @@ import { getReplayProtection, destroyReplayProtection } from '@/utils/replayProt
 import { usePlausibleDeniability } from '@/hooks/usePlausibleDeniability';
 import { createMinDelay } from '@/utils/interactionTiming';
 import { useVoiceMessaging } from './hooks/useVoiceMessaging';
+import { 
+  generateSafeFileTransferId, 
+  makeNativeDropId, 
+  normalizeFileNameForMime, 
+  purgeFileTransfer, 
+  sniffMimeFromBytes, 
+  waitForFileAck 
+} from './hooks/fileTransferUtils';
 import KeyVerificationModal from './KeyVerificationModal';
 import ConnectionStatusIndicator from './ConnectionStatusIndicator';
 import VoiceRecorder from './VoiceRecorder';
+import VoiceMessage from './VoiceMessage';
 import FilePreviewCard from './FilePreviewCard';
 import TimestampSettings from './TimestampSettings';
 
@@ -289,107 +298,12 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     return getTextEncoder().encode(`${prefixes.file}${params.senderId}|${params.fileId}`);
   };
 
-  const generateSafeFileTransferId = (): string => {
-    const bytes = crypto.getRandomValues(new Uint8Array(16));
-    try {
-      return bytesToBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-    } finally {
-      try {
-        bytes.fill(0);
-      } catch {
-      }
-    }
+  const waitForFileAckLocal = (key: string, timeoutMs: number): Promise<boolean> => {
+    return waitForFileAck(pendingFileAcksRef.current, seenFileAcksRef.current, key, timeoutMs);
   };
 
-  const makeNativeDropId = (baseId: string): string => {
-    const base = String(baseId || '').replace(/[^a-zA-Z0-9_-]/g, '');
-    const safeBase = base.length > 0 ? base : 'drop';
-    const suffix = generateSafeFileTransferId().slice(0, 10);
-    const combined = `${safeBase}-${suffix}`;
-    return combined.length > 128 ? combined.slice(0, 128) : combined;
-  };
-
-  const waitForFileAck = (key: string, timeoutMs: number): Promise<boolean> => {
-    return new Promise((resolve) => {
-      const seenAt = seenFileAcksRef.current.get(key);
-      if (typeof seenAt === 'number') {
-        seenFileAcksRef.current.delete(key);
-        resolve(true);
-        return;
-      }
-
-      pendingFileAcksRef.current.set(key, resolve);
-
-      setTimeout(() => {
-        const resolver = pendingFileAcksRef.current.get(key);
-        if (resolver) {
-          pendingFileAcksRef.current.delete(key);
-          resolver(false);
-        }
-      }, timeoutMs);
-    });
-  };
-
-  const purgeFileTransfer = (fileId: string): void => {
-    const t = fileTransfersRef.current.get(fileId);
-    if (!t) return;
-
-    if (t.cleanupTimer) {
-      clearTimeout(t.cleanupTimer);
-    }
-
-    try {
-      t.chunks.fill('');
-    } catch {
-    }
-
-    t.received = 0;
-    t.total = 0;
-    t.iv = '';
-    t.fileName = '';
-    t.fileType = '';
-    t.sealedKind = '';
-    t.timestamp = 0;
-    t.senderId = '';
-    t.cleanupTimer = null;
-
-    fileTransfersRef.current.delete(fileId);
-  };
-
-  const sniffMimeFromBytes = (bytes: Uint8Array): string | null => {
-    try {
-      const header = Array.from(bytes.slice(0, 16))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-      if (header.startsWith('25504446')) return 'application/pdf';
-      if (header.startsWith('89504e47')) return 'image/png';
-      if (header.startsWith('ffd8ff')) return 'image/jpeg';
-      if (header.startsWith('47494638')) return 'image/gif';
-      if (header.startsWith('52494646')) return 'image/webp';
-      return null;
-    } catch {
-      return null;
-    }
-  };
-
-  const normalizeFileNameForMime = (safeFileName: string, mime: string | null): string => {
-    if (!mime) return safeFileName;
-    const extByMime: Record<string, string> = {
-      'application/pdf': 'pdf',
-      'image/png': 'png',
-      'image/jpeg': 'jpg',
-      'image/gif': 'gif',
-      'image/webp': 'webp'
-    };
-    const desiredExt = extByMime[mime];
-    if (!desiredExt) return safeFileName;
-
-    const idx = safeFileName.lastIndexOf('.');
-    const currentExt = idx >= 0 ? safeFileName.slice(idx + 1).toLowerCase() : '';
-    if (currentExt === desiredExt) return safeFileName;
-
-    const base = idx >= 0 ? safeFileName.slice(0, idx) : safeFileName;
-    return `${base}.${desiredExt}`.slice(0, 256);
+  const purgeFileTransferLocal = (fileId: string): void => {
+    purgeFileTransfer(fileTransfersRef.current, fileId);
   };
 
   const syncMessagesFromQueue = useCallback(() => {
@@ -843,7 +757,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             }
 
             existing.cleanupTimer = setTimeout(() => {
-              purgeFileTransfer(fileId);
+              purgeFileTransferLocal(fileId);
             }, FILE_TRANSFER_TTL_MS);
 
             // Idempotency: do not reset an in-progress transfer if we receive a duplicate init.
@@ -878,7 +792,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           }
 
           const cleanupTimer = setTimeout(() => {
-            purgeFileTransfer(fileId);
+            purgeFileTransferLocal(fileId);
           }, FILE_TRANSFER_TTL_MS);
 
           fileTransfersRef.current.set(fileId, {
@@ -948,7 +862,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             const effectiveSealedKind = sealedKind === 'video-drop' ? 'video-drop' : 'file';
 
             const cleanupTimer = setTimeout(() => {
-              purgeFileTransfer(fileId);
+              purgeFileTransferLocal(fileId);
             }, FILE_TRANSFER_TTL_MS);
 
             t = {
@@ -1012,7 +926,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
           const chunk = String(data.chunk || '');
           if (chunk.length === 0 || chunk.length > MAX_CHUNK_CHARS) {
-            purgeFileTransfer(fileId);
+            purgeFileTransferLocal(fileId);
             return;
           }
 
@@ -1020,7 +934,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             clearTimeout(t.cleanupTimer);
           }
           t.cleanupTimer = setTimeout(() => {
-            purgeFileTransfer(fileId);
+            purgeFileTransferLocal(fileId);
           }, FILE_TRANSFER_TTL_MS);
 
           t.chunks[idx] = chunk;
@@ -1065,7 +979,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             const objectUrl = URL.createObjectURL(blob);
             decryptedBytes.fill(0);
 
-            purgeFileTransfer(fileId);
+            purgeFileTransferLocal(fileId);
 
             messageQueueRef.current.addMessage(sessionId, {
               id: fileId,
@@ -1105,7 +1019,9 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           const pkB64 = String(payload.data?.publicKey || '');
           if (pkB64) {
             const pkBytes = base64ToBytes(pkB64);
-            const hash = await crypto.subtle.digest('SHA-256', pkBytes);
+            const view = pkBytes.buffer instanceof ArrayBuffer ? pkBytes : new Uint8Array(pkBytes);
+            const digestBuf = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+            const hash = await crypto.subtle.digest('SHA-256', digestBuf);
             remoteFingerprint = Array.from(new Uint8Array(hash))
               .slice(0, 16)
               .map((b) => b.toString(16).padStart(2, '0'))
@@ -1244,7 +1160,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             return;
           }
 
-          const aad = buildChatAad({ senderId: payload.senderId, messageId: payload.nonce, sequence: seq, type: 'file', fileName: safeFileName });
+          const aad = buildFileAad({ senderId: payload.senderId, fileId: payload.nonce });
           const decrypted = await encryptionEngineRef.current.decryptBytes(encrypted, iv, aad);
           try {
             aad.fill(0);
@@ -1609,7 +1525,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         let legacyPeer = false;
         let fastPathStartIndex = 0;
 
-        const initAckPromise = waitForFileAck(`${messageId}:init`, 6000);
+        const initAckPromise = waitForFileAckLocal(`${messageId}:init`, 6000);
         debugStage = 'send_init';
         let sent = (await realtimeManagerRef.current?.send('file', {
           kind: 'init',
@@ -1633,7 +1549,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
           if (!ackCapable && totalChunks > 0) {
             const probeChunk = encrypted.slice(0, chunkSize);
-            const probeAckPromise = waitForFileAck(`${messageId}:0`, 6000);
+            const probeAckPromise = waitForFileAckLocal(`${messageId}:0`, 6000);
             debugStage = 'probe_chunk_0';
             const probeOk = (await realtimeManagerRef.current?.send('file', {
               kind: 'chunk',
@@ -1720,7 +1636,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
             const sendChunkWithRetry = async (i: number): Promise<boolean> => {
               const chunk = encrypted.slice(i * chunkSize, (i + 1) * chunkSize);
               for (let attempt = 0; attempt < 3; attempt++) {
-                const ackPromise = waitForFileAck(`${messageId}:${i}`, 6000);
+                const ackPromise = waitForFileAckLocal(`${messageId}:${i}`, 6000);
                 debugStage = `send_chunk_${i}_attempt_${attempt}`;
                 const ok = (await realtimeManagerRef.current?.send('file', {
                   kind: 'chunk',
@@ -1889,7 +1805,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         }
 
         debugStage = 'wait_init_ack';
-        const initAck = await waitForFileAck(`${messageId}:init`, 4000);
+        const initAck = await waitForFileAckLocal(`${messageId}:init`, 4000);
         if (!initAck) {
           toast.warning('Receiver may be slow to acknowledge; continuing...');
         }
@@ -1899,7 +1815,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         const sendChunkWithRetry = async (i: number): Promise<boolean> => {
           const chunk = encrypted.slice(i * chunkSize, (i + 1) * chunkSize);
           for (let attempt = 0; attempt < 3; attempt++) {
-            const ackPromise = waitForFileAck(`${messageId}:${i}`, 12000);
+            const ackPromise = waitForFileAckLocal(`${messageId}:${i}`, 12000);
             debugStage = `send_chunk_${i}_attempt_${attempt}`;
             const ok = (await realtimeManagerRef.current?.send('file', {
               kind: 'chunk',
@@ -2234,7 +2150,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           }
       }
 
-      purgeFileTransfer(fileId);
+      purgeFileTransferLocal(fileId);
       setDownloadedVideoDrops(prev => {
         const next = new Set(prev);
         next.add(fileId);
@@ -2586,7 +2502,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     }
 
     for (const fileId of fileTransfersRef.current.keys()) {
-      purgeFileTransfer(fileId);
+      purgeFileTransferLocal(fileId);
     }
 
     pendingFileAcksRef.current.clear();
