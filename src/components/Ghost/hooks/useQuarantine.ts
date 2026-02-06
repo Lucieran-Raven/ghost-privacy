@@ -60,9 +60,11 @@ export function useQuarantine(params: {
     };
 
     const handleBlur = () => {
-      setIsWindowVisible(false);
-      if (!isCapacitorNative()) {
-        setInputText('');
+      if (typeof document !== 'undefined' && document.hidden) {
+        setIsWindowVisible(false);
+        if (!isCapacitorNative()) {
+          setInputText('');
+        }
       }
     };
 

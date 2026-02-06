@@ -800,6 +800,21 @@ const ChatInterfaceShell = ({ sessionId, token, channelToken, isHost, timerMode,
                                   fileName={message.fileName || 'Unknown File'}
                                   content={typeof message.content === 'string' ? message.content : ''}
                                   sender={message.sender}
+                                  onDownload={() => {
+                                    if (message.sender === 'me') {
+                                      return;
+                                    }
+                                    const t = fileTransfersRef.current.get(message.id);
+                                    if (!t || t.sealedKind !== 'file' || t.total <= 0) {
+                                      toast.error('File not available');
+                                      return;
+                                    }
+                                    if (t.received < t.total) {
+                                      toast.info(`File still receiving (${t.received}/${t.total})`);
+                                      return;
+                                    }
+                                    void handleDownloadFileDrop(message.id);
+                                  }}
                                 />
                               </div>
                             )
