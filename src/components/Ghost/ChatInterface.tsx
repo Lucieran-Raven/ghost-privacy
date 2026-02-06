@@ -17,7 +17,7 @@ import { secureZeroUint8Array } from '@/utils/algorithms/memory/zeroization';
 import { getReplayProtection, destroyReplayProtection } from '@/utils/replayProtection';
 import { usePlausibleDeniability } from '@/hooks/usePlausibleDeniability';
 import { createMinDelay } from '@/utils/interactionTiming';
-import { useVoiceMessaging } from './hooks/useVoiceMessaging';
+import { useMediaVoice } from './hooks/useMediaVoice';
 import { normalizeFileNameForMime, sniffMimeFromBytes } from './hooks/fileTransferUtils';
 import { useFileTransfers } from './hooks/useFileTransfers';
 import { useChatTransport } from './hooks/useChatTransport';
@@ -98,7 +98,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     remoteFingerprint: '',
     verified: false
   });
-  const [voiceVerified, setVoiceVerified] = useState(false);
   const [isWindowVisible, setIsWindowVisible] = useState(true);
   const [showTimestampSettings, setShowTimestampSettings] = useState(false);
   const sessionKeyRef = useRef<CryptoKey | null>(null);
@@ -327,26 +326,31 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   }, [syncMessagesFromQueue]);
 
   const {
+    voiceVerified,
+    setVoiceVerified,
+    handleRequestVoiceVerification,
     voiceMessages,
     voiceMessagesById,
     sendVoiceMessage,
     addIncomingVoiceMessage,
     handleVoiceMessagePlayed,
     clearVoiceMessages,
-  } = useVoiceMessaging({
+  } = useMediaVoice({
     sessionId,
     getParticipantId: () => participantIdRef.current,
     encryptionEngineRef,
     realtimeManagerRef,
     replayProtectionRef,
     isKeyExchangeComplete,
-    voiceVerified,
     markActivity,
     buildVoiceAad,
     addMessageToQueue: (sid, message) => {
       messageQueueRef.current.addMessage(sid, message);
     },
     scheduleSyncMessagesFromQueue,
+    verificationState,
+    setVerificationState,
+    verificationShownRef,
   });
 
   const {
@@ -416,8 +420,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     setInputText,
     setMessages,
     setMemoryStats,
-    setVoiceVerified,
-
     clearVoiceMessages,
 
     destroyFileTransferState,
@@ -628,16 +630,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     setVerificationState(prev => ({ ...prev, show: false, verified: false }));
     setVoiceVerified(false);
   };
-
-  const handleRequestVoiceVerification = () => {
-    if (verificationState.verified) {
-      setVoiceVerified(true);
-      toast.success('Voice messaging enabled');
-    } else if (!verificationShownRef.current || !verificationState.show) {
-      setVerificationState(prev => ({ ...prev, show: true }));
-    }
-  };
-
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
