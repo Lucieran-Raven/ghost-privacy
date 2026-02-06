@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback, useMemo, type ChangeEvent, type KeyboardEvent } from 'react';
+﻿import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Ghost, Send, Paperclip, Shield, X, Loader2, Trash2, HardDrive, FileText, FileSpreadsheet, FileImage, FileArchive, FileCode, File, AlertTriangle, Clock, Download, Video } from 'lucide-react';
 import { toast } from 'sonner';
@@ -17,10 +17,10 @@ import { secureZeroUint8Array } from '@/utils/algorithms/memory/zeroization';
 import { getReplayProtection, destroyReplayProtection } from '@/utils/replayProtection';
 import { usePlausibleDeniability } from '@/hooks/usePlausibleDeniability';
 import { createMinDelay } from '@/utils/interactionTiming';
+import { useVoiceMessaging } from './hooks/useVoiceMessaging';
 import KeyVerificationModal from './KeyVerificationModal';
 import ConnectionStatusIndicator from './ConnectionStatusIndicator';
 import VoiceRecorder from './VoiceRecorder';
-import VoiceMessage from './VoiceMessage';
 import FilePreviewCard from './FilePreviewCard';
 import TimestampSettings from './TimestampSettings';
 
@@ -40,15 +40,6 @@ interface VerificationState {
   localFingerprint: string;
   remoteFingerprint: string;
   verified: boolean;
-}
-
-interface VoiceMessageData {
-  id: string;
-  blob: Blob;
-  duration: number;
-  sender: 'me' | 'partner';
-  timestamp: number;
-  played: boolean;
 }
 
 const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEndSession }: ChatInterfaceProps) => {
@@ -103,7 +94,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     remoteFingerprint: '',
     verified: false
   });
-  const [voiceMessages, setVoiceMessages] = useState<VoiceMessageData[]>([]);
   const [voiceVerified, setVoiceVerified] = useState(false);
   const [isWindowVisible, setIsWindowVisible] = useState(true);
   const [showTimestampSettings, setShowTimestampSettings] = useState(false);
@@ -319,8 +309,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     return combined.length > 128 ? combined.slice(0, 128) : combined;
   };
 
-  const MAX_VOICE_MESSAGES = 50;
-
   const waitForFileAck = (key: string, timeoutMs: number): Promise<boolean> => {
     return new Promise((resolve) => {
       const seenAt = seenFileAcksRef.current.get(key);
@@ -451,13 +439,28 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     }
   }, [syncMessagesFromQueue]);
 
-  const voiceMessagesById = useMemo(() => {
-    const map = new Map<string, VoiceMessageData>();
-    for (const vm of voiceMessages) {
-      map.set(vm.id, vm);
-    }
-    return map;
-  }, [voiceMessages]);
+  const {
+    voiceMessages,
+    voiceMessagesById,
+    sendVoiceMessage,
+    addIncomingVoiceMessage,
+    handleVoiceMessagePlayed,
+    clearVoiceMessages,
+  } = useVoiceMessaging({
+    sessionId,
+    getParticipantId: () => participantIdRef.current,
+    encryptionEngineRef,
+    realtimeManagerRef,
+    replayProtectionRef,
+    isKeyExchangeComplete,
+    voiceVerified,
+    markActivity,
+    buildVoiceAad,
+    addMessageToQueue: (sid, message) => {
+      messageQueueRef.current.addMessage(sid, message);
+    },
+    scheduleSyncMessagesFromQueue,
+  });
 
   useEffect(() => {
     try {
@@ -1309,7 +1312,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     });
 
     manager.onMessage('voice-message', async (payload) => {
-      const ensureMinAckDelay = createMinDelay(35);
       try {
         markActivity();
         if (!encryptionEngineRef.current) return;
@@ -1333,16 +1335,13 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         const blob = new Blob([decryptedBytes], { type: 'audio/webm;codecs=opus' });
         decryptedBytes.fill(0);
 
-        setVoiceMessages(prev => {
-          const next = [...prev, {
-            id: payload.nonce,
-            blob,
-            duration,
-            sender: 'partner' as const,
-            timestamp: payload.timestamp,
-            played: false
-          }];
-          return next.length > MAX_VOICE_MESSAGES ? next.slice(-MAX_VOICE_MESSAGES) : next;
+        addIncomingVoiceMessage({
+          id: payload.nonce,
+          blob,
+          duration,
+          sender: 'partner',
+          timestamp: payload.timestamp,
+          played: false,
         });
 
         messageQueueRef.current.addMessage(sessionId, {
@@ -1354,7 +1353,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           fileName: undefined
         });
         scheduleSyncMessagesFromQueue();
-        await ensureMinAckDelay();
         await manager.send('message-ack', { messageId: payload.nonce });
       } catch {
         // Silent
@@ -1421,89 +1419,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     } else if (!verificationShownRef.current || !verificationState.show) {
       setVerificationState(prev => ({ ...prev, show: true }));
     }
-  };
-
-  const sendVoiceMessage = async (blob: Blob, duration: number) => {
-    if (!encryptionEngineRef.current || !isKeyExchangeComplete) {
-      toast.error('Secure connection not established');
-      return;
-    }
-
-    if (!voiceVerified) {
-      toast.error('Please verify security codes first');
-      return;
-    }
-
-    try {
-      markActivity();
-      const messageId = generateNonce();
-
-      const seq = replayProtectionRef.current.getNextSequence(participantIdRef.current);
-
-      const arrayBuffer = await blob.arrayBuffer();
-      const aad = buildVoiceAad({ senderId: participantIdRef.current, messageId, sequence: seq, duration });
-      const { encrypted, iv } = await encryptionEngineRef.current.encryptBytes(arrayBuffer, aad);
-      try {
-        aad.fill(0);
-      } catch {
-      }
-
-      try {
-        const { secureZeroArrayBuffer } = await import('@/utils/algorithms/memory/zeroization');
-        const crypto = window.crypto;
-        secureZeroArrayBuffer({ getRandomValues: (arr) => crypto.getRandomValues(arr) }, arrayBuffer);
-      } catch {
-        try {
-          new Uint8Array(arrayBuffer).fill(0);
-        } catch {
-          // Ignore
-        }
-      }
-
-      setVoiceMessages(prev => {
-        const next = [...prev, {
-          id: messageId,
-          blob,
-          duration,
-          sender: 'me' as const,
-          timestamp: Date.now(),
-          played: false
-        }];
-        return next.length > MAX_VOICE_MESSAGES ? next.slice(-MAX_VOICE_MESSAGES) : next;
-      });
-
-      messageQueueRef.current.addMessage(sessionId, {
-        id: messageId,
-        content: '[Voice Message]',
-        sender: 'me',
-        timestamp: Date.now(),
-        type: 'voice'
-      });
-      scheduleSyncMessagesFromQueue();
-
-      const sent = await realtimeManagerRef.current?.send('voice-message', {
-        encrypted,
-        iv,
-        duration,
-        messageId,
-        sequence: seq
-      });
-
-      if (!sent) {
-        toast.error('Voice message may not have been delivered');
-      }
-    } catch {
-      toast.error('Failed to send voice message');
-    }
-  };
-
-  const handleVoiceMessagePlayed = (messageId: string) => {
-    setVoiceMessages(prev =>
-      prev.map(vm => {
-        if (vm.id !== messageId) return vm;
-        return { ...vm, played: true, blob: new Blob([], { type: 'application/octet-stream' }) };
-      })
-    );
   };
 
   const addSystemMessage = (content: string, unique = true) => {
@@ -2718,7 +2633,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     setIsPartnerConnected(false);
     setIsKeyExchangeComplete(false);
     setMemoryStats({ messageCount: 0, estimatedBytes: 0 });
-    setVoiceMessages([]);
+    clearVoiceMessages();
     setVoiceVerified(false);
     setVerificationState({
       show: false,
