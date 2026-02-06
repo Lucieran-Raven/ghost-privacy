@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { trapState } from '@/utils/trapState';
-import { trapAudio } from '@/utils/trapAudio';
+import { honeypotAudio } from '@/utils/honeypotAudio';
 import FakeAdminPanel from './FakeAdminPanel';
 import FakeApiDocs from './FakeApiDocs';
 import FakeDebugConsole from './FakeDebugConsole';
@@ -27,7 +27,7 @@ const DecoyRoutes = ({ type }: DecoyRoutesProps) => {
   useEffect(() => {
     // Record the decoy hit
     const hits = trapState.recordDecoyHit();
-    trapAudio.playAccessGranted();
+    honeypotAudio.playAccessGranted();
 
     // Route to appropriate trap based on type
     switch (type) {

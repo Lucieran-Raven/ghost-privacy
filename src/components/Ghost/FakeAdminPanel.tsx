@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { getAdminStats, generateFakeErrorLogs } from '@/utils/decoyContent';
 import { trapState } from '@/utils/trapState';
-import { trapAudio } from '@/utils/trapAudio';
+import { honeypotAudio } from '@/utils/honeypotAudio';
 import { secureRandomInt } from '@/utils/secureRng';
 
 interface FakeAdminPanelProps {
@@ -39,7 +39,7 @@ const FakeAdminPanel = ({ onTimeout }: FakeAdminPanelProps) => {
 
   // Play access granted sound on mount
   useEffect(() => {
-    trapAudio.playAccessGranted();
+    honeypotAudio.playAccessGranted();
   }, []);
 
   // Countdown timer

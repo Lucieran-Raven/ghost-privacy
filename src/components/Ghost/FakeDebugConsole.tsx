@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Terminal, X } from 'lucide-react';
 import { trapState } from '@/utils/trapState';
-import { trapAudio } from '@/utils/trapAudio';
+import { honeypotAudio } from '@/utils/honeypotAudio';
 import { secureRandomInt } from '@/utils/secureRng';
 
 interface FakeDebugConsoleProps {
@@ -208,7 +208,7 @@ const FakeDebugConsole = ({ isOpen, onClose }: FakeDebugConsoleProps) => {
     if (!safeCmd) return;
     const trimmed = safeCmd.trim().toLowerCase();
     trapState.recordCommand(safeCmd);
-    trapAudio.playTick();
+    honeypotAudio.playTick();
 
     if (trimmed === 'clear') {
       setHistory([]);

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { User, LogIn, LogOut } from 'lucide-react';
 import { getRandomPhantomUser } from '@/utils/decoyContent';
 import { trapState } from '@/utils/trapState';
-import { trapAudio } from '@/utils/trapAudio';
+import { honeypotAudio } from '@/utils/honeypotAudio';
 import { secureRandomInt } from '@/utils/secureRng';
 
 interface PhantomPresenceProps {
@@ -44,9 +44,9 @@ const PhantomPresence = ({ isActive }: PhantomPresenceProps) => {
       trapState.recordPhantomUser(username);
       
       if (type === 'join') {
-        trapAudio.playJoin();
+        honeypotAudio.playJoin();
       } else {
-        trapAudio.playLeave();
+        honeypotAudio.playLeave();
       }
 
       setEvents(prev => [...prev.slice(-4), event]);

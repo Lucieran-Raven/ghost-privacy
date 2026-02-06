@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Upload, File, Shield, CheckCircle, Loader2, X } from 'lucide-react';
 import { trapState } from '@/utils/trapState';
-import { trapAudio } from '@/utils/trapAudio';
+import { honeypotAudio } from '@/utils/honeypotAudio';
 import { getRandomFakeFile } from '@/utils/decoyContent';
 
 interface FakeFileUploadProps {
@@ -79,7 +79,7 @@ const FakeFileUpload = ({ isOpen, onClose }: FakeFileUploadProps) => {
         setPhase('complete');
         setPhaseMessage('File uploaded successfully!');
         tickStopperRef.current?.();
-        trapAudio.playAccessGranted();
+        honeypotAudio.playAccessGranted();
         break;
     }
   };
@@ -96,7 +96,7 @@ const FakeFileUpload = ({ isOpen, onClose }: FakeFileUploadProps) => {
     trapState.recordFileAttempt();
     
     // Start tick audio
-    tickStopperRef.current = trapAudio.startTickLoop(800);
+    tickStopperRef.current = honeypotAudio.startTickLoop(800);
     
     setPhase('scanning');
     setPhaseMessage('Scanning for malware and threats...');

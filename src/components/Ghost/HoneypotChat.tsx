@@ -3,10 +3,10 @@ import { Ghost, Send, Loader2, AlertCircle, Shield, Paperclip, ChevronDown, More
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { trapState } from '@/utils/trapState';
-import { trapAudio } from '@/utils/trapAudio';
+import { honeypotAudio } from '@/utils/honeypotAudio';
 import { getDecoyScenario, getRandomPhantomUser } from '@/utils/decoyContent';
 import { secureRandomInt } from '@/utils/secureRng';
-import FakeTwoFactorModal from './FakeTwoFactorModal';
+import SimulatedTwoFactorModal from './SimulatedTwoFactorModal';
 import FakeFileUpload from './FakeFileUpload';
 import FakeAdminPanel from './FakeAdminPanel';
 import FakeDebugConsole from './FakeDebugConsole';
@@ -90,7 +90,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
       if (typeof document === 'undefined') return;
       if (document.hidden) {
         document.title = '⚠️ Session Monitored';
-        trapAudio.playFocusNotification();
+        honeypotAudio.playFocusNotification();
       } else {
         document.title = originalTitle.current;
         trapState.recordTabFocusChange();
@@ -126,7 +126,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
     const typingLoop = () => {
       setIsPartnerTyping(true);
       phantomTypingStopRef.current?.();
-      phantomTypingStopRef.current = trapAudio.startPhantomTyping();
+      phantomTypingStopRef.current = honeypotAudio.startPhantomTyping();
       
       // Stop typing after random duration
       setTimeout(() => {
@@ -220,7 +220,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
 
     if (value.length > lastInputLenRef.current) {
       trapState.recordKeystroke();
-      trapAudio.playType();
+      honeypotAudio.playType();
     }
     lastInputLenRef.current = value.length;
   };
@@ -293,21 +293,18 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
   const handleLoadMore = () => {
     trapState.recordPaginationLoop();
     setIsLoadingMore(true);
-    trapAudio.playTick();
+    honeypotAudio.playTick();
     
     setTimeout(() => {
-      setPaginationPage(prev => prev + 1);
-      // Add same fake messages again (infinite loop)
-      scenario.messages.forEach((msg, index) => {
-        setMessages(prev => {
-          const next = [{
-            id: `old-${paginationPage}-${index}`,
-            content: msg.content,
-            sender: 'partner' as const,
-            timestamp: Date.now() - (paginationPage * 3600000)
-          }, ...prev];
-          return next.length > MAX_MESSAGES ? next.slice(0, MAX_MESSAGES) : next;
-        });
+      setPaginationPage((prev) => prev + 1);
+      setMessages((prev) => {
+        const next = [{
+          id: `older-${paginationPage}-${Date.now()}`,
+          content: 'Loading previous messages...',
+          sender: 'partner' as const,
+          timestamp: Date.now() - (paginationPage * 3600000),
+        }, ...prev];
+        return next.length > MAX_MESSAGES ? next.slice(0, MAX_MESSAGES) : next;
       });
       setIsLoadingMore(false);
     }, 2000 + secureRandomInt(2001));
@@ -536,7 +533,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
       </footer>
 
       {/* Trap modals */}
-      <FakeTwoFactorModal isOpen={show2FA} onClose={() => setShow2FA(false)} />
+      <SimulatedTwoFactorModal isOpen={show2FA} onClose={() => setShow2FA(false)} />
       <FakeFileUpload isOpen={showFileUpload} onClose={() => setShowFileUpload(false)} />
       <FakeDebugConsole isOpen={showDebugConsole} onClose={() => setShowDebugConsole(false)} />
       <FakeApiDocs isOpen={showApiDocs} onClose={() => setShowApiDocs(false)} />

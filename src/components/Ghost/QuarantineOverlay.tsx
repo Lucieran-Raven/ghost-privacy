@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Shield, AlertTriangle, Clock } from 'lucide-react';
 import { trapState } from '@/utils/trapState';
-import { trapAudio } from '@/utils/trapAudio';
+import { honeypotAudio } from '@/utils/honeypotAudio';
 
 interface QuarantineOverlayProps {
   isActive: boolean;
@@ -27,7 +27,7 @@ const QuarantineOverlay = ({ isActive }: QuarantineOverlayProps) => {
   // Start ambient audio and track degradation
   useEffect(() => {
     if (isActive) {
-      trapAudio.startAmbient();
+      honeypotAudio.startAmbient();
       
       // Gradually increase degradation
       const interval = setInterval(() => {
@@ -36,7 +36,7 @@ const QuarantineOverlay = ({ isActive }: QuarantineOverlayProps) => {
       
       return () => {
         clearInterval(interval);
-        trapAudio.stopAmbient();
+        honeypotAudio.stopAmbient();
       };
     }
   }, [isActive]);

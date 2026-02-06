@@ -12,7 +12,7 @@
    clampVolume,
    getAudioUri,
    type TrapAudioType
- } from '@/utils/algorithms/deception/trapAudio';
+ } from '@/utils/algorithms/deception/honeypotAudio';
 
  import { secureRandomInt } from '@/utils/secureRng';
 
@@ -170,6 +170,6 @@ class TrapAudioManager {
 }
 
 // Singleton instance
-export const trapAudio = new TrapAudioManager();
+export const honeypotAudio = new TrapAudioManager();
 
-export default trapAudio;
+export default honeypotAudio;

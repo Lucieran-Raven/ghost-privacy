@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Shield, AlertTriangle, Clock } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { trapState } from '@/utils/trapState';
-import { trapAudio } from '@/utils/trapAudio';
+import { honeypotAudio } from '@/utils/honeypotAudio';
 
 /**
  * GHOST QUARANTINE: Deep Trap Endpoint
@@ -30,7 +30,7 @@ const Quarantine = () => {
   // Start ambient audio and track degradation
   useEffect(() => {
     if (isQuarantineMode) {
-      trapAudio.startAmbient();
+      honeypotAudio.startAmbient();
       
       // Gradually increase visual degradation
       const interval = setInterval(() => {
@@ -39,7 +39,7 @@ const Quarantine = () => {
       
       return () => {
         clearInterval(interval);
-        trapAudio.stopAmbient();
+        honeypotAudio.stopAmbient();
       };
     }
   }, [isQuarantineMode]);

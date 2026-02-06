@@ -4,7 +4,7 @@ import {
   Code, ChevronRight, Copy, CheckCircle, 
   Lock, Globe, Server, X 
 } from 'lucide-react';
-import { trapAudio } from '@/utils/trapAudio';
+import { honeypotAudio } from '@/utils/honeypotAudio';
 import { writeEphemeralClipboard } from '@/utils/ephemeralClipboard';
 
 interface FakeApiDocsProps {
@@ -140,7 +140,7 @@ const FakeApiDocs = ({ isOpen, onClose }: FakeApiDocsProps) => {
   const handleCopy = (text: string, id: string) => {
     void writeEphemeralClipboard(text, 30000);
     setCopied(id);
-    trapAudio.playTick();
+    honeypotAudio.playTick();
     setTimeout(() => setCopied(null), 2000);
   };
 
@@ -260,7 +260,7 @@ const FakeApiDocs = ({ isOpen, onClose }: FakeApiDocsProps) => {
                       {/* Try it button (fake) */}
                       <button
                         onClick={() => {
-                          trapAudio.playAccessGranted();
+                          honeypotAudio.playAccessGranted();
                           // Just plays sound, does nothing
                         }}
                         className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:shadow-glow-sm transition-all"

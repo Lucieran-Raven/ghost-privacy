@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, AlertCircle, Loader2, Lock } from 'lucide-react';
 import { trapState } from '@/utils/trapState';
-import { trapAudio } from '@/utils/trapAudio';
+import { honeypotAudio } from '@/utils/honeypotAudio';
 import { secureRandomInt } from '@/utils/secureRng';
 
-interface FakeTwoFactorModalProps {
+interface SimulatedTwoFactorModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
@@ -21,7 +21,7 @@ interface FakeTwoFactorModalProps {
  * This is a SECURITY TESTING SIMULATION for honeypot detection.
  * No authentication codes are validated.
  */
-const FakeTwoFactorModal = ({ isOpen, onClose }: FakeTwoFactorModalProps) => {
+const SimulatedTwoFactorModal = ({ isOpen, onClose }: SimulatedTwoFactorModalProps) => {
   const [code, setCode] = useState('');
   const [attempts, setAttempts] = useState(0);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -46,7 +46,7 @@ const FakeTwoFactorModal = ({ isOpen, onClose }: FakeTwoFactorModalProps) => {
     if (code.length !== 6 || phase !== 'input') return;
 
     trapState.recordTwoFactorAttempt();
-    trapAudio.playTick();
+    honeypotAudio.playTick();
     
     setIsVerifying(true);
     setPhase('verifying');
@@ -210,4 +210,4 @@ const FakeTwoFactorModal = ({ isOpen, onClose }: FakeTwoFactorModalProps) => {
   );
 };
 
-export default FakeTwoFactorModal;
+export default SimulatedTwoFactorModal;
