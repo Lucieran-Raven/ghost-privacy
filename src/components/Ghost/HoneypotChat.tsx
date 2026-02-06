@@ -394,14 +394,6 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
   // Main chat interface
   return (
     <div className="min-h-screen bg-background flex flex-col md:pt-9">
-      {!isWindowVisible && (
-        <div
-          className="fixed inset-0 z-[200] bg-background/95 backdrop-blur-xl"
-          onClick={() => setIsWindowVisible(true)}
-          role="button"
-          tabIndex={0}
-        />
-      )}
       {/* Quarantine overlay */}
       <QuarantineOverlay isActive={isQuarantined} />
       

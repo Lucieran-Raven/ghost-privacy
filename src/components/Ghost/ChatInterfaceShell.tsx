@@ -216,45 +216,10 @@ const ChatInterfaceShell = ({ sessionId, token, channelToken, isHost, timerMode,
     return getTextEncoder().encode(`${prefixes.voice}${params.senderId}|${params.messageId}|${params.sequence}|${params.duration}`);
   };
 
-  const buildFileAad = (params: { senderId: string; fileId: string }): Uint8Array => {
+  const buildFileAad = (params: { senderId: string; fileId: string }) => {
     const prefixes = getAadPrefixes();
     return getTextEncoder().encode(`${prefixes.file}${params.senderId}|${params.fileId}`);
   };
-
-  const {
-    fileTransfersRef,
-    downloadedVideoDrops,
-    downloadedFileDrops,
-    purgeActiveNativeVideoDropsBestEffort,
-    destroyFileTransferState,
-    handleRealtimeFileMessage,
-    handleFileUpload,
-    handleVideoUpload,
-    handleDownloadVideoDrop,
-    handleDownloadFileDrop,
-  } = useFileTransfers({
-    sessionId,
-    encryptionEngineRef,
-    realtimeManagerRef,
-    getParticipantId: () => participantIdRef.current,
-    getNextSequence: () => replayProtectionRef.current.getNextSequence(participantIdRef.current),
-    isKeyExchangeComplete,
-    isVerified: verificationState.verified,
-    onRequireVerification: () => {
-      setVerificationState((prev) => ({
-        ...prev,
-        show: true,
-      }));
-    },
-    markActivity,
-    buildFileAad,
-    addMessageToQueue: (sid, message) => {
-      messageQueueRef.current.addMessage(sid, message);
-    },
-    scheduleSyncMessagesFromQueue,
-    getIsCapacitorNative,
-    fileTransferTtlMs: 15 * 60 * 1000,
-  });
 
   const syncMessagesFromQueue = useCallback(() => {
     const queuedMessages = messageQueueRef.current.getMessages(sessionId);
@@ -302,6 +267,41 @@ const ChatInterfaceShell = ({ sessionId, token, channelToken, isHost, timerMode,
       void Promise.resolve().then(flush);
     }
   }, [syncMessagesFromQueue]);
+
+  const {
+    fileTransfersRef,
+    downloadedVideoDrops,
+    downloadedFileDrops,
+    purgeActiveNativeVideoDropsBestEffort,
+    destroyFileTransferState,
+    handleRealtimeFileMessage,
+    handleFileUpload,
+    handleVideoUpload,
+    handleDownloadVideoDrop,
+    handleDownloadFileDrop,
+  } = useFileTransfers({
+    sessionId,
+    encryptionEngineRef,
+    realtimeManagerRef,
+    getParticipantId: () => participantIdRef.current,
+    getNextSequence: () => replayProtectionRef.current.getNextSequence(participantIdRef.current),
+    isKeyExchangeComplete,
+    isVerified: verificationState.verified,
+    onRequireVerification: () => {
+      setVerificationState((prev) => ({
+        ...prev,
+        show: true,
+      }));
+    },
+    markActivity,
+    buildFileAad,
+    addMessageToQueue: (sid, message) => {
+      messageQueueRef.current.addMessage(sid, message);
+    },
+    scheduleSyncMessagesFromQueue,
+    getIsCapacitorNative,
+    fileTransferTtlMs: 15 * 60 * 1000,
+  });
 
   const {
     voiceVerified,
@@ -398,6 +398,7 @@ const ChatInterfaceShell = ({ sessionId, token, channelToken, isHost, timerMode,
     setInputText,
     setMessages,
     setMemoryStats,
+    setVoiceVerified,
     clearVoiceMessages,
 
     destroyFileTransferState,

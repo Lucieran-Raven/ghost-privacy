@@ -46,6 +46,13 @@ export default function SecurityStatusBar() {
       } as const;
     }
 
+    if (torStatus === 'clearnet') {
+      return {
+        tone: 'warn',
+        text: "[!] ANONYMITY: INACTIVE — CLEARNET",
+      } as const;
+    }
+
     return {
       tone: 'neutral',
       text: "[?] ANONYMITY: UNKNOWN (USE TOR)",

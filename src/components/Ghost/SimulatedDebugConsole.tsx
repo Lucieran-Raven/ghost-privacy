@@ -249,8 +249,8 @@ const SimulatedDebugConsole = ({ isOpen, onClose }: SimulatedDebugConsoleProps) 
     setHistory(prev => {
       const next = [
         ...prev,
-        { type: 'input', content: `ghost@prod-01:~$ ${safeCmd}` },
-        { type: 'output', content: response as string },
+        { type: 'input' as const, content: `ghost@prod-01:~$ ${safeCmd}` },
+        { type: 'output' as const, content: response as string },
       ];
       return next.length > 200 ? next.slice(-200) : next;
     });
