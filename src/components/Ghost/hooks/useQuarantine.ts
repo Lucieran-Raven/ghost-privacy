@@ -15,7 +15,7 @@
  * - Requires transport-provided termination refs and cleanup callbacks.
  */
 
-import { useEffect, useState, type MutableRefObject } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { usePlausibleDeniability } from '@/hooks/usePlausibleDeniability';
 import { setTauriContentProtected } from '@/utils/runtime';
 import { SessionService } from '@/lib/sessionService';
@@ -41,6 +41,7 @@ export function useQuarantine(params: {
   } = params;
 
   const [isWindowVisible, setIsWindowVisible] = useState(true);
+  const hideDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   usePlausibleDeniability(() => {
     purgeActiveNativeVideoDropsBestEffort();
@@ -49,12 +50,26 @@ export function useQuarantine(params: {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (typeof document === 'undefined') return;
-      setIsWindowVisible(!document.hidden);
+
+      if (hideDebounceTimerRef.current) {
+        clearTimeout(hideDebounceTimerRef.current);
+        hideDebounceTimerRef.current = null;
+      }
+
       if (document.hidden) {
-        if (!isCapacitorNative()) {
-          setInputText('');
-        }
+        hideDebounceTimerRef.current = setTimeout(() => {
+          try {
+            if (typeof document !== 'undefined' && document.hidden) {
+              setIsWindowVisible(false);
+              if (!isCapacitorNative()) {
+                setInputText('');
+              }
+            }
+          } catch {
+          }
+        }, 400);
       } else {
+        setIsWindowVisible(true);
         purgeActiveNativeVideoDropsBestEffort();
       }
     };
@@ -69,6 +84,10 @@ export function useQuarantine(params: {
     };
 
     const handleFocus = () => {
+      if (hideDebounceTimerRef.current) {
+        clearTimeout(hideDebounceTimerRef.current);
+        hideDebounceTimerRef.current = null;
+      }
       setIsWindowVisible(true);
       purgeActiveNativeVideoDropsBestEffort();
     };
@@ -82,6 +101,10 @@ export function useQuarantine(params: {
     }
 
     return () => {
+      if (hideDebounceTimerRef.current) {
+        clearTimeout(hideDebounceTimerRef.current);
+        hideDebounceTimerRef.current = null;
+      }
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       }
