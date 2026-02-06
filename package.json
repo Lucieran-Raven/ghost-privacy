@@ -24,6 +24,7 @@
     "cap:android:build": "npm run build && cap sync android && cd android && gradlew.bat assembleDebug",
     "android:apk:debug": "npm run build && cap sync android && cd android && gradlew.bat assembleDebug",
     "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "integrity": "tsx scripts/verify_integrity.ts",

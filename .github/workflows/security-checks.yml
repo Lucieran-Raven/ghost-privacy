@@ -115,6 +115,9 @@ jobs:
 
       - name: Typecheck security-critical code (strict)
         run: npx --no-install tsc -p tsconfig.security.json --noEmit
+
+      - name: Typecheck (app)
+        run: npm run typecheck
       
       - name: Build production bundle
         run: npm run build
