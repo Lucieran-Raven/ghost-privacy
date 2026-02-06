@@ -4,7 +4,7 @@ import PageTransition from '@/components/Ghost/PageTransition';
 import { useMemo } from 'react';
 
 const Downloads = () => {
-  const releaseTag = 'v0.1.32';
+  const releaseTag = 'v0.1.33';
   const androidApk = 'ghost-privacy-android-release.apk';
 
   const releasePageUrl = `https://github.com/Lucieran-Raven/ghost-privacy/releases/tag/${releaseTag}`;
@@ -50,7 +50,7 @@ const Downloads = () => {
                         className="inline-flex w-full justify-between items-center px-4 py-3 border border-[rgba(255,10,42,0.24)] bg-black/40 font-mono text-xs tracking-[0.16em] uppercase text-white/85 transition-all active:translate-y-[1px] hover:border-[rgba(255,10,42,0.55)] hover:text-white hover:shadow-[0_0_12px_rgba(255,10,42,0.35)]"
                       >
                         DOWNLOAD
-                        <span className="text-white/50">DESKTOP</span>
+                        <span className="text-white/50">TAURI DESKTOP</span>
                       </a>
                     </div>
                   </div>
