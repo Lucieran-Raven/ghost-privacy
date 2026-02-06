@@ -1,26 +1,20 @@
 ﻿import { useState, useEffect, useRef, useCallback, type KeyboardEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Ghost, Send, Paperclip, Shield, X, Loader2, Trash2, HardDrive, FileText, FileSpreadsheet, FileImage, FileArchive, FileCode, File as FileIcon, AlertTriangle, Clock, Download, Video } from 'lucide-react';
 import { toast } from 'sonner';
-import { EncryptionEngine, KeyExchange, generateNonce } from '@/utils/encryption';
-import { SecurityManager, validateMessage, sanitizeFileName } from '@/utils/security';
-import { checkOrPinFingerprint } from '@/utils/tofuFingerprintStore';
-import { RealtimeManager, BroadcastPayload, ConnectionState } from '@/lib/realtimeManager';
+import { EncryptionEngine } from '@/utils/encryption';
+import { SecurityManager, sanitizeFileName } from '@/utils/security';
+import { RealtimeManager, ConnectionState } from '@/lib/realtimeManager';
 import { SessionService } from '@/lib/sessionService';
 import { getMessageQueue, QueuedMessage } from '@/utils/clientMessageQueue';
 import { cn } from '@/lib/utils';
-import { generatePlausibleTimestamp, isTimestampObfuscationEnabled } from '@/utils/plausibleTimestamp';
+import { isTimestampObfuscationEnabled } from '@/utils/plausibleTimestamp';
 import { useMemoryCleanup } from '@/hooks/useMemoryCleanup';
-import { isTauriRuntime, setTauriContentProtected, tauriInvoke } from '@/utils/runtime';
-import { base64ToBytes, bytesToBase64 } from '@/utils/algorithms/encoding/base64';
-import { secureZeroUint8Array } from '@/utils/algorithms/memory/zeroization';
 import { getReplayProtection, destroyReplayProtection } from '@/utils/replayProtection';
-import { usePlausibleDeniability } from '@/hooks/usePlausibleDeniability';
-import { createMinDelay } from '@/utils/interactionTiming';
 import { useMediaVoice } from './hooks/useMediaVoice';
 import { normalizeFileNameForMime, sniffMimeFromBytes } from './hooks/fileTransferUtils';
 import { useFileTransfers } from './hooks/useFileTransfers';
 import { useChatTransport } from './hooks/useChatTransport';
+import { useQuarantine } from './hooks/useQuarantine';
 import KeyVerificationModal from './KeyVerificationModal';
 import ConnectionStatusIndicator from './ConnectionStatusIndicator';
 import VoiceRecorder from './VoiceRecorder';
@@ -37,8 +31,6 @@ interface ChatInterfaceProps {
   onEndSession: (showToast?: boolean) => void;
 }
 
-type TerminationReason = 'partner_left' | 'connection_lost' | 'channel_dead' | 'manual';
-
 interface VerificationState {
   show: boolean;
   localFingerprint: string;
@@ -47,7 +39,6 @@ interface VerificationState {
 }
 
 const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEndSession }: ChatInterfaceProps) => {
-  const navigate = useNavigate();
   const { fullCleanup } = useMemoryCleanup();
 
   const textEncoderRef = useRef<TextEncoder | null>(null);
@@ -98,7 +89,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     remoteFingerprint: '',
     verified: false
   });
-  const [isWindowVisible, setIsWindowVisible] = useState(true);
   const [showTimestampSettings, setShowTimestampSettings] = useState(false);
   const sessionKeyRef = useRef<CryptoKey | null>(null);
 
@@ -126,14 +116,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   const verificationShownRef = useRef(false);
   const systemMessagesShownRef = useRef<Set<string>>(new Set());
 
-  const isCapacitorNativeShadow = (): boolean => {
-    try {
-      const c = (window as any).Capacitor;
-      return Boolean(c && typeof c.isNativePlatform === 'function' && c.isNativePlatform());
-    } catch {
-      return false;
-    }
-  };
   const lastTerminationRef = useRef<number>(0);
 
   const replayProtectionRef = useRef(getReplayProtection());
@@ -272,10 +254,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     scheduleSyncMessagesFromQueue,
     getIsCapacitorNative,
     fileTransferTtlMs: 15 * 60 * 1000,
-  });
-
-  usePlausibleDeniability(() => {
-    purgeActiveNativeVideoDropsBestEffort();
   });
 
   const syncMessagesFromQueue = useCallback(() => {
@@ -434,6 +412,18 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
     isCapacitorNative,
   });
 
+  const {
+    isWindowVisible,
+    setIsWindowVisible,
+  } = useQuarantine({
+    sessionId,
+    isTerminatingRef,
+    isCapacitorNative,
+    destroyLocalSessionData,
+    purgeActiveNativeVideoDropsBestEffort,
+    setInputText,
+  });
+
   useEffect(() => {
     try {
       if (isHost) {
@@ -485,139 +475,8 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
   }, []);
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (typeof document === 'undefined') return;
-      setIsWindowVisible(!document.hidden);
-      if (document.hidden) {
-        if (!isCapacitorNative()) {
-          setInputText('');
-        }
-      } else {
-        purgeActiveNativeVideoDropsBestEffort();
-      }
-    };
-
-    const handleBlur = () => {
-      setIsWindowVisible(false);
-      if (!isCapacitorNative()) {
-        setInputText('');
-      }
-    };
-
-    const handleFocus = () => {
-      setIsWindowVisible(true);
-      purgeActiveNativeVideoDropsBestEffort();
-    };
-
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-    }
-    if (typeof window !== 'undefined') {
-      window.addEventListener('blur', handleBlur);
-      window.addEventListener('focus', handleFocus);
-    }
-
-    return () => {
-      if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-      }
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('blur', handleBlur);
-        window.removeEventListener('focus', handleFocus);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    void setTauriContentProtected(true);
-    return () => {
-      void setTauriContentProtected(false);
-    };
-  }, []);
-
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = 'Leave Ghost session? Click "End Session" to properly terminate.';
-      return e.returnValue;
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('beforeunload', handleBeforeUnload);
-      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }
-    return;
-  }, [sessionId]);
-
-  useEffect(() => {
     isKeyExchangeCompleteRef.current = isKeyExchangeComplete;
   }, [isKeyExchangeComplete]);
-
-  const stopPublicKeyResend = () => {
-    if (publicKeyResendIntervalRef.current) {
-      clearInterval(publicKeyResendIntervalRef.current);
-      publicKeyResendIntervalRef.current = null;
-    }
-    publicKeyResendAttemptsRef.current = 0;
-  };
-
-  const startPublicKeyResend = () => {
-    stopPublicKeyResend();
-
-    publicKeyResendAttemptsRef.current = 0;
-    publicKeyResendIntervalRef.current = setInterval(() => {
-      if (isTerminatingRef.current) {
-        stopPublicKeyResend();
-        return;
-      }
-
-      if (partnerPublicKeyRef.current || isKeyExchangeCompleteRef.current) {
-        stopPublicKeyResend();
-        return;
-      }
-
-      publicKeyResendAttemptsRef.current += 1;
-      void sendPublicKey();
-
-      if (publicKeyResendAttemptsRef.current >= 6) {
-        stopPublicKeyResend();
-      }
-    }, 2000);
-  };
-
-  useEffect(() => {
-    const handlePageHide = () => {
-      if (!isTerminatingRef.current) {
-        return;
-      }
-
-      if (isCapacitorNative()) {
-        return;
-      }
-
-      try {
-        destroyLocalSessionData();
-      } catch {
-        // Ignore
-      }
-
-      try {
-        SessionService.clearValidationCache(sessionId);
-      } catch {
-        // Ignore
-      }
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('pagehide', handlePageHide);
-      window.addEventListener('unload', handlePageHide);
-      return () => {
-        window.removeEventListener('pagehide', handlePageHide);
-        window.removeEventListener('unload', handlePageHide);
-      };
-    }
-    return;
-  }, [sessionId]);
 
   const handleVerificationConfirmed = () => {
     setVerificationState(prev => ({ ...prev, show: false, verified: true }));
