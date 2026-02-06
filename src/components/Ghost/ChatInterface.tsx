@@ -1646,6 +1646,8 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                                   content={typeof message.content === 'string' ? message.content : ''}
                                   sender={message.sender}
                                 />
+                              </div>
+                            )
                           ) : (
                             <p className="whitespace-pre-wrap break-words">{contentText}</p>
                           )}
