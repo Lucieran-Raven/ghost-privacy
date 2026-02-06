@@ -7,7 +7,7 @@ import {
 import { honeypotAudio } from '@/utils/honeypotAudio';
 import { writeEphemeralClipboard } from '@/utils/ephemeralClipboard';
 
-interface FakeApiDocsProps {
+interface SimulatedApiDocsProps {
   isOpen: boolean;
   onClose: () => void;
 }
@@ -133,7 +133,7 @@ const FAKE_ENDPOINTS = [
   },
 ];
 
-const FakeApiDocs = ({ isOpen, onClose }: FakeApiDocsProps) => {
+const SimulatedApiDocs = ({ isOpen, onClose }: SimulatedApiDocsProps) => {
   const [selectedEndpoint, setSelectedEndpoint] = useState<number | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -296,4 +296,4 @@ const FakeApiDocs = ({ isOpen, onClose }: FakeApiDocsProps) => {
   );
 };
 
-export default FakeApiDocs;
+export default SimulatedApiDocs;

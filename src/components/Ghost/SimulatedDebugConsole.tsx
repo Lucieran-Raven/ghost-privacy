@@ -5,7 +5,7 @@ import { trapState } from '@/utils/trapState';
 import { honeypotAudio } from '@/utils/honeypotAudio';
 import { secureRandomInt } from '@/utils/secureRng';
 
-interface FakeDebugConsoleProps {
+interface SimulatedDebugConsoleProps {
   isOpen: boolean;
   onClose: () => void;
 }
@@ -169,7 +169,7 @@ redis:x:109:116::/var/lib/redis:/usr/sbin/nologin`,
   'rm -rf /': "rm: it is dangerous to operate recursively on '/'",
 };
 
-const FakeDebugConsole = ({ isOpen, onClose }: FakeDebugConsoleProps) => {
+const SimulatedDebugConsole = ({ isOpen, onClose }: SimulatedDebugConsoleProps) => {
   const [history, setHistory] = useState<Array<{ type: 'input' | 'output'; content: string }>>([
     { type: 'output', content: 'Ghost Debug Console v2.4.1' },
     { type: 'output', content: 'Type "help" for available commands.\n' },
@@ -362,4 +362,4 @@ const FakeDebugConsole = ({ isOpen, onClose }: FakeDebugConsoleProps) => {
   );
 };
 
-export default FakeDebugConsole;
+export default SimulatedDebugConsole;

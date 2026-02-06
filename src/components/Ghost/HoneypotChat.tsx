@@ -7,10 +7,10 @@ import { honeypotAudio } from '@/utils/honeypotAudio';
 import { getDecoyScenario, getRandomPhantomUser } from '@/utils/decoyContent';
 import { secureRandomInt } from '@/utils/secureRng';
 import SimulatedTwoFactorModal from './SimulatedTwoFactorModal';
-import FakeFileUpload from './FakeFileUpload';
-import FakeAdminPanel from './FakeAdminPanel';
-import FakeDebugConsole from './FakeDebugConsole';
-import FakeApiDocs from './FakeApiDocs';
+import SimulatedFileUpload from './SimulatedFileUpload';
+import SimulatedAdminConsole from './SimulatedAdminConsole';
+import SimulatedDebugConsole from './SimulatedDebugConsole';
+import SimulatedApiDocs from './SimulatedApiDocs';
 import QuarantineOverlay from './QuarantineOverlay';
 import PhantomPresence from './PhantomPresence';
 
@@ -376,7 +376,7 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
 
   // Admin panel (escalation)
   if (showAdminPanel) {
-    return <FakeAdminPanel onTimeout={() => setIsQuarantined(true)} />;
+    return <SimulatedAdminConsole onTimeout={() => setIsQuarantined(true)} />;
   }
 
   // Connecting
@@ -534,9 +534,9 @@ const HoneypotChat = ({ sessionId, trapType }: HoneypotChatProps) => {
 
       {/* Trap modals */}
       <SimulatedTwoFactorModal isOpen={show2FA} onClose={() => setShow2FA(false)} />
-      <FakeFileUpload isOpen={showFileUpload} onClose={() => setShowFileUpload(false)} />
-      <FakeDebugConsole isOpen={showDebugConsole} onClose={() => setShowDebugConsole(false)} />
-      <FakeApiDocs isOpen={showApiDocs} onClose={() => setShowApiDocs(false)} />
+      <SimulatedFileUpload isOpen={showFileUpload} onClose={() => setShowFileUpload(false)} />
+      <SimulatedDebugConsole isOpen={showDebugConsole} onClose={() => setShowDebugConsole(false)} />
+      <SimulatedApiDocs isOpen={showApiDocs} onClose={() => setShowApiDocs(false)} />
     </div>
   );
 };

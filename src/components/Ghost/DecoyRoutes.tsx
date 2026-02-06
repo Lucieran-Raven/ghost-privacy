@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { trapState } from '@/utils/trapState';
 import { honeypotAudio } from '@/utils/honeypotAudio';
-import FakeAdminPanel from './FakeAdminPanel';
-import FakeApiDocs from './FakeApiDocs';
-import FakeDebugConsole from './FakeDebugConsole';
+import SimulatedAdminConsole from './SimulatedAdminConsole';
+import SimulatedApiDocs from './SimulatedApiDocs';
+import SimulatedDebugConsole from './SimulatedDebugConsole';
 import { generateFakeDatabasePreview } from '@/utils/decoyContent';
 
 interface DecoyRoutesProps {
@@ -58,17 +58,17 @@ const DecoyRoutes = ({ type }: DecoyRoutesProps) => {
 
   // Admin panel trap
   if (showAdmin) {
-    return <FakeAdminPanel onTimeout={() => navigate('/')} />;
+    return <SimulatedAdminConsole onTimeout={() => navigate('/')} />;
   }
 
   // API docs trap
   if (showApi) {
-    return <FakeApiDocs isOpen={true} onClose={() => navigate('/')} />;
+    return <SimulatedApiDocs isOpen={true} onClose={() => navigate('/')} />;
   }
 
   // Debug console trap
   if (showDebug) {
-    return <FakeDebugConsole isOpen={true} onClose={() => navigate('/')} />;
+    return <SimulatedDebugConsole isOpen={true} onClose={() => navigate('/')} />;
   }
 
   // Backup file trap - show fake database dump

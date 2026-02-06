@@ -10,7 +10,7 @@ import { trapState } from '@/utils/trapState';
 import { honeypotAudio } from '@/utils/honeypotAudio';
 import { secureRandomInt } from '@/utils/secureRng';
 
-interface FakeAdminPanelProps {
+interface SimulatedAdminConsoleProps {
   onTimeout: () => void;
 }
 
@@ -30,7 +30,7 @@ interface FakeAdminPanelProps {
  * This is a SECURITY TESTING SIMULATION for honeypot detection.
  * No real data is shown. All metrics are fabricated.
  */
-const FakeAdminPanel = ({ onTimeout }: FakeAdminPanelProps) => {
+const SimulatedAdminConsole = ({ onTimeout }: SimulatedAdminConsoleProps) => {
   const [stats, setStats] = useState(getAdminStats());
   const [logs] = useState(generateFakeErrorLogs(30));
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'logs' | 'system'>('overview');
@@ -373,4 +373,4 @@ const FakeAdminPanel = ({ onTimeout }: FakeAdminPanelProps) => {
   );
 };
 
-export default FakeAdminPanel;
+export default SimulatedAdminConsole;

@@ -5,7 +5,7 @@ import { trapState } from '@/utils/trapState';
 import { honeypotAudio } from '@/utils/honeypotAudio';
 import { getRandomFakeFile } from '@/utils/decoyContent';
 
-interface FakeFileUploadProps {
+interface SimulatedFileUploadProps {
   isOpen: boolean;
   onClose: () => void;
 }
@@ -27,7 +27,7 @@ type UploadPhase = 'idle' | 'scanning' | 'encrypting' | 'uploading' | 'complete'
  * This is a SECURITY TESTING SIMULATION for honeypot detection.
  * No files are uploaded, scanned, or encrypted.
  */
-const FakeFileUpload = ({ isOpen, onClose }: FakeFileUploadProps) => {
+const SimulatedFileUpload = ({ isOpen, onClose }: SimulatedFileUploadProps) => {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [phase, setPhase] = useState<UploadPhase>('idle');
   const [progress, setProgress] = useState(0);
@@ -245,4 +245,4 @@ const FakeFileUpload = ({ isOpen, onClose }: FakeFileUploadProps) => {
   );
 };
 
-export default FakeFileUpload;
+export default SimulatedFileUpload;
