@@ -1,3 +1,20 @@
+/**
+ * Responsibilities:
+ * - Voice/media orchestration around `useVoiceMessaging`.
+ * - Enforces verification gating for voice send attempts.
+ * - Exposes a stable, typed surface for the chat shell.
+ *
+ * Security guarantees:
+ * - Does not persist decoded audio beyond caller-owned state.
+ * - Attempts to zeroize/clear local voice message state on teardown.
+ *
+ * Caveats / limitations:
+ * - Browser media stacks may retain internal buffers outside JS control.
+ *
+ * Cross-module dependencies:
+ * - Requires transport-provided `realtimeManagerRef` + `encryptionEngineRef`.
+ */
+
 import { useCallback, useState, type MutableRefObject } from 'react';
 import { toast } from 'sonner';
 import type { EncryptionEngine } from '@/utils/encryption';

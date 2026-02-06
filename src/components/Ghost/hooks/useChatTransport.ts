@@ -1,3 +1,23 @@
+/**
+ * Responsibilities:
+ * - Owns the realtime session lifecycle (connect, key exchange, presence, termination).
+ * - Owns authenticated message send/receive wiring and replay/sequence enforcement.
+ * - Owns shutdown ordering and best-effort cleanup/zeroization paths.
+ *
+ * Security guarantees:
+ * - Fail-closed behavior where required for cryptographic operations.
+ * - Does not persist plaintext chat payloads beyond the in-memory queue.
+ * - Enforces replay protection and validation on inbound traffic.
+ *
+ * Caveats / limitations:
+ * - This module cannot prevent OS-level capture (screenshots, keyloggers, etc.).
+ * - Cleanup is best-effort on abrupt process termination.
+ *
+ * Cross-module dependencies:
+ * - Requires message queue + replay protection refs owned by the shell.
+ * - Delegates file/voice payload handling to the respective subsystems.
+ */
+
 import { useCallback, type MutableRefObject } from 'react';
 import { toast } from 'sonner';
 import { EncryptionEngine, KeyExchange, generateNonce } from '@/utils/encryption';
@@ -579,8 +599,8 @@ export function useChatTransport(params: {
           if (pkB64) {
             const pkBytes = base64ToBytes(pkB64);
             const view = pkBytes.buffer instanceof ArrayBuffer ? pkBytes : new Uint8Array(pkBytes);
-            const digestBuf = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
-            const hash = await crypto.subtle.digest('SHA-256', digestBuf);
+            const digestBytes = new Uint8Array(view.subarray(0, view.byteLength));
+            const hash = await crypto.subtle.digest('SHA-256', digestBytes);
             remoteFingerprint = Array.from(new Uint8Array(hash))
               .slice(0, 16)
               .map((b) => b.toString(16).padStart(2, '0'))

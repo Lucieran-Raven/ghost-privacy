@@ -1,3 +1,21 @@
+/**
+ * Responsibilities:
+ * - Implements encrypted file/video transfer protocol (chunking, ACKs, retries).
+ * - Owns TTL cleanup and best-effort purge of native drop artifacts.
+ * - Exposes UI-safe download helpers (Web Share / filesystem / native integrations).
+ *
+ * Security guarantees:
+ * - Transfers are encrypted via the session crypto engine; plaintext is not persisted.
+ * - Attempts to purge temporary blobs/native artifacts after download or TTL expiry.
+ *
+ * Caveats / limitations:
+ * - Full secure deletion is not guaranteed on all filesystems/OSes.
+ * - Native layers may cache media outside JS control.
+ *
+ * Cross-module dependencies:
+ * - Requires transport-provided `realtimeManagerRef` + `encryptionEngineRef`.
+ */
+
 import { useCallback, useRef, useState, type ChangeEvent, type MutableRefObject } from 'react';
 import { toast } from 'sonner';
 import { bytesToBase64 } from '@/utils/algorithms/encoding/base64';

@@ -1,3 +1,20 @@
+/**
+ * Responsibilities:
+ * - Owns session-adjacent lifecycle effects: visibility, blur/focus, beforeunload/pagehide.
+ * - Toggles platform privacy affordances (e.g. Tauri content-protection) while mounted.
+ * - Triggers best-effort artifact cleanup on plausible deniability activation.
+ *
+ * Security guarantees:
+ * - Attempts to clear in-memory session artifacts on termination paths.
+ * - Avoids persisting any session secret state.
+ *
+ * Caveats / limitations:
+ * - Browsers/OS may not deliver unload events reliably; cleanup is best-effort.
+ *
+ * Cross-module dependencies:
+ * - Requires transport-provided termination refs and cleanup callbacks.
+ */
+
 import { useEffect, useState, type MutableRefObject } from 'react';
 import { usePlausibleDeniability } from '@/hooks/usePlausibleDeniability';
 import { setTauriContentProtected } from '@/utils/runtime';
