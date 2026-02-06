@@ -18,6 +18,7 @@ import { getReplayProtection, destroyReplayProtection } from '@/utils/replayProt
 import { usePlausibleDeniability } from '@/hooks/usePlausibleDeniability';
 import { createMinDelay } from '@/utils/interactionTiming';
 import KeyVerificationModal from './KeyVerificationModal';
+import ConnectionStatusIndicator from './ConnectionStatusIndicator';
 import VoiceRecorder from './VoiceRecorder';
 import VoiceMessage from './VoiceMessage';
 import FilePreviewCard from './FilePreviewCard';
@@ -903,9 +904,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
           }
 
           if (effectiveSealedKind === 'file') {
-            const fileName = sanitizeFileName(String(data.fileName || 'unknown_file')).slice(0, 256);
-            const fileType = String(data.fileType || 'application/octet-stream').slice(0, 128);
-            const isImage = fileType.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(fileName);
+            const isImage = fileTransfersRef.current.get(fileId)?.fileType.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(fileTransfersRef.current.get(fileId)?.fileName || '');
             const capNative = await getIsCapacitorNative();
             const shouldPlaceholder = (isTauriRuntime() || capNative) || !isImage;
             if (shouldPlaceholder) {
@@ -915,7 +914,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                 sender: 'partner',
                 timestamp: Number(data.timestamp) || payload.timestamp,
                 type: 'file',
-                fileName
+                fileName: fileTransfersRef.current.get(fileId)?.fileName
               });
               scheduleSyncMessagesFromQueue();
             }
@@ -1454,7 +1453,6 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
         const crypto = window.crypto;
         secureZeroArrayBuffer({ getRandomValues: (arr) => crypto.getRandomValues(arr) }, arrayBuffer);
       } catch {
-        // Fallback: simple zero fill
         try {
           new Uint8Array(arrayBuffer).fill(0);
         } catch {
@@ -2919,7 +2917,7 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
                     <div className="md:hidden flex-shrink-0" />
                   </div>
                   <div className="flex items-center gap-1 md:gap-2 text-[9px] md:text-xs text-muted-foreground">
-                    <Shield className="h-2.5 w-2.5 md:h-3 md:w-3 flex-shrink-0" />
+                    <Shield className="h-2.5 w-2.5" />
                     <span className="truncate">{isKeyExchangeComplete ? 'E2E Encrypted' : 'Connecting...'}</span>
                   </div>
                 </div>
@@ -3360,27 +3358,4 @@ const ChatInterface = ({ sessionId, token, channelToken, isHost, timerMode, onEn
 
 };
 
-// Connection Status Component
-const ConnectionStatusIndicator = ({ state }: { state: ConnectionState }) => {
-  const getStatusInfo = () => {
-    if (state.status === 'connected') {
-      return { text: 'Connected', color: 'text-accent', dot: 'bg-accent' };
-    }
-    if (state.status === 'reconnecting') {
-      return { text: 'Reconnecting...', color: 'text-yellow-500', dot: 'bg-yellow-500' };
-    }
-    return { text: 'Connecting...', color: 'text-muted-foreground', dot: 'bg-muted-foreground' };
-  };
-
-  const { text, color, dot } = getStatusInfo();
-
-  return (
-    <div className={cn("flex items-center gap-2 text-xs", color)}>
-      <div className={cn("w-2 h-2 rounded-full animate-pulse", dot)} />
-      <span>{text}</span>
-    </div>
-  );
-};
-
 export default ChatInterface;
-
