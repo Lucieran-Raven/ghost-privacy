@@ -38,7 +38,7 @@ jobs:
         run: npm run integrity
 
       - name: Lint
-        run: npm run lint
+        run: npm run lint -- --quiet
 
       - name: Typecheck security-critical code (strict)
         run: npx --no-install tsc -p tsconfig.security.json --noEmit
