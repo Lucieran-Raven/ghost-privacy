@@ -25,7 +25,7 @@ describe('layer9 ui/human side-channel invariants', () => {
   });
 
   it('disables autofill/autocorrect/spellcheck for chat textarea', () => {
-    const src = read('src/components/Ghost/ChatInterface.tsx');
+    const src = read('src/components/Ghost/ChatInterfaceShell.tsx');
     expect(src).toMatch(/<textarea[\s\S]*autoComplete="off"/);
     expect(src).toMatch(/<textarea[\s\S]*autoCorrect="off"/);
     expect(src).toMatch(/<textarea[\s\S]*autoCapitalize="off"/);
