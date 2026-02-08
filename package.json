@@ -1,7 +1,7 @@
 {
   "name": "vite_react_shadcn_ts",
   "private": true,
-  "version": "0.1.36",
+  "version": "0.1.37",
   "packageManager": "npm@10.9.3",
   "engines": {
     "node": ">=20 <23",
