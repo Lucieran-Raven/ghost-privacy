@@ -62,9 +62,10 @@ jobs:
           GHOST_EXPECTED_TAURI_SIGNING_CERT_SHA256: ${{ secrets.TAURI_EXPECTED_SIGNING_CERT_SHA256 }}
           # Use ad-hoc signing if secrets not available, otherwise use proper signing
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_SIGNING_IDENTITY || '-' }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Only set notarization vars if we have proper signing (not ad-hoc)
+          APPLE_ID: ${{ secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_TEAM_ID || '' }}
 
       - name: Collect installers + checksums
         run: |
