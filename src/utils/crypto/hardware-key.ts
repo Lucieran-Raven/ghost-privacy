@@ -407,7 +407,8 @@ export class HardwareKeyManager {
     // Simplified parser - production would fully parse all fields
     const rpIdHash = data.slice(0, 32);
     const flags = data[32];
-    const signCount = data.readUInt32BE(33); // Node Buffer method, adjust for browser
+    // Use DataView for browser-compatible big-endian uint32 reading
+    const signCount = new DataView(data.buffer, data.byteOffset + 33, 4).getUint32(0, false); // big-endian
 
     return {
       rpIdHash,
