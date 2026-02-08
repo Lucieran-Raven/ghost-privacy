@@ -56,16 +56,22 @@ jobs:
         run: cargo clippy --locked -- -D warnings
         working-directory: src-tauri
 
-      - name: Build Tauri bundle
+      - name: Build Tauri bundle (with proper signing)
+        if: ${{ secrets.APPLE_SIGNING_IDENTITY != '' }}
         run: npm run tauri:build -- --target ${{ matrix.arch == 'aarch64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }}
         env:
           GHOST_EXPECTED_TAURI_SIGNING_CERT_SHA256: ${{ secrets.TAURI_EXPECTED_SIGNING_CERT_SHA256 }}
-          # Use ad-hoc signing if secrets not available, otherwise use proper signing
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_SIGNING_IDENTITY || '-' }}
-          # Only set notarization vars if we have proper signing (not ad-hoc)
-          APPLE_ID: ${{ secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_ID || '' }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_TEAM_ID || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build Tauri bundle (ad-hoc signing, no notarization)
+        if: ${{ secrets.APPLE_SIGNING_IDENTITY == '' }}
+        run: npm run tauri:build -- --target ${{ matrix.arch == 'aarch64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }}
+        env:
+          GHOST_EXPECTED_TAURI_SIGNING_CERT_SHA256: ${{ secrets.TAURI_EXPECTED_SIGNING_CERT_SHA256 }}
+          APPLE_SIGNING_IDENTITY: "-"
 
       - name: Collect installers + checksums
         run: |
