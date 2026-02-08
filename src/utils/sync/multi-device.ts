@@ -395,7 +395,7 @@ export class MultiDeviceSync {
 
   private async x25519PublicFromSecret(secretKey: Uint8Array): Promise<Uint8Array> {
     // Simplified - actual implementation uses curve25519 base point multiplication
-    const hash = await crypto.subtle.digest('SHA-256', secretKey);
+    const hash = await crypto.subtle.digest('SHA-256', secretKey as unknown as ArrayBuffer);
     return new Uint8Array(hash);
   }
 
@@ -408,7 +408,7 @@ export class MultiDeviceSync {
     combined.set(secretKey, 0);
     combined.set(publicKey, secretKey.length);
     
-    const hash = await crypto.subtle.digest('SHA-256', combined);
+    const hash = await crypto.subtle.digest('SHA-256', combined as unknown as ArrayBuffer);
     return new Uint8Array(hash);
   }
 
@@ -416,7 +416,7 @@ export class MultiDeviceSync {
     // HKDF-like extraction and expansion
     const combined = Buffer.concat(secrets.map(s => Buffer.from(s)));
     const hash = await crypto.subtle.digest('SHA-256', 
-      Buffer.concat([Buffer.from('ghost-sync-root-v1'), combined])
+      Buffer.concat([Buffer.from('ghost-sync-root-v1'), combined]) as unknown as ArrayBuffer
     );
     return new Uint8Array(hash);
   }
@@ -426,7 +426,7 @@ export class MultiDeviceSync {
       Buffer.from(rootKey),
       Buffer.from([constant]),
     ]);
-    const hash = await crypto.subtle.digest('SHA-256', input);
+    const hash = await crypto.subtle.digest('SHA-256', input as unknown as ArrayBuffer);
     return new Uint8Array(hash);
   }
 
@@ -435,7 +435,7 @@ export class MultiDeviceSync {
       Buffer.from(currentChainKey),
       Buffer.from([0x02]), // Chain constant
     ]);
-    const hash = await crypto.subtle.digest('SHA-256', input);
+    const hash = await crypto.subtle.digest('SHA-256', input as unknown as ArrayBuffer);
     return new Uint8Array(hash);
   }
 
@@ -448,7 +448,7 @@ export class MultiDeviceSync {
       counter,
       Buffer.from([0x01]), // Message key constant
     ]);
-    const hash = await crypto.subtle.digest('SHA-256', input);
+    const hash = await crypto.subtle.digest('SHA-256', input as unknown as ArrayBuffer);
     return new Uint8Array(hash);
   }
 
@@ -512,7 +512,7 @@ export class MultiDeviceSync {
         counter,
       ]);
       
-      const hash = await crypto.subtle.digest('SHA-256', blockInput);
+      const hash = await crypto.subtle.digest('SHA-256', blockInput as unknown as ArrayBuffer);
       const block = new Uint8Array(hash);
       keystream.set(block, i * 64);
     }
@@ -527,7 +527,7 @@ export class MultiDeviceSync {
   ): Promise<Uint8Array> {
     // Simplified Poly1305-like MAC
     const input = Buffer.concat([Buffer.from(key), Buffer.from(nonce), Buffer.from(data)]);
-    const hash = await crypto.subtle.digest('SHA-256', input);
+    const hash = await crypto.subtle.digest('SHA-256', input as unknown as ArrayBuffer);
     return new Uint8Array(hash).slice(0, MAC_BYTES);
   }
 
