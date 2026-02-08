@@ -395,7 +395,7 @@ export class IPFSStorage {
     plaintext: Uint8Array,
     key: Uint8Array
   ): Promise<{ ciphertext: Uint8Array; nonce: Uint8Array }> {
-    const nonce = crypto.getRandomValues(new Uint8Array(12));
+    const nonce = crypto.getRandomValues(new Uint8Array(12)) as Uint8Array;
     
     // Simplified ChaCha20 - actual implementation uses proper stream cipher
     const ciphertext = new Uint8Array(plaintext.length);
@@ -454,7 +454,7 @@ export class IPFSStorage {
       state.set(counterBytes, 48);
 
       // Hash block (simplified)
-      const block = await crypto.subtle.digest('SHA-256', state);
+      const block = await crypto.subtle.digest('SHA-256', state as unknown as ArrayBuffer);
       const blockArray = new Uint8Array(block);
 
       const toCopy = Math.min(64, length - offset);

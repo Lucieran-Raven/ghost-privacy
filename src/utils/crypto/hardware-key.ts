@@ -125,7 +125,7 @@ export class HardwareKeyManager {
     const challenge = this.generateChallenge();
     
     const options: PublicKeyCredentialCreationOptions = {
-      challenge,
+      challenge: challenge as unknown as BufferSource,
       rp: {
         name: this.rpName,
         id: this.rpId,
@@ -214,7 +214,7 @@ export class HardwareKeyManager {
     }
 
     const options: PublicKeyCredentialRequestOptions = {
-      challenge,
+      challenge: challenge as unknown as BufferSource,
       rpId: this.rpId,
       allowCredentials: allowList,
       userVerification: 'required',
@@ -266,7 +266,7 @@ export class HardwareKeyManager {
     
     // Verify challenge matches
     const receivedChallenge = this.base64urlToArrayBuffer(clientData.challenge);
-    if (!this.constantTimeEqual(receivedChallenge, expectedChallenge)) {
+    if (!this.constantTimeEqual(receivedChallenge as unknown as ArrayBuffer, expectedChallenge as unknown as ArrayBuffer)) {
       throw new HardwareKeyError('Challenge mismatch - possible replay attack');
     }
 
@@ -299,7 +299,7 @@ export class HardwareKeyManager {
     const challenge = this.generateChallenge();
 
     const options: PublicKeyCredentialRequestOptions = {
-      challenge,
+      challenge: challenge as unknown as BufferSource,
       rpId: this.rpId,
       allowCredentials: [{
         id: this.base64urlToArrayBuffer(credentialId),
@@ -332,7 +332,7 @@ export class HardwareKeyManager {
     const challenge = this.generateChallenge();
 
     const options: PublicKeyCredentialRequestOptions = {
-      challenge,
+      challenge: challenge as unknown as BufferSource,
       rpId: this.rpId,
       allowCredentials: [{
         id: this.base64urlToArrayBuffer(credentialId),

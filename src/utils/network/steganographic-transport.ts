@@ -291,7 +291,7 @@ export class StegoTransport extends EventEmitter {
     const connectionId = this.generateConnectionId();
     
     // Generate session keys for this connection
-    const sessionKeys = crypto.getRandomValues(new Uint8Array(32));
+    const sessionKeys = crypto.getRandomValues(new Uint8Array(32)) as Uint8Array;
 
     const connection: CoverConnection = {
       domain,
@@ -497,14 +497,14 @@ export class StegoTransport extends EventEmitter {
   }
 
   private generateConnectionId(): string {
-    return Array.from(crypto.getRandomValues(new Uint8Array(8)))
+    return Array.from(crypto.getRandomValues(new Uint8Array(8)) as Uint8Array)
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
   }
 
   private async encryptSession(data: Uint8Array, key: Uint8Array): Promise<Uint8Array> {
     // ChaCha20-Poly1305 with session key
-    const nonce = crypto.getRandomValues(new Uint8Array(12));
+    const nonce = crypto.getRandomValues(new Uint8Array(12)) as Uint8Array;
     
     // Simplified encryption
     const encrypted = new Uint8Array(data.length);
@@ -530,11 +530,11 @@ export class StegoTransport extends EventEmitter {
   private generatePadding(): Uint8Array {
     // Random padding 32-256 bytes
     const length = 32 + Math.floor(Math.random() * 224);
-    return crypto.getRandomValues(new Uint8Array(length));
+    return crypto.getRandomValues(new Uint8Array(length)) as Uint8Array;
   }
 
   private async computeChecksum(data: Uint8Array): Promise<Uint8Array> {
-    const hash = await crypto.subtle.digest('SHA-256', data);
+    const hash = await crypto.subtle.digest('SHA-256', data as unknown as ArrayBuffer);
     return new Uint8Array(hash).slice(0, 16);
   }
 
