@@ -71,6 +71,25 @@ function normalizeText(input: string): string {
     return input.replace(/\r\n/g, '\n');
 }
 
+function checkVersionSync(repoRoot: string): { pkg: string; tauri: string; downloads: string; synced: boolean } {
+    const pkgPath = path.join(repoRoot, 'package.json');
+    const tauriPath = path.join(repoRoot, 'src-tauri', 'tauri.conf.json');
+    const downloadsPath = path.join(repoRoot, 'src', 'pages', 'Downloads.tsx');
+    
+    const pkgRaw = fs.readFileSync(pkgPath, 'utf8');
+    const tauriRaw = fs.readFileSync(tauriPath, 'utf8');
+    const downloadsRaw = fs.readFileSync(downloadsPath, 'utf8');
+    
+    const pkgVersion = JSON.parse(pkgRaw).version;
+    const tauriVersion = JSON.parse(tauriRaw).version;
+    const downloadsMatch = downloadsRaw.match(/releaseTag\s*=\s*['"](v[\d.]+)['"]/);
+    const downloadsVersion = downloadsMatch ? downloadsMatch[1] : null;
+    
+    const synced = pkgVersion === tauriVersion && downloadsVersion === `v${pkgVersion}`;
+    
+    return { pkg: pkgVersion, tauri: tauriVersion, downloads: downloadsVersion, synced };
+}
+
 function shouldIgnorePath(p: string): boolean {
     const norm = p.replace(/\\/g, '/');
     return (
@@ -264,6 +283,20 @@ async function runTests() {
 
         if (!queue.isDestroyed()) {
             throw new Error("Queue not marked as destroyed");
+        }
+    });
+
+    // --- TEST SUITE 3: Version Sync Check ---
+    await test("Version Sync (Package/Tauri/Downloads)", async () => {
+        const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+        const repoRoot = path.resolve(scriptDir, '..');
+        const versionCheck = checkVersionSync(repoRoot);
+        
+        if (!versionCheck.synced) {
+            throw new Error(
+                `Version mismatch detected: package.json=${versionCheck.pkg}, ` +
+                `tauri.conf.json=${versionCheck.tauri}, Downloads.tsx=${versionCheck.downloads}`
+            );
         }
     });
 

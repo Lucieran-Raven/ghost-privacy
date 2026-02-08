@@ -4,6 +4,32 @@ import { generateNonce } from '@/utils/encryption';
 import { deriveRealtimeChannelName } from '@/utils/realtimeChannel';
 import { base64ToBytes, base64UrlToBytes, bytesToBase64 } from '@/utils/algorithms/encoding/base64';
 
+// Simple structured logger for security events
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+interface LogContext {
+  attempt?: number;
+  error?: string;
+  context?: string;
+  [key: string]: unknown;
+}
+
+const logger = {
+  log: (level: LogLevel, message: string, context?: LogContext) => {
+    const timestamp = new Date().toISOString();
+    const ctx = context ? ` ${JSON.stringify(context)}` : '';
+    // In production, send to monitoring service; in dev, console
+    if (process.env.NODE_ENV === 'development') {
+      // eslint-disable-next-line no-console
+      console[level](`[${timestamp}] [${level.toUpperCase()}] ${message}${ctx}`);
+    }
+    // Silent in production (no console output for security)
+  },
+  debug: (msg: string, ctx?: LogContext) => logger.log('debug', msg, ctx),
+  info: (msg: string, ctx?: LogContext) => logger.log('info', msg, ctx),
+  warn: (msg: string, ctx?: LogContext) => logger.log('warn', msg, ctx),
+  error: (msg: string, ctx?: LogContext) => logger.log('error', msg, ctx),
+};
+
 const PADDED_FRAME_TOTAL_CHARS = 1024;
 const PADDED_FRAME_HEADER_CHARS = 6;
 const PADDED_FRAME_PAYLOAD_CHARS = PADDED_FRAME_TOTAL_CHARS - PADDED_FRAME_HEADER_CHARS;
@@ -394,8 +420,13 @@ export class RealtimeManager {
             this.lastOutboundAt = this.lastHeartbeat;
             return true;
           }
-        } catch {
-          // Silent retry
+        } catch (err) {
+          // Log retry attempt for monitoring, but don't expose to user
+          logger.warn('send_retry_failed', { 
+            attempt, 
+            error: err instanceof Error ? err.message : 'unknown',
+            context: 'direct_broadcast'
+          });
         }
 
         if (attempt < retries) {
@@ -437,8 +468,13 @@ export class RealtimeManager {
           this.lastOutboundAt = this.lastHeartbeat;
           return true;
         }
-      } catch {
-        // Silent retry
+      } catch (err) {
+        // Log retry attempt for padded frames
+        logger.warn('send_retry_failed', { 
+          attempt, 
+          error: err instanceof Error ? err.message : 'unknown',
+          context: 'padded_frame'
+        });
       }
 
       if (attempt < retries) {
@@ -475,7 +511,10 @@ export class RealtimeManager {
       };
 
       this.sendNow(payload, 1)
-        .catch(() => {
+        .catch((err) => {
+          logger.debug('cover_traffic_send_failed', { 
+            error: err instanceof Error ? err.message : 'unknown' 
+          });
         })
         .finally(() => {
           this.coverTrafficInFlight = false;
@@ -487,7 +526,8 @@ export class RealtimeManager {
     if (!this.coverTrafficTimer) return;
     try {
       clearInterval(this.coverTrafficTimer);
-    } catch {
+    } catch (err) {
+      logger.debug('stop_cover_traffic_error', { error: err instanceof Error ? err.message : 'unknown' });
     }
     this.coverTrafficTimer = null;
     this.coverTrafficInFlight = false;
@@ -915,7 +955,8 @@ export class RealtimeManager {
 
           try {
             await this.channel!.track({ online_at: new Date().toISOString() });
-          } catch {
+          } catch (err) {
+            logger.debug('presence_track_failed', { error: err instanceof Error ? err.message : 'unknown' });
           }
 
           // Wait for channel stability
@@ -987,7 +1028,8 @@ export class RealtimeManager {
         await supabase.removeChannel(this.channel);
       }
       await this.connect();
-    } catch {
+    } catch (err) {
+      logger.debug('reconnect_failed', { attempt: this.reconnectAttempts, error: err instanceof Error ? err.message : 'unknown' });
       if (this.reconnectAttempts < this.maxReconnectAttempts) {
         await this.attemptReconnect();
       }
@@ -1003,7 +1045,8 @@ export class RealtimeManager {
           nonce = mid;
         }
       }
-    } catch {
+    } catch (err) {
+      logger.debug('nonce_extraction_failed', { error: err instanceof Error ? err.message : 'unknown' });
     }
 
     const payload: BroadcastPayload = {
@@ -1022,7 +1065,8 @@ export class RealtimeManager {
     const ok = await this.sendNow(payload, retries);
     if (ok) {
       if (this.outboxSize() > 0) {
-        void this.flushOutbox().catch(() => {
+        void this.flushOutbox().catch((err) => {
+          logger.debug('flush_outbox_failed', { error: err instanceof Error ? err.message : 'unknown' });
         });
       }
       return true;
