@@ -221,7 +221,7 @@ export class MultiDeviceSync {
     encryptedMessage: EncryptedSyncMessage
   ): Promise<SyncPayload> {
     const ratchetKey = this.getRatchetKey(senderDeviceId);
-    let state = this.ratchets.get(ratchetKey);
+    const state = this.ratchets.get(ratchetKey);
 
     if (!state) {
       throw new Error(`No sync session with device ${senderDeviceId}`);
