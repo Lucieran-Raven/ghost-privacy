@@ -57,21 +57,9 @@ jobs:
         working-directory: src-tauri
 
       - name: Build Tauri bundle
-        run: |
-          # Determine if we have proper signing credentials
-          if [ -n "$APPLE_SIGNING_IDENTITY" ] && [ "$APPLE_SIGNING_IDENTITY" != "-" ]; then
-            echo "Using proper code signing with notarization..."
-            export APPLE_ID="${{ secrets.APPLE_ID }}"
-            export APPLE_PASSWORD="${{ secrets.APPLE_PASSWORD }}"
-            export APPLE_TEAM_ID="${{ secrets.APPLE_TEAM_ID }}"
-          else
-            echo "Using ad-hoc signing without notarization..."
-            export APPLE_SIGNING_IDENTITY="-"
-          fi
-          npm run tauri:build -- --target ${{ matrix.arch == 'aarch64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }}
+        run: npm run tauri:build -- --target ${{ matrix.arch == 'aarch64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin' }}
         env:
           GHOST_EXPECTED_TAURI_SIGNING_CERT_SHA256: ${{ secrets.TAURI_EXPECTED_SIGNING_CERT_SHA256 }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_SIGNING_IDENTITY || '-' }}
 
       - name: Collect installers + checksums
         run: |
