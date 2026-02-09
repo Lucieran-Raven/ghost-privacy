@@ -98,6 +98,22 @@ const Security = () => {
                   </div>
                 </div>
 
+                <div className="border border-[rgba(255,10,42,0.14)] p-4 bg-black/40">
+                  <div className="inline-flex items-center gap-2 font-mono text-sm tracking-[0.12em] text-white/90">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#ff0a2a] shadow-[0_0_14px_rgba(255,10,42,0.7)] opsec-pulse" />
+                    <span>[✓] ADVANCED SECURITY FEATURES (v0.3.0)</span>
+                  </div>
+                  <div className="mt-3 font-mono text-[12px] leading-relaxed text-white/70 space-y-1">
+                    <div>[✓] POST-QUANTUM CRYPTOGRAPHY: HYBRID X25519 + KYBER-768 KEY EXCHANGE</div>
+                    <div>[✓] HARDWARE SECURITY KEYS: FIDO2/WebAuthn SUPPORT (YUBIKEY, SOLOKEYS)</div>
+                    <div>[✓] MULTI-DEVICE SYNC: DOUBLE RATCHET PROTOCOL WITH PERFECT FORWARD SECRECY</div>
+                    <div>[✓] TOR ONION SERVICES: AUTO-ROUTING FOR CENSORSHIP RESISTANCE</div>
+                    <div>[✓] STEGANOGRAPHIC TRANSPORT: HIDE TRAFFIC IN HTTPS TO COMMON SITES</div>
+                    <div>[✓] IPFS/Filecoin: DECENTRALIZED ENCRYPTED STORAGE</div>
+                    <div>[✓] MONERO PAYMENTS: XMR INTEGRATION FOR PRIVACY-PRESERVING SUBSCRIPTIONS</div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div className="border border-[rgba(255,10,42,0.14)] bg-black/35">
                     <div className="px-4 py-3 border-b border-[rgba(255,10,42,0.14)]">
