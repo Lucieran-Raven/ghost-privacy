@@ -2,6 +2,7 @@ import { FileText, FileSpreadsheet, FileImage, FileArchive, FileCode, File, Down
 import { cn } from '@/lib/utils';
 import { sanitizeFileName, getFileIconType } from '@/utils/security';
 import { useEffect, useState, type MouseEvent } from 'react';
+import { crossPlatformDownload, legacyDownload } from '@/utils/crossPlatformDownload';
 
 interface FilePreviewCardProps {
   fileName: string;
@@ -14,6 +15,7 @@ const FilePreviewCard = ({ fileName, content, sender, onDownload }: FilePreviewC
   const safeName = sanitizeFileName(fileName);
   const iconType = getFileIconType(safeName);
   const extension = safeName.split('.').pop()?.toUpperCase() || 'FILE';
+  const [isDownloading, setIsDownloading] = useState(false);
   const [{ objectUrl, shouldRevoke }] = useState(() => {
     try {
       if (content.startsWith('data:')) {
@@ -62,46 +64,44 @@ const FilePreviewCard = ({ fileName, content, sender, onDownload }: FilePreviewC
         ? `${(estimatedSize / 1024).toFixed(1)} KB`
         : `${(estimatedSize / (1024 * 1024)).toFixed(2)} MB`;
   
-  const handleDownload = (e?: MouseEvent) => {
+  const handleDownload = async (e?: MouseEvent) => {
     if (e) {
       e.stopPropagation();
     }
 
+    // If custom onDownload provided (for encrypted files), use that
     if (typeof onDownload === 'function') {
       try {
         onDownload();
       } catch {
+        // Let parent handle errors
       }
       return;
     }
 
+    // For direct content (data URLs, blob URLs)
     if (!(objectUrl.startsWith('blob:') || objectUrl.startsWith('data:'))) {
       return;
     }
-    if (typeof document === 'undefined') {
-      return;
-    }
 
-    const link = document.createElement('a');
-    link.href = objectUrl;
-    link.download = safeName;
-    link.rel = 'noopener noreferrer';
-    link.style.display = 'none';
-
-    // Some browsers/WebViews require the link to be in the DOM.
-    document.body.appendChild(link);
+    setIsDownloading(true);
+    
     try {
-      link.click();
+      const success = await crossPlatformDownload({
+        fileName: safeName,
+        mimeType: isImage ? 'image/png' : isVideo ? 'video/mp4' : 'application/octet-stream',
+        data: objectUrl,
+      });
+      
+      if (!success) {
+        // Fallback to legacy method if cross-platform fails
+        legacyDownload(objectUrl, safeName);
+      }
     } catch {
-      try {
-        window.open(objectUrl, '_blank', 'noopener,noreferrer');
-      } catch {
-      }
+      // Final fallback
+      legacyDownload(objectUrl, safeName);
     } finally {
-      try {
-        document.body.removeChild(link);
-      } catch {
-      }
+      setIsDownloading(false);
     }
   };
   

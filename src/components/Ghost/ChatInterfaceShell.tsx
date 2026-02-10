@@ -15,6 +15,7 @@ import { normalizeFileNameForMime, sniffMimeFromBytes } from './hooks/fileTransf
 import { useFileTransfers } from './hooks/useFileTransfers';
 import { useChatTransport } from './hooks/useChatTransport';
 import { useQuarantine } from './hooks/useQuarantine';
+import { crossPlatformDownload } from '@/utils/crossPlatformDownload';
 import KeyVerificationModal from './KeyVerificationModal';
 import ConnectionStatusIndicator from './ConnectionStatusIndicator';
 import VoiceRecorder from './VoiceRecorder';
@@ -751,21 +752,25 @@ const ChatInterfaceShell = ({ sessionId, token, channelToken, isHost, timerMode,
                                   draggable={false}
                                 />
                                 <button
-                                  onClick={() => {
+                                  onClick={async () => {
                                     if (typeof message.content !== 'string') {
                                       return;
                                     }
                                     if (!(message.content.startsWith('blob:') || message.content.startsWith('data:'))) {
                                       return;
                                     }
-                                    if (typeof document === 'undefined') {
-                                      return;
+                                    
+                                    const success = await crossPlatformDownload({
+                                      fileName: message.fileName || 'ghost_image.png',
+                                      mimeType: 'image/png',
+                                      data: message.content,
+                                    });
+                                    
+                                    if (success) {
+                                      toast.success('Image downloaded');
+                                    } else {
+                                      toast.error('Download failed - try again');
                                     }
-                                    const link = document.createElement('a');
-                                    link.href = message.content;
-                                    link.download = message.fileName || 'ghost_image.png';
-                                    link.click();
-                                    toast.success('Image downloaded');
                                   }}
                                   className="absolute top-2 right-2 p-2 rounded-full bg-black/70 backdrop-blur-sm opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity active:scale-95"
                                   aria-label="Download image"
