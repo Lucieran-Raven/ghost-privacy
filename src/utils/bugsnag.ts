@@ -1,7 +1,7 @@
 import Bugsnag from '@bugsnag/js';
 
 const BUGSNAG_API_KEY = 'fa219feec3980f82be3de8349e986592';
-const APP_VERSION = '0.4.0'; // Sync with package.json version
+const APP_VERSION = '0.4.1'; // Sync with package.json version
 
 export function initializeBugsnag(): void {
   Bugsnag.start({
