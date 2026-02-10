@@ -17,7 +17,7 @@ interface DetectedPlatform {
 }
 
 const Downloads = () => {
-  const releaseTag = 'v0.3.0';
+  const releaseTag = 'v0.4.0';
   const [detected, setDetected] = useState<DetectedPlatform>({ 
     platform: 'unknown', 
     arch: 'unknown', 
