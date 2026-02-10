@@ -1,0 +1,166 @@
+name: Mobile Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build-android:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+
+    env:
+      CAPACITOR_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20.19.0
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Integrity attestation
+        run: |
+          set -euo pipefail
+          npm run integrity | tee integrity-attestation-android.txt
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Sync Capacitor (Android)
+        run: npx --no-install cap sync android
+
+      - name: Prepare Android signing keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            umask 077
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release.jks
+
+            {
+              echo "ANDROID_KEYSTORE_PATH=$GITHUB_WORKSPACE/android/app/release.jks"
+              echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD"
+              echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS"
+              echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+          else
+            echo "Android keystore not configured; generating ephemeral keystore for installable APK (NOT for Play Store)."
+            umask 077
+            keytool -genkeypair -v \
+              -keystore android/app/release.jks \
+              -storetype JKS \
+              -alias ghostprivacy \
+              -storepass ghostprivacy \
+              -keypass ghostprivacy \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Ghost Privacy, OU=Dev, O=Ghost Privacy, L=NA, S=NA, C=US"
+
+            {
+              echo "ANDROID_KEYSTORE_PATH=$GITHUB_WORKSPACE/android/app/release.jks"
+              echo "ANDROID_KEYSTORE_PASSWORD=ghostprivacy"
+              echo "ANDROID_KEY_ALIAS=ghostprivacy"
+              echo "ANDROID_KEY_PASSWORD=ghostprivacy"
+            } >> "$GITHUB_ENV"
+          fi
+
+      - name: Extract signing cert SHA-256 (integrity anchor)
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ env.ANDROID_KEYSTORE_PATH }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ env.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ env.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANDROID_KEYSTORE_PATH:-}" ]; then
+            echo "No keystore path available; cannot extract signing cert SHA-256"
+            exit 1
+          fi
+
+          CERT_HASH=$(keytool -list -v -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" | grep -m 1 -E 'SHA256:' | awk '{print $2}' | tr -d ':')
+          if [ -z "$CERT_HASH" ]; then
+            echo "Failed to extract signing cert SHA-256 from keystore"
+            exit 1
+          fi
+          echo "ANDROID_EXPECTED_SIGNING_CERT_SHA256=$CERT_HASH" >> "$GITHUB_ENV"
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+        env:
+          ANDROID_EXPECTED_SIGNING_CERT_SHA256: ${{ env.ANDROID_EXPECTED_SIGNING_CERT_SHA256 }}
+
+      - name: Compute SHA-256
+        run: |
+          APK_PATH=$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)
+          cp "$APK_PATH" ghost-privacy-android-release.apk
+          sha256sum ghost-privacy-android-release.apk > ghost-privacy-android-release.apk.sha256
+
+      - name: Attest build provenance (APK)
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018
+        with:
+          subject-path: |
+            ghost-privacy-android-release.apk
+            ghost-privacy-android-release.apk.sha256
+            integrity-attestation-android.txt
+
+      - name: Cleanup Android signing material
+        if: always()
+        run: |
+          rm -f android/app/release.jks
+
+      - name: Upload APK (workflow artifact)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: android-apk
+          path: |
+            ghost-privacy-android-release.apk
+            ghost-privacy-android-release.apk.sha256
+            integrity-attestation-android.txt
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b
+        with:
+          files: |
+            ghost-privacy-android-release.apk
+            ghost-privacy-android-release.apk.sha256
+            integrity-attestation-android.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,123 @@
+name: Desktop Release (Linux)
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-linux-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            arch: x86_64
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20.19.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Tauri dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Integrity attestation
+        run: |
+          npm run integrity | tee integrity-attestation-linux-${{ matrix.arch }}.txt
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7
+        with:
+          toolchain: 1.85.0
+          components: clippy
+          target: ${{ matrix.target }}
+
+      - name: Cargo fetch (locked)
+        run: cargo fetch --locked
+        working-directory: src-tauri
+
+      - name: Cargo clippy (locked)
+        run: cargo clippy --locked -- -D warnings
+        working-directory: src-tauri
+
+      - name: Build Tauri bundle
+        run: npm run tauri:build -- --target ${{ matrix.target }}
+        env:
+          GHOST_EXPECTED_TAURI_SIGNING_CERT_SHA256: ${{ secrets.TAURI_EXPECTED_SIGNING_CERT_SHA256 }}
+
+      - name: Collect installers + checksums
+        run: |
+          set -euo pipefail
+          BUNDLE_ROOT="src-tauri/target/${{ matrix.target }}/release/bundle"
+          
+          if [ ! -d "$BUNDLE_ROOT" ]; then
+            echo "Bundle output not found: $BUNDLE_ROOT"
+            exit 1
+          fi
+
+          OUT="ghost-privacy-linux-${{ matrix.arch }}-installers"
+          mkdir -p "$OUT"
+
+          CHECKSUM_FILE="ghost-privacy-linux-${{ matrix.arch }}.sha256"
+          rm -f "$CHECKSUM_FILE"
+
+          find "$BUNDLE_ROOT" -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.tar.gz" \) | while read -r f; do
+            cp "$f" "$OUT/"
+            sha256sum "$f" >> "$CHECKSUM_FILE"
+          done
+
+          if [ ! -s "$CHECKSUM_FILE" ]; then
+            echo "No installers found"
+            exit 1
+          fi
+
+      - name: Attest build provenance (Linux ${{ matrix.arch }} artifacts)
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018
+        with:
+          subject-path: |
+            ghost-privacy-linux-${{ matrix.arch }}-installers/*
+            ghost-privacy-linux-${{ matrix.arch }}.sha256
+            integrity-attestation-linux-${{ matrix.arch }}.txt
+
+      - name: Upload installers (workflow artifacts)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-${{ matrix.arch }}-installers
+          path: |
+            src-tauri/target/*/release/bundle/**
+            ghost-privacy-linux-${{ matrix.arch }}-installers/**
+            ghost-privacy-linux-${{ matrix.arch }}.sha256
+            integrity-attestation-linux-${{ matrix.arch }}.txt
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b
+        with:
+          files: |
+            ghost-privacy-linux-${{ matrix.arch }}-installers/*
+            ghost-privacy-linux-${{ matrix.arch }}.sha256
+            integrity-attestation-linux-${{ matrix.arch }}.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

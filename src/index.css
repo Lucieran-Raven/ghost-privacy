@@ -1,0 +1,1663 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/bebas-neue/400.css";
+@import "@fontsource/barlow-condensed/600.css";
+@import "@fontsource/barlow-condensed/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/outfit/400.css";
+@import "@fontsource/outfit/500.css";
+@import "@fontsource/outfit/600.css";
+@import "@fontsource/outfit/700.css";
+@import "@fontsource/outfit/800.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CSP-safe progress indicators */
+@layer utilities {
+  .progress-indicator {
+    transform: translateX(calc(-100% + var(--progress-value) * 1%));
+  }
+  .honeypot-progress {
+    width: var(--progress-width, 0%);
+  }
+  .admin-progress {
+    width: var(--admin-progress, 0%);
+  }
+}
+
+/* CSP-safe particle animations */
+@layer utilities {
+  .particle {
+    left: var(--particle-x, 50%);
+    top: var(--particle-y, 50%);
+    width: var(--particle-size, 4px);
+    height: var(--particle-size, 4px);
+    background: radial-gradient(circle, rgba(255, 10, 42, var(--particle-opacity, 0.5)) 0%, transparent 70%);
+  }
+  .ghost-particle {
+    left: var(--ghost-left, 10%);
+    top: var(--ghost-top, 20%);
+  }
+}
+
+/* Ghost - Cinematic Spy Thriller Design System */
+@layer base {
+  :root {
+    /* Core Colors */
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+
+    /* Card surfaces with slight transparency */
+    --card: 0 0% 4%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 0 0% 6%;
+    --popover-foreground: 0 0% 100%;
+
+    /* Primary - Operational Green */
+    --primary: 352 100% 52%;
+    --primary-foreground: 0 0% 0%;
+
+    /* Secondary - Deep Space */
+    --secondary: 0 0% 7%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Muted surfaces */
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 72%;
+
+    /* Accent - Operational Green */
+    --accent: 350 100% 38%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Destructive - Urgent Red */
+    --destructive: 352 100% 52%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders and inputs */
+    --border: 0 0% 14%;
+    --input: 0 0% 12%;
+    --ring: 352 100% 52%;
+
+    --radius: 0.75rem;
+
+    /* Custom Ghost Colors */
+    --ghost-navy: 0 0% 0%;
+    --ghost-navy-light: 0 0% 6%;
+    --ghost-cyan: 352 100% 52%;
+    --ghost-cyan-glow: 352 100% 52%;
+    --ghost-green: 352 100% 52%;
+    --ghost-green-glow: 352 100% 52%;
+    --ghost-purple: 0 0% 100%;
+    --ghost-red: 352 100% 52%;
+    --ghost-red-glow: 350 100% 38%;
+    --ghost-gold: 0 0% 100%;
+
+    /* Gradients (deprecated; interface is solid-fill) */
+    --gradient-ghost: none;
+    --gradient-dark: none;
+    --gradient-card: none;
+    --gradient-glow: none;
+    --gradient-danger: none;
+
+    /* Shadows */
+    --shadow-glow-sm: 0 0 10px hsl(352 100% 52% / 0.25);
+    --shadow-glow-md: 0 0 20px hsl(352 100% 52% / 0.35);
+    --shadow-glow-lg: 0 0 40px hsl(352 100% 52% / 0.45);
+    --shadow-glow-green: 0 0 20px hsl(352 100% 52% / 0.35);
+    --shadow-glow-red: 0 0 20px hsl(350 100% 38% / 0.45);
+    --shadow-card: 0 4px 30px hsl(0 0% 0% / 0.5);
+    --shadow-cinematic: 0 25px 50px -12px hsl(0 0% 0% / 0.8);
+
+    /* Sidebar */
+    --sidebar-background: 240 10% 6%;
+    --sidebar-foreground: 180 100% 95%;
+    --sidebar-primary: 180 100% 50%;
+    --sidebar-primary-foreground: 240 10% 4%;
+    --sidebar-accent: 240 15% 12%;
+    --sidebar-accent-foreground: 180 100% 95%;
+    --sidebar-border: 240 15% 15%;
+    --sidebar-ring: 180 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: Inter, "Helvetica Neue", system-ui, -apple-system, sans-serif;
+    background: radial-gradient(circle at center, #110000 0%, #000000 70%);
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Bebas Neue', 'Barlow Condensed', Inter, system-ui, sans-serif;
+    letter-spacing: 0.02em;
+  }
+
+  ::selection {
+    background: hsl(352 100% 52% / 0.3);
+    color: hsl(0 0% 100%);
+  }
+}
+
+@layer utilities {
+  .opsec-pulse {
+    animation: opsec-pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes opsec-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.65; }
+  }
+}
+
+@layer utilities {
+  /* Glow effects */
+  .glow-cyan {
+    box-shadow: none;
+  }
+
+  .glow-green {
+    box-shadow: none;
+  }
+
+  .glow-red {
+    box-shadow: none;
+  }
+
+  .text-glow-cyan {
+    text-shadow: none;
+  }
+
+  .text-glow-green {
+    text-shadow: none;
+  }
+
+  .text-glow-red {
+    text-shadow: none;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+
+  .gradient-text-danger {
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+
+  /* Glass effect */
+  .glass {
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: none;
+    border: 1px solid rgba(255, 10, 42, 0.12);
+  }
+
+  .glass-dark {
+    background: rgba(0, 0, 0, 0.82);
+    backdrop-filter: none;
+    border: 1px solid rgba(255, 10, 42, 0.14);
+  }
+
+  /* Classified stamp effect */
+  .classified-stamp {
+    position: relative;
+  }
+  
+  .classified-stamp::before {
+    content: 'CLASSIFIED';
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    color: hsl(350 100% 50%);
+    border: 2px solid hsl(350 100% 50%);
+    transform: rotate(12deg);
+    opacity: 0.8;
+  }
+
+  /* Pulse animations */
+  .pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .pulse-glow-red {
+    animation: pulse-glow-red 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 10px rgba(255, 10, 42, 0.25);
+    }
+    50% {
+      box-shadow: 0 0 30px rgba(255, 10, 42, 0.55), 0 0 60px rgba(255, 10, 42, 0.25);
+    }
+  }
+
+  @keyframes pulse-glow-red {
+    0%, 100% {
+      box-shadow: 0 0 10px hsl(350 100% 50% / 0.3);
+    }
+    50% {
+      box-shadow: 0 0 30px hsl(350 100% 50% / 0.6);
+    }
+  }
+
+  /* Scanline effect */
+  .scanlines::before {
+    content: none;
+  }
+
+  /* CRT flicker effect */
+  .crt-flicker {
+    animation: none;
+  }
+
+  @keyframes crt-flicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.98; }
+  }
+
+  /* Typing cursor */
+  .cursor-blink::after {
+    content: '|';
+    animation: blink 1s step-end infinite;
+    color: rgba(255, 10, 42, 0.95);
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  /* Fade in animations */
+  .animate-fade-in {
+    animation: none;
+  }
+
+  .animate-fade-in-up {
+    animation: none;
+  }
+
+  .animate-fade-in-delay-1 {
+    animation: none;
+    opacity: 1;
+  }
+
+  .animate-fade-in-delay-2 {
+    animation: none;
+    opacity: 1;
+  }
+
+  .animate-fade-in-delay-3 {
+    animation: none;
+    opacity: 1;
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Float animation */
+  .animate-float {
+    animation: none;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-15px); }
+  }
+
+  /* Glitch effect */
+  .glitch {
+    animation: none;
+  }
+
+  @keyframes glitch {
+    0%, 100% { transform: translate(0); }
+    20% { transform: translate(-2px, 2px); }
+    40% { transform: translate(-2px, -2px); }
+    60% { transform: translate(2px, 2px); }
+    80% { transform: translate(2px, -2px); }
+  }
+
+  /* Matrix rain effect */
+  .matrix-bg {
+    background-image: none;
+  }
+
+  /* Particle effect placeholder */
+  .particle-container {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  /* Cinematic letterbox */
+  .letterbox::before,
+  .letterbox::after {
+    content: '';
+    position: fixed;
+    left: 0;
+    right: 0;
+    height: 5vh;
+    background: hsl(0 0% 0%);
+    z-index: 100;
+  }
+
+  .letterbox::before { top: 0; }
+  .letterbox::after { bottom: 0; }
+
+  /* Secure badge pulse */
+  .secure-badge {
+    animation: secure-pulse 3s ease-in-out infinite;
+  }
+
+  @keyframes secure-pulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 hsl(156 100% 50% / 0.4);
+    }
+    50% {
+      box-shadow: 0 0 0 10px hsl(156 100% 50% / 0);
+    }
+  }
+
+  /* Hover lift effect */
+  .hover-lift {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-cinematic);
+  }
+
+  /* Text reveal animation */
+  .text-reveal {
+    animation: text-reveal 1s ease forwards;
+  }
+
+  @keyframes text-reveal {
+    from {
+      clip-path: polygon(0 0, 0 0, 0 100%, 0% 100%);
+    }
+    to {
+      clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+    }
+  }
+
+  /* Urgent banner */
+  .urgent-banner {
+    background: linear-gradient(90deg, hsl(350 100% 50% / 0.1) 0%, hsl(350 100% 50% / 0.2) 50%, hsl(350 100% 50% / 0.1) 100%);
+    border-top: 1px solid hsl(350 100% 50% / 0.3);
+    border-bottom: 1px solid hsl(350 100% 50% / 0.3);
+  }
+
+  /* Termination Screen Styles */
+  .termination-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, hsl(240 10% 4%) 0%, hsl(350 20% 5%) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: terminationFadeIn 0.5s ease-out;
+  }
+
+  .termination-content {
+    background: hsl(240 10% 6% / 0.95);
+    backdrop-filter: blur(20px);
+    border: 2px solid hsl(350 100% 50% / 0.5);
+    border-radius: 16px;
+    padding: 48px;
+    text-align: center;
+    max-width: 500px;
+    animation: terminationPulse 2s infinite;
+    box-shadow: 0 0 60px hsl(350 100% 50% / 0.3);
+  }
+
+  .termination-icon {
+    font-size: 64px;
+    margin-bottom: 24px;
+    animation: terminationShake 0.5s ease-in-out;
+    filter: drop-shadow(0 0 20px hsl(350 100% 50% / 0.6));
+  }
+
+  .termination-title {
+    color: hsl(350 100% 60%);
+    font-size: 32px;
+    font-weight: 800;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    font-family: 'Outfit', system-ui, sans-serif;
+    text-shadow: 0 0 20px hsl(350 100% 50% / 0.5);
+  }
+
+  .termination-reason {
+    color: hsl(350 80% 70%);
+    font-size: 18px;
+    margin-bottom: 16px;
+    font-weight: 500;
+  }
+
+  .termination-session-id {
+    margin-bottom: 24px;
+    padding: 8px 16px;
+    background: hsl(240 10% 8% / 0.8);
+    border: 1px solid hsl(240 15% 15%);
+    border-radius: 8px;
+    display: inline-block;
+  }
+
+  .termination-message {
+    color: hsl(210 20% 70%);
+    font-size: 16px;
+    margin-bottom: 32px;
+    line-height: 1.6;
+  }
+
+  .termination-timer {
+    color: hsl(210 20% 55%);
+    font-size: 14px;
+    margin-bottom: 24px;
+    font-weight: 500;
+  }
+
+  .termination-button {
+    background: hsl(350 100% 50%);
+    color: white;
+    border: none;
+    padding: 14px 32px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .termination-button:hover {
+    background: hsl(350 100% 55%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px hsl(350 100% 50% / 0.4);
+  }
+
+  /* Termination Animations */
+  @keyframes terminationFadeIn {
+    from { 
+      opacity: 0;
+      backdrop-filter: blur(0px);
+    }
+    to { 
+      opacity: 1;
+      backdrop-filter: blur(10px);
+    }
+  }
+
+  @keyframes terminationPulse {
+    0%, 100% { 
+      box-shadow: 0 0 40px hsl(350 100% 50% / 0.3);
+      border-color: hsl(350 100% 50% / 0.5);
+    }
+    50% { 
+      box-shadow: 0 0 80px hsl(350 100% 50% / 0.6);
+      border-color: hsl(350 100% 50% / 0.8);
+    }
+  }
+
+  @keyframes terminationShake {
+    0%, 100% { transform: translateX(0) rotate(0deg); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px) rotate(-5deg); }
+    20%, 40%, 60%, 80% { transform: translateX(5px) rotate(5deg); }
+  }
+
+  /* ----------------------------------------
+     MOBILE-FIRST UI SYSTEM v4.0
+     Production-ready mobile redesign for Ghost
+     ---------------------------------------- */
+
+  /* CSS Custom Properties for mobile */
+  :root {
+    --mobile-header-height: 56px;
+    --mobile-input-height: 72px;
+    --mobile-banner-height: 28px;
+  }
+
+  /* Safe area handling for iPhone X+ and notched devices */
+  .safe-area-inset-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .safe-area-inset-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Chat container - full viewport with flex layout */
+  .chat-container-mobile {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    position: fixed;
+    inset: 0;
+    background: hsl(var(--background));
+    isolation: isolate; /* Create stacking context */
+  }
+
+  /* Mobile header - fixed at top with safe area */
+  .mobile-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    background: hsl(var(--background) / 0.95);
+    border-bottom: 1px solid hsl(var(--border) / 0.3);
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Mobile message area - Instagram-style smooth scrolling */
+  .mobile-message-area {
+    flex: 1 1 0%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    overscroll-behavior-y: contain;
+    min-height: 0;
+    width: 100%;
+    /* Base padding for input bar (input + icons + warning) + safe area - ensures no overlap */
+    padding-bottom: calc(140px + env(safe-area-inset-bottom, 20px));
+    /* Margin for fixed header */
+    margin-top: 0;
+  }
+
+  /* Message area inner content */
+  .message-area-content {
+    padding: 16px;
+    padding-bottom: 24px;
+  }
+
+  /* Mobile input bar - Fixed at bottom, never hidden by keyboard on 100dvh */
+  /* NEW LAYOUT: Input on top row, action icons on bottom row */
+  .mobile-input-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: hsl(var(--background) / 0.98);
+    border-top: 1px solid hsl(var(--border) / 0.3);
+    padding: 12px 16px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    /* Keyboard pushes input up naturally with 100dvh */
+    transform: translateZ(0);
+    will-change: transform;
+    /* Stacked layout: input on top, icons below */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Voice recorder container - overlay input bar when active */
+  .voice-recorder-fixed {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 60;
+    background: hsl(var(--background) / 0.98);
+    border-top: 1px solid hsl(var(--destructive) / 0.3);
+    padding: 16px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    transform: translateZ(0);
+  }
+
+  /* Touch targets - minimum 48px for accessibility (Apple/Google standard) */
+  .touch-target {
+    min-width: 48px;
+    min-height: 48px;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Mobile action button with tap feedback */
+  .action-button-mobile {
+    min-width: 48px;
+    min-height: 48px;
+    border-radius: 12px;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.1s ease, background-color 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .action-button-mobile:active {
+    transform: scale(0.92);
+    background-color: hsl(var(--secondary) / 0.9);
+  }
+
+  /* Send button - circular with glow effect */
+  .send-button-mobile {
+    min-width: 48px;
+    min-height: 48px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    box-shadow: 0 0 20px hsl(180 100% 50% / 0.35);
+    transition: transform 0.1s ease, box-shadow 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .send-button-mobile:active:not(:disabled) {
+    transform: scale(0.9);
+    box-shadow: 0 0 35px hsl(180 100% 50% / 0.6);
+  }
+
+  .send-button-mobile:disabled {
+    box-shadow: none;
+    opacity: 0.5;
+  }
+
+  /* Message bubble sizing - mobile optimized */
+  .message-bubble-mobile {
+    max-width: 80%;
+    padding: 12px 16px;
+    font-size: 16px;
+    line-height: 1.5;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+  }
+
+  /* Anti-screenshot: blur messages when window loses focus */
+  .message-blur {
+    filter: blur(8px);
+    user-select: none;
+    pointer-events: none;
+    transition: filter 0.2s ease-out;
+  }
+
+  /* File preview card - mobile stacked layout */
+  .file-preview-mobile {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 12px;
+    min-width: 160px;
+    max-width: 100%;
+  }
+
+  /* Secure line banner */
+  .secure-line-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 60;
+    background: linear-gradient(90deg, hsl(156 100% 45% / 0.08) 0%, hsl(156 100% 45% / 0.15) 50%, hsl(156 100% 45% / 0.08) 100%);
+    border-bottom: 1px solid hsl(156 100% 45% / 0.25);
+    padding: 6px 16px;
+    padding-top: max(6px, env(safe-area-inset-top));
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: hsl(156 100% 60%);
+    text-align: center;
+    text-shadow: 0 0 8px hsl(156 100% 50% / 0.4);
+    animation: securePulse 3s ease-in-out infinite;
+  }
+
+  @keyframes securePulse {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; }
+  }
+
+  /* Mobile connection status badge */
+  .mobile-connection-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  /* Voice waveform container */
+  .voice-waveform-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 48px;
+    flex: 1;
+    min-width: 60px;
+  }
+
+  /* Recording timer */
+  .recording-timer {
+    font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+  }
+
+  /* ----------------------------------------
+     VOICE RECORDING OVERLAY SYSTEM
+     Unified input bar with floating overlays
+     ---------------------------------------- */
+
+  /* Voice mic button - always visible in input bar */
+  .voice-mic-button {
+    min-width: 48px;
+    min-height: 48px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .voice-mic-button:active:not(:disabled) {
+    transform: scale(0.92);
+  }
+
+  /* Voice Recording Overlay - Floating indicator above input bar */
+  .voice-recording-overlay {
+    position: fixed;
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 99;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 20px;
+    background: hsl(var(--background) / 0.97);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid hsl(var(--destructive) / 0.5);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px hsl(var(--destructive) / 0.25);
+    animation: voice-overlay-in 0.2s ease-out;
+  }
+
+  .voice-recording-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-width: 220px;
+  }
+
+  /* Voice Preview Overlay - After recording stops */
+  .voice-preview-overlay {
+    position: fixed;
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 99;
+    padding: 14px 20px;
+    background: hsl(var(--background) / 0.97);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid hsl(var(--accent) / 0.5);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px hsl(var(--accent) / 0.25);
+    animation: voice-overlay-in 0.2s ease-out;
+  }
+
+  .voice-preview-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    min-width: 260px;
+  }
+
+  @keyframes voice-overlay-in {
+    from {
+      opacity: 0;
+      transform: translateX(-50%) translateY(12px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0) scale(1);
+    }
+  }
+
+  /* Mobile-specific adjustments for voice overlays */
+  @media (max-width: 768px) {
+    .voice-recording-overlay,
+    .voice-preview-overlay {
+      left: 12px;
+      right: 12px;
+      transform: none;
+      width: auto;
+      bottom: calc(80px + env(safe-area-inset-bottom, 16px));
+    }
+
+    .voice-recording-indicator,
+    .voice-preview-content {
+      min-width: auto;
+      width: 100%;
+    }
+
+    @keyframes voice-overlay-in {
+      from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+  }
+
+  /* ----------------------------------------
+     VIDEO RECORDING SYSTEM
+     ---------------------------------------- */
+
+  /* Video record button - matches voice button styling */
+  .video-record-button {
+    min-width: 48px;
+    min-height: 48px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .video-record-button:active:not(:disabled) {
+    transform: scale(0.92);
+  }
+
+  /* Video message container */
+  .video-message-container {
+    max-width: 280px;
+    animation: video-message-in 0.3s ease-out;
+  }
+
+  @keyframes video-message-in {
+    from {
+      opacity: 0;
+      transform: scale(0.9) translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  /* Destroyed video message */
+  .video-message-destroyed {
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: hsl(var(--destructive) / 0.1);
+    border: 1px dashed hsl(var(--destructive) / 0.3);
+    max-width: 280px;
+    animation: video-destroyed 0.5s ease-out;
+  }
+
+  @keyframes video-destroyed {
+    0% {
+      opacity: 1;
+      background: hsl(var(--destructive) / 0.3);
+    }
+    50% {
+      background: hsl(var(--destructive) / 0.15);
+    }
+    100% {
+      opacity: 1;
+      background: hsl(var(--destructive) / 0.1);
+    }
+  }
+
+  /* Keyboard awareness utility */
+  .keyboard-aware {
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Input bar flex layout - WhatsApp/Telegram style - improved spacing */
+  .input-bar-flex {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    width: 100%;
+    max-width: 100%;
+    min-height: 56px;
+  }
+
+  /* Text input styling - improved min-height for mobile (Instagram-style) */
+  .mobile-text-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 14px 18px;
+    border-radius: 22px;
+    background: hsl(var(--secondary) / 0.5);
+    border: 1.5px solid hsl(var(--border) / 0.5);
+    font-size: 16px !important; /* Prevents iOS zoom on focus */
+    line-height: 1.5;
+    resize: none;
+    min-height: 52px;
+    max-height: 140px;
+    overflow-y: auto;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    color: hsl(var(--foreground));
+    /* Prevent zoom on iOS */
+    touch-action: manipulation;
+    -webkit-appearance: none;
+  }
+
+  .mobile-text-input:focus {
+    outline: none;
+    border-color: hsl(var(--primary) / 0.6);
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.15);
+  }
+
+  .mobile-text-input::placeholder {
+    color: hsl(var(--muted-foreground) / 0.6);
+  }
+
+  /* Full-screen modal for mobile */
+  .mobile-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: hsl(var(--background) / 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .mobile-modal-content {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* No horizontal scroll ever */
+  .no-horizontal-scroll {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  /* Mobile-optimized card */
+  .mobile-card {
+    padding: 20px;
+    border-radius: 16px;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border) / 0.5);
+  }
+
+  /* Mobile section spacing */
+  .mobile-section {
+    padding: 48px 16px;
+  }
+
+  /* Mobile typography */
+  .mobile-heading {
+    font-size: clamp(1.75rem, 6vw, 3rem);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+
+  .mobile-subheading {
+    font-size: clamp(1rem, 4vw, 1.25rem);
+    line-height: 1.5;
+  }
+
+  /* CTA buttons - mobile optimized */
+  .mobile-cta-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 52px;
+    padding: 14px 24px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.1s ease, box-shadow 0.15s ease;
+  }
+
+  .mobile-cta-primary:active {
+    transform: scale(0.97);
+  }
+
+  /* System message styling */
+  .system-message {
+    max-width: 90%;
+    padding: 10px 16px;
+    border-radius: 9999px;
+    background: hsl(var(--secondary) / 0.5);
+    font-size: 14px;
+    text-align: center;
+    color: hsl(var(--muted-foreground));
+  }
+}
+
+/* ----------------------------------------
+   MOBILE-SPECIFIC MEDIA QUERIES v4.0
+   ---------------------------------------- */
+
+/* Base mobile styles (mobile-first approach) */
+@media (max-width: 768px) {
+  /* Prevent any horizontal scrolling */
+  html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  /* Nav height reduction for mobile - 56px max */
+  .nav-mobile {
+    height: 56px;
+    padding: 8px 12px;
+  }
+
+  /* Termination screen mobile adjustments */
+  .termination-content {
+    margin: 16px;
+    padding: 28px 20px;
+    max-width: calc(100vw - 32px);
+  }
+
+  .termination-title {
+    font-size: 20px;
+    letter-spacing: 1.5px;
+  }
+
+  .termination-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+
+  .termination-reason {
+    font-size: 15px;
+  }
+
+  .termination-message {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .termination-button {
+    width: 100%;
+    min-height: 52px;
+    font-size: 14px;
+  }
+
+  /* Ensure all interactive elements have proper tap targets */
+  button:not(.inline-btn):not(.text-btn), 
+  a:not(.inline-link):not(.text-link), 
+  [role="button"] {
+    min-height: 44px;
+  }
+
+  /* Message bubbles on mobile - wider */
+  .message-bubble-mobile {
+    max-width: 85%;
+    padding: 12px 14px;
+    font-size: 16px;
+    border-radius: 18px;
+    line-height: 1.5;
+    word-break: break-word;
+    hyphens: auto;
+  }
+
+  /* Full-width inputs - prevents iOS auto-zoom on focus */
+  input[type="text"], 
+  input[type="email"], 
+  input[type="password"], 
+  input[type="search"],
+  textarea,
+  select {
+    font-size: 16px !important;
+    transform: translateZ(0);
+  }
+
+  /* Chat container full dynamic viewport height - 100dvh handles keyboard automatically */
+  .chat-container-mobile {
+    height: 100dvh;
+  }
+
+  /* Message area adjustments - compact padding for input bar */
+  .mobile-message-area {
+    padding-bottom: calc(115px + env(safe-area-inset-bottom, 12px));
+  }
+
+  /* Voice recorder buttons - larger on mobile */
+  .voice-btn-mobile {
+    min-width: 48px;
+    min-height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* File preview on mobile - stacked layout */
+  .file-preview-mobile {
+    flex-direction: column;
+    gap: 8px;
+    min-width: 140px;
+    max-width: 100%;
+  }
+
+  /* Mobile header - reduced height */
+  .mobile-header {
+    height: auto;
+    min-height: 52px;
+    z-index: 50;
+  }
+
+  .mobile-header-content {
+    padding: 8px 12px;
+  }
+
+  /* Input bar on mobile - fixed at bottom, compact layout */
+  .mobile-input-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 8px 12px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    background: hsl(var(--background));
+    border-top: 1px solid hsl(var(--border) / 0.5);
+    z-index: 100;
+    transform: translateZ(0);
+    will-change: transform;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  /* Mobile text input - compact for better UX */
+  .mobile-text-input {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px !important;
+    max-height: 100px;
+    padding: 10px 16px !important;
+    font-size: 16px !important;
+    line-height: 1.4;
+    border-radius: 22px;
+    background: hsl(var(--secondary));
+    border: 1px solid hsl(var(--border) / 0.5);
+    color: hsl(var(--foreground));
+    resize: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+    touch-action: manipulation;
+    -webkit-appearance: none;
+    -webkit-overflow-scrolling: touch;
+    word-wrap: break-word;
+    word-break: break-word;
+    white-space: pre-wrap;
+    /* Ensure text never overflows */
+    box-sizing: border-box;
+  }
+
+  .mobile-text-input::placeholder {
+    color: hsl(var(--muted-foreground));
+    font-size: 16px;
+    opacity: 0.8;
+  }
+
+  .mobile-text-input:focus {
+    outline: none;
+    border-color: hsl(var(--primary) / 0.5);
+    box-shadow: 0 0 0 2px hsl(var(--primary) / 0.15);
+  }
+
+  /* Action buttons on mobile - proper spacing and touch targets */
+  .action-button-mobile {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease;
+  }
+
+  .action-button-mobile:active {
+    background-color: hsl(var(--secondary) / 0.8);
+  }
+
+  .send-button-mobile {
+    min-width: 48px;
+    min-height: 48px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* Voice mic button - proper mobile sizing */
+  .voice-mic-button {
+    min-width: 48px;
+    min-height: 48px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* Hero section mobile */
+  .hero-mobile {
+    padding-top: calc(72px + env(safe-area-inset-top, 0px));
+    padding-bottom: 48px;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /* Feature cards on mobile */
+  .feature-card-mobile {
+    padding: 24px 20px;
+  }
+
+  /* Footer mobile */
+  .footer-mobile {
+    padding: 32px 16px;
+  }
+
+  /* Modal full-width on mobile */
+  .modal-mobile {
+    width: 100%;
+    max-width: 100%;
+    margin: 16px;
+    border-radius: 16px;
+  }
+
+  /* Verification modal mobile */
+  .verification-modal-mobile {
+    padding: 24px 20px;
+  }
+
+  /* Grid adjustments for mobile */
+  .grid-mobile-single {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Session creator mobile */
+  .session-creator-mobile {
+    padding: 24px 20px;
+  }
+
+  .ghost-id-display {
+    font-size: 18px;
+    word-break: break-all;
+  }
+
+  /* Disable heavy animations on mobile for performance */
+  .particle-container,
+  .bg-grid-pattern {
+    display: none;
+  }
+
+  /* Reduce blur effects for performance */
+  .glass {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .glass-dark {
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+  }
+
+  /* Hide desktop-only elements */
+  .desktop-only {
+    display: none !important;
+  }
+
+  /* Show mobile-only elements */
+  .mobile-only {
+    display: flex !important;
+  }
+
+  /* Spacing utilities for mobile */
+  .px-mobile {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .py-mobile {
+    padding-top: 24px;
+    padding-bottom: 24px;
+  }
+}
+
+/* Small phone adjustments (iPhone SE, older Android devices - 320px-375px) */
+@media (max-width: 375px) {
+  .message-bubble-mobile {
+    max-width: 88%;
+    padding: 10px 12px;
+    font-size: 15px;
+  }
+
+  .action-button-mobile {
+    min-width: 40px;
+    min-height: 40px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .send-button-mobile {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .mobile-input-bar {
+    padding: 10px 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    gap: 6px;
+    min-height: 68px;
+  }
+
+  .mobile-text-input {
+    padding: 12px 16px;
+    font-size: 16px !important;
+    border-radius: 22px;
+    min-height: 48px;
+  }
+
+  .termination-content {
+    padding: 20px 16px;
+  }
+
+  .termination-title {
+    font-size: 18px;
+  }
+
+  .mobile-header {
+    padding: 8px 10px;
+  }
+
+  .secure-line-banner {
+    font-size: 9px;
+    padding: 5px 12px;
+  }
+
+  .mobile-connection-badge {
+    padding: 3px 8px;
+    font-size: 9px;
+  }
+
+  /* Smaller Ghost ID on tiny screens */
+  .ghost-id-display {
+    font-size: 16px;
+  }
+
+  /* Session creator adjustments */
+  .session-creator-mobile {
+    padding: 20px 16px;
+  }
+
+  /* Timer options grid single column on tiny screens */
+  .timer-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Medium phones (iPhone 13/14, Pixel 5 - 376px-414px) */
+@media (min-width: 376px) and (max-width: 414px) {
+  .message-bubble-mobile {
+    max-width: 82%;
+  }
+
+  .ghost-id-display {
+    font-size: 20px;
+  }
+}
+
+/* Large phones (iPhone Pro Max, large Androids - 415px-480px) */
+@media (min-width: 415px) and (max-width: 480px) {
+  .message-bubble-mobile {
+    max-width: 78%;
+  }
+}
+
+/* Tall/narrow phones (iPhone X/11/12/13/14 Pro with notch) */
+@media (max-height: 700px) and (max-width: 420px) {
+  .mobile-message-area {
+    padding-bottom: calc(85px + env(safe-area-inset-bottom, 16px));
+  }
+
+  .hero-mobile {
+    padding-top: calc(72px + env(safe-area-inset-top, 0px));
+  }
+}
+
+/* Short screens (landscape or small height devices) */
+@media (max-height: 600px) {
+  .mobile-message-area {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 8px));
+  }
+
+  .mobile-input-bar {
+    padding: 8px 10px;
+  }
+
+  .termination-content {
+    padding: 20px 16px;
+  }
+
+  .termination-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+  }
+}
+
+/* Dynamic viewport height support */
+@supports (height: 100dvh) {
+  @media (max-width: 768px) {
+    .chat-container-mobile {
+      height: 100dvh;
+    }
+
+    .hero-mobile {
+      min-height: 100dvh;
+    }
+  }
+}
+
+/* Landscape mode on mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+  .mobile-message-area {
+    padding-top: 48px;
+    padding-bottom: 70px;
+  }
+
+  .mobile-input-bar {
+    padding: 6px 12px;
+  }
+
+  .message-bubble-mobile {
+    max-width: 55%;
+  }
+
+  .mobile-header {
+    padding: 6px 12px;
+  }
+
+  .action-button-mobile,
+  .send-button-mobile {
+    min-width: 40px;
+    min-height: 40px;
+    width: 40px;
+    height: 40px;
+  }
+
+  /* Hide banner in landscape */
+  .secure-line-banner {
+    display: block;
+  }
+}
+
+/* Tablet portrait (768px-1024px) */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .message-bubble-mobile {
+    max-width: 65%;
+  }
+
+  .mobile-input-bar {
+    padding: 14px 20px;
+  }
+
+  .container {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .pulse-glow, 
+  .pulse-glow-red, 
+  .secure-badge, 
+  .animate-float,
+  .securePulse,
+  .animate-pulse {
+    animation: none !important;
+  }
+
+  .particle-container {
+    display: none !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .message-bubble-mobile {
+    border: 2px solid currentColor;
+  }
+
+  .mobile-input-bar {
+    border-top-width: 2px;
+  }
+
+  .mobile-text-input {
+    border-width: 2px;
+  }
+
+  .action-button-mobile,
+  .send-button-mobile {
+    border: 2px solid currentColor;
+  }
+}
+
+/* Dark mode preference (already dark by default, but ensure consistency) */
+@media (prefers-color-scheme: dark) {
+  .glass {
+    background: hsl(240 10% 8% / 0.75);
+  }
+}

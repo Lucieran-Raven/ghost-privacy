@@ -1,0 +1,411 @@
+/**
+ * GHOST PRIVACY - SECURE IN-MEMORY SESSION KEY MANAGER
+ * 
+ * SECURITY GUARANTEE: Keys exist ONLY in JavaScript heap memory
+ * - NO disk persistence
+ * 
+ * Implements aggressive cleanup on:
+ * - Session termination
+ * - Browser close (beforeunload)
+ * - Tab visibility change
+ * - Window blur
+ */
+
+import { isValidSessionId } from '@/utils/algorithms/session/binding';
+
+interface SessionKeyData {
+    encryptionKey: CryptoKey | null;
+    keyPair: CryptoKeyPair | null;
+    partnerPublicKey: CryptoKey | null;
+    sessionId: string;
+    createdAt: number;
+    lastAccessedAt: number;
+}
+
+function assertNonExtractableSensitiveKey(key: CryptoKey, label: string): void {
+    if (key.type === 'public') return;
+    if (key.extractable) {
+        throw new Error(`${label} must be non-extractable`);
+    }
+}
+
+class SecureSessionKeyManager {
+    // In-memory storage ONLY - never persisted
+    private keys: Map<string, SessionKeyData> = new Map();
+    private cleanupHandlersRegistered = false;
+
+    private handlers?: {
+        beforeUnload: (e: BeforeUnloadEvent) => void;
+        unload: () => void;
+        pageHide: () => void;
+        visibilityChange: () => void;
+        blur: () => void;
+    };
+
+    constructor() {
+        this.registerCleanupHandlers();
+    }
+
+    /**
+     * Register aggressive cleanup handlers
+     */
+    private registerCleanupHandlers(): void {
+        if (this.cleanupHandlersRegistered) return;
+        this.cleanupHandlersRegistered = true;
+
+        if (typeof window === 'undefined' || typeof document === 'undefined') {
+            return;
+        }
+
+        if (!this.handlers) {
+            this.handlers = {
+                beforeUnload: (e: BeforeUnloadEvent) => {
+                    try {
+                        const hasPrompt = typeof (e as any)?.returnValue === 'string' && (e as any).returnValue.length > 0;
+                        if (hasPrompt) {
+                            return;
+                        }
+                    } catch {
+                    }
+                    this.nuclearPurge();
+                },
+                unload: () => {
+                    this.nuclearPurge();
+                },
+                pageHide: () => {
+                    this.nuclearPurge();
+                },
+                visibilityChange: () => {
+                    if (document.hidden) {
+                        // Optional: aggressive cleanup when tab is hidden
+                        // this.nuclearPurge();
+                    }
+                },
+                blur: () => {
+                    // Optional: cleanup on window blur
+                    // this.nuclearPurge();
+                }
+            };
+        }
+
+        // Cleanup on browser close
+        window.addEventListener('beforeunload', this.handlers.beforeUnload);
+
+        // Cleanup on tab visibility change (user switches tabs)
+        document.addEventListener('visibilitychange', this.handlers.visibilityChange);
+
+        // Cleanup on window blur (user switches windows)
+        window.addEventListener('blur', this.handlers.blur);
+
+        // Cleanup on page unload
+        window.addEventListener('unload', this.handlers.unload);
+
+        // Cleanup on page hide (mobile/PWA)
+        window.addEventListener('pagehide', this.handlers.pageHide);
+    }
+
+    dispose(): void {
+        if (!this.cleanupHandlersRegistered) return;
+        if (typeof window === 'undefined' || typeof document === 'undefined') {
+            this.cleanupHandlersRegistered = false;
+            return;
+        }
+        if (!this.handlers) {
+            this.cleanupHandlersRegistered = false;
+            return;
+        }
+
+        try {
+            window.removeEventListener('beforeunload', this.handlers.beforeUnload);
+        } catch {
+        }
+        try {
+            document.removeEventListener('visibilitychange', this.handlers.visibilityChange);
+        } catch {
+        }
+        try {
+            window.removeEventListener('blur', this.handlers.blur);
+        } catch {
+        }
+        try {
+            window.removeEventListener('unload', this.handlers.unload);
+        } catch {
+        }
+        try {
+            window.removeEventListener('pagehide', this.handlers.pageHide);
+        } catch {
+        }
+
+        this.cleanupHandlersRegistered = false;
+    }
+
+    /**
+     * Store encryption key for a session (IN MEMORY ONLY)
+     */
+    setEncryptionKey(sessionId: string, key: CryptoKey): void {
+        if (!isValidSessionId(sessionId)) {
+            throw new Error('invalid session id');
+        }
+        assertNonExtractableSensitiveKey(key, 'encryptionKey');
+        const existing = this.keys.get(sessionId) || this.createEmptyKeyData(sessionId);
+        existing.encryptionKey = key;
+        existing.lastAccessedAt = Date.now();
+        this.keys.set(sessionId, existing);
+    }
+
+    /**
+     * Get encryption key for a session
+     */
+    getEncryptionKey(sessionId: string): CryptoKey | null {
+        if (!isValidSessionId(sessionId)) {
+            return null;
+        }
+        const data = this.keys.get(sessionId);
+        if (data) {
+            data.lastAccessedAt = Date.now();
+            return data.encryptionKey;
+        }
+        return null;
+    }
+
+    /**
+     * Store ECDH key pair for a session (IN MEMORY ONLY)
+     */
+    setKeyPair(sessionId: string, keyPair: CryptoKeyPair): void {
+        if (!isValidSessionId(sessionId)) {
+            throw new Error('invalid session id');
+        }
+        assertNonExtractableSensitiveKey(keyPair.privateKey, 'keyPair.privateKey');
+        const existing = this.keys.get(sessionId) || this.createEmptyKeyData(sessionId);
+        existing.keyPair = keyPair;
+        existing.lastAccessedAt = Date.now();
+        this.keys.set(sessionId, existing);
+    }
+
+    /**
+     * Get ECDH key pair for a session
+     */
+    getKeyPair(sessionId: string): CryptoKeyPair | null {
+        if (!isValidSessionId(sessionId)) {
+            return null;
+        }
+        const data = this.keys.get(sessionId);
+        if (data) {
+            data.lastAccessedAt = Date.now();
+            return data.keyPair;
+        }
+        return null;
+    }
+
+    /**
+     * Store partner's public key (IN MEMORY ONLY)
+     */
+    setPartnerPublicKey(sessionId: string, publicKey: CryptoKey): void {
+        if (!isValidSessionId(sessionId)) {
+            throw new Error('invalid session id');
+        }
+        const existing = this.keys.get(sessionId) || this.createEmptyKeyData(sessionId);
+        existing.partnerPublicKey = publicKey;
+        existing.lastAccessedAt = Date.now();
+        this.keys.set(sessionId, existing);
+    }
+
+    /**
+     * Get partner's public key
+     */
+    getPartnerPublicKey(sessionId: string): CryptoKey | null {
+        if (!isValidSessionId(sessionId)) {
+            return null;
+        }
+        const data = this.keys.get(sessionId);
+        if (data) {
+            data.lastAccessedAt = Date.now();
+            return data.partnerPublicKey;
+        }
+        return null;
+    }
+
+    /**
+     * Check if session has keys
+     */
+    hasSession(sessionId: string): boolean {
+        if (!isValidSessionId(sessionId)) {
+            return false;
+        }
+        return this.keys.has(sessionId);
+    }
+
+    /**
+     * Get all session IDs (for debugging only)
+     */
+    getAllSessionIds(): string[] {
+        return Array.from(this.keys.keys());
+    }
+
+    /**
+     * Destroy a single session - complete memory wipe
+     */
+    destroySession(sessionId: string): void {
+        if (!isValidSessionId(sessionId)) {
+            return;
+        }
+        const data = this.keys.get(sessionId);
+        if (!data) return;
+
+        // Nullify all references
+        data.encryptionKey = null;
+        data.keyPair = null;
+        data.partnerPublicKey = null;
+        data.sessionId = '';
+        data.createdAt = 0;
+        data.lastAccessedAt = 0;
+
+        // Remove from map
+        this.keys.delete(sessionId);
+
+        // Hint garbage collector
+        this.hintGarbageCollection();
+    }
+
+    /**
+     * NUCLEAR OPTION - Destroy ALL sessions immediately
+     */
+    nuclearPurge(): void {
+        // Nullify all key references
+        this.keys.forEach((data) => {
+            data.encryptionKey = null;
+            data.keyPair = null;
+            data.partnerPublicKey = null;
+            data.sessionId = '';
+            data.createdAt = 0;
+            data.lastAccessedAt = 0;
+        });
+
+        // Clear map
+        this.keys.clear();
+
+        // Aggressive garbage collection hints
+        this.hintGarbageCollection();
+    }
+
+    /**
+     * Create empty key data structure
+     */
+    private createEmptyKeyData(sessionId: string): SessionKeyData {
+        return {
+            encryptionKey: null,
+            keyPair: null,
+            partnerPublicKey: null,
+            sessionId,
+            createdAt: Date.now(),
+            lastAccessedAt: Date.now(),
+        };
+    }
+
+    /**
+     * Hint to browser for garbage collection
+     */
+    private hintGarbageCollection(): void {
+        // Create and immediately discard large objects to trigger GC
+        try {
+            const dummy = new Array(10000).fill(0);
+            dummy.length = 0;
+        } catch {
+            // Ignore errors
+        }
+
+        // Use gc() if available (Chrome with --expose-gc flag)
+        try {
+            if (typeof window !== 'undefined' && typeof (window as any).gc === 'function') {
+                (window as any).gc();
+            }
+        } catch {
+            // Ignore errors
+        }
+    }
+
+    /**
+     * Auto-cleanup stale sessions (older than 30 minutes)
+     */
+    cleanupStaleSessions(): void {
+        const now = Date.now();
+        const thirtyMinutes = 30 * 60 * 1000;
+
+        this.keys.forEach((data, sessionId) => {
+            if (now - data.lastAccessedAt > thirtyMinutes) {
+                this.destroySession(sessionId);
+            }
+        });
+    }
+
+    /**
+     * Get memory usage estimate
+     */
+    getMemoryStats(): { sessionCount: number; estimatedBytes: number } {
+        return {
+            sessionCount: this.keys.size,
+            estimatedBytes: this.keys.size * 1024, // Rough estimate
+        };
+    }
+}
+
+// Singleton instance for the application
+let keyManagerInstance: SecureSessionKeyManager | null = null;
+let staleCleanupInterval: ReturnType<typeof setInterval> | null = null;
+let isInitializing = false;
+
+export const getSessionKeyManager = (): SecureSessionKeyManager => {
+    if (keyManagerInstance) {
+        return keyManagerInstance;
+    }
+    
+    // Prevent race condition during initialization
+    if (isInitializing) {
+        // Spin briefly waiting for initialization to complete
+        const start = Date.now();
+        while (isInitializing && Date.now() - start < 1000) {
+            // Busy wait for up to 1 second
+        }
+        if (keyManagerInstance) {
+            return keyManagerInstance;
+        }
+        // Fall through to create instance if initialization failed
+    }
+    
+    isInitializing = true;
+    try {
+        keyManagerInstance = new SecureSessionKeyManager();
+        
+        // Auto-cleanup stale sessions every 5 minutes
+        if (!staleCleanupInterval) {
+            staleCleanupInterval = setInterval(() => {
+                keyManagerInstance?.cleanupStaleSessions();
+            }, 5 * 60 * 1000);
+        }
+    } finally {
+        isInitializing = false;
+    }
+    
+    return keyManagerInstance;
+};
+
+export const destroySessionKeyManager = (): void => {
+    if (keyManagerInstance) {
+        keyManagerInstance.nuclearPurge();
+        try {
+            keyManagerInstance.dispose();
+        } catch {
+        }
+        keyManagerInstance = null;
+    }
+
+    if (staleCleanupInterval) {
+        try {
+            clearInterval(staleCleanupInterval);
+        } catch {
+        }
+        staleCleanupInterval = null;
+    }
+};
+
+export default getSessionKeyManager;

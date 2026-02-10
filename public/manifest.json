@@ -1,0 +1,29 @@
+{
+  "name": "Ghost Privacy — Operational Interface",
+  "short_name": "Ghost Ops",
+  "version": "2.0.0",
+  "description": "Operational-grade ephemeral messaging. Client-side encryption. RAM-only storage.",
+  "id": "/",
+  "start_url": "/",
+  "display": "standalone",
+  "prefer_related_applications": false,
+  "background_color": "#000000",
+  "theme_color": "#ff0a2a",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "lang": "en",
+  "scope": "/",
+  "dir": "ltr"
+}

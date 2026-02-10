@@ -1,0 +1,24 @@
+[functions]
+[functions.create-session]
+verify_jwt = false
+
+[functions.validate-session]
+verify_jwt = false
+
+[functions.delete-session]
+verify_jwt = false
+
+[functions.extend-session]
+verify_jwt = false
+
+[functions.cleanup-sessions]
+verify_jwt = false
+
+[functions.detect-honeypot]
+verify_jwt = false
+
+[functions.rotate-honeytokens]
+verify_jwt = false
+
+[functions.background-delete]
+verify_jwt = false

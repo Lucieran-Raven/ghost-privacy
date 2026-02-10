@@ -1,0 +1,120 @@
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20.19.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Integrity attestation
+        shell: pwsh
+        run: |
+          npm run integrity | Tee-Object -FilePath integrity-attestation-windows.txt
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7
+        with:
+          toolchain: 1.85.0
+          components: clippy
+
+      - name: Cargo fetch (locked)
+        run: cargo fetch --locked
+        working-directory: src-tauri
+
+      - name: Cargo clippy (locked)
+        run: cargo clippy --locked -- -D warnings
+        working-directory: src-tauri
+
+      - name: Optional Tauri signing cert SHA-256 (integrity anchor)
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace("${{ secrets.TAURI_EXPECTED_SIGNING_CERT_SHA256 }}")) {
+            Write-Host "No secrets.TAURI_EXPECTED_SIGNING_CERT_SHA256 set; building unsigned release (integrity verification will be skipped)."
+          } else {
+            Write-Host "Signing cert hash provided; integrity verification will be enabled."
+          }
+
+      - name: Build Tauri bundle
+        run: npm run tauri:build
+        env:
+          GHOST_EXPECTED_TAURI_SIGNING_CERT_SHA256: ${{ secrets.TAURI_EXPECTED_SIGNING_CERT_SHA256 }}
+
+      - name: Collect installers + checksums
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundleRoot = Join-Path $env:GITHUB_WORKSPACE 'src-tauri\target\release\bundle'
+          if (-not (Test-Path $bundleRoot)) { throw "Bundle output not found: $bundleRoot" }
+
+          $files = Get-ChildItem -Path $bundleRoot -Recurse -File | Where-Object { $_.Extension -in '.exe', '.msi', '.zip' }
+          if (-not $files -or $files.Count -eq 0) { throw "No installers found under $bundleRoot" }
+
+          $out = Join-Path $env:GITHUB_WORKSPACE 'ghost-privacy-windows-installers'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+
+          $checksumPath = Join-Path $env:GITHUB_WORKSPACE 'ghost-privacy-windows.sha256'
+          Remove-Item -Force -ErrorAction SilentlyContinue $checksumPath
+
+          foreach ($f in $files) {
+            Copy-Item -Force $f.FullName (Join-Path $out $f.Name)
+            $hash = (Get-FileHash -Algorithm SHA256 -Path $f.FullName).Hash.ToLower()
+            "$hash  $($f.Name)" | Out-File -FilePath $checksumPath -Append -Encoding ascii
+          }
+
+      - name: Attest build provenance (Windows release artifacts)
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018
+        with:
+          subject-path: |
+            ghost-privacy-windows-installers/*
+            ghost-privacy-windows.sha256
+            integrity-attestation-windows.txt
+
+      - name: Upload installers (workflow artifacts)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-installers
+          path: |
+            src-tauri/target/release/bundle/**
+            ghost-privacy-windows-installers/**
+            ghost-privacy-windows.sha256
+            integrity-attestation-windows.txt
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b
+        with:
+          files: |
+            ghost-privacy-windows-installers/*.msi
+            ghost-privacy-windows-installers/*.exe
+            ghost-privacy-windows-installers/*.zip
+            ghost-privacy-windows.sha256
+            integrity-attestation-windows.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

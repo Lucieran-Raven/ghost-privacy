@@ -1,0 +1,266 @@
+name: Security Audit & Build Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run security audit weekly
+    - cron: '0 0 * * 0'
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  security-audit:
+    name: NPM Security Audit
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '20.19.0'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Integrity suite
+        run: npm run integrity
+      
+      - name: Audit (fail on high/critical)
+        run: |
+          set -euo pipefail
+          npm audit --json > audit.json || true
+          node -e "const fs=require('fs');const a=JSON.parse(fs.readFileSync('audit.json','utf8'));const v=(a && a.metadata && a.metadata.vulnerabilities)||{};const high=Number(v.high||0);const critical=Number(v.critical||0);if(critical>0){console.error('CRITICAL vulnerabilities found:',critical);process.exit(1);}if(high>0){console.error('HIGH vulnerabilities found:',high);process.exit(1);}console.log('No high/critical vulnerabilities');"
+
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
+
+      - name: Run Semgrep SAST
+        uses: returntocorp/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d
+        with:
+          config: p/security-audit
+
+  lint:
+    name: ESLint Security Check
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '20.19.0'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run ESLint
+        run: npm run lint -- --quiet
+
+  build:
+    name: Build Verification
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    needs: [security-audit, semgrep, lint]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '20.19.0'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Integrity suite
+        run: npm run integrity
+
+      - name: Typecheck security-critical code (strict)
+        run: npx --no-install tsc -p tsconfig.security.json --noEmit
+
+      - name: Typecheck (app)
+        run: npm run typecheck
+      
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Ensure production build has no sourcemaps
+        run: |
+          set -euo pipefail
+          if find dist -type f -name '*.map' | grep -q .; then
+            echo "❌ SECURITY: sourcemap files found in dist/ (must not ship source maps in production)"
+            find dist -type f -name '*.map' -maxdepth 5 -print
+            exit 1
+          fi
+      
+      - name: Verify build output
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "❌ Build failed: dist directory not created"
+            exit 1
+          fi
+          
+          if [ ! -f "dist/index.html" ]; then
+            echo "❌ Build failed: index.html not found"
+            exit 1
+          fi
+          
+          echo "✅ Build successful"
+
+  csp-validation:
+    name: Content Security Policy Validation
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
+      
+      - name: Validate CSP headers
+        run: |
+          set -euo pipefail
+
+          WEB_CSP=$(grep -E '^\s*Content-Security-Policy\s*=\s*"' netlify.toml | head -n 1 | sed -E 's/^\s*Content-Security-Policy\s*=\s*"(.*)"\s*$/\1/')
+          if [ -z "${WEB_CSP}" ]; then
+            echo "❌ SECURITY: Web CSP not found in netlify.toml"
+            exit 1
+          fi
+
+          TAURI_CSP=$(jq -r '.app.security.csp // ""' src-tauri/tauri.conf.json)
+          if [ -z "${TAURI_CSP}" ] || [ "${TAURI_CSP}" = "null" ]; then
+            echo "❌ SECURITY: Tauri CSP not found in src-tauri/tauri.conf.json"
+            exit 1
+          fi
+
+          if echo "${WEB_CSP} ${TAURI_CSP}" | grep -q "unsafe-eval"; then
+            echo "❌ SECURITY: unsafe-eval found in CSP"
+            exit 1
+          fi
+          if echo "${WEB_CSP} ${TAURI_CSP}" | grep -q "unsafe-inline"; then
+            echo "❌ SECURITY: unsafe-inline found in CSP"
+            exit 1
+          fi
+
+          WEB_CSP_NORM=$(echo "${WEB_CSP}" | tr -s ' ')
+          TAURI_CSP_NORM=$(echo "${TAURI_CSP}" | tr -s ' ')
+
+          if [ "${WEB_CSP_NORM}" != "${TAURI_CSP_NORM}" ]; then
+            echo "❌ SECURITY: CSP drift detected between Web and Tauri"
+            echo "Web CSP  : ${WEB_CSP_NORM}"
+            echo "Tauri CSP: ${TAURI_CSP_NORM}"
+            exit 1
+          fi
+
+          if ! echo "${WEB_CSP_NORM}" | grep -q "default-src 'self'"; then
+            echo "❌ SECURITY: default-src 'self' not found in CSP"
+            exit 1
+          fi
+
+          echo "✅ CSP validation passed (Web/Tauri parity enforced)"
+
+  env-check:
+    name: Environment Variables Security Check
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
+      
+      - name: Check for .env file in repository
+        run: |
+          if [ -f ".env" ]; then
+            echo "❌ CRITICAL: .env file found in repository!"
+            echo "This file should never be committed. Add it to .gitignore."
+            exit 1
+          fi
+
+          echo "✅ No .env file in repository"
+
+  dependency-review:
+    name: Dependency License & Security Review
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
+      
+      - name: Dependency Review
+        uses: actions/dependency-review-action@3c4e3dcb1aa7874d2c16be7d79418e9b7efd6261
+        with:
+          fail-on-severity: moderate
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
+
+  post-deploy-verification:
+    name: Post-Deploy Security Verification
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [security-audit, lint, build, csp-validation, env-check]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          token: ${{ github.token }}
+          persist-credentials: true
+          clean: true
+          fetch-depth: 0
+      
+      - name: Verify deployment security
+        run: |
+          echo "✅ All security checks passed"
+          echo "📦 Build verified"
+          echo "🔒 Dependencies audited"
+          echo "🛡️ CSP validated"
+          echo "🔑 No credentials exposed"

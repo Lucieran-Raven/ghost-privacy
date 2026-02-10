@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20.19.0
+          cache: npm
+
+      - name: Install dependencies (reproducible)
+        run: npm ci
+
+      - name: Run unit/security tests
+        run: npm test
+
+      - name: Integrity suite
+        run: npm run integrity
+
+      - name: Lint
+        run: npm run lint -- --quiet
+
+      - name: Typecheck security-critical code (strict)
+        run: npx --no-install tsc -p tsconfig.security.json --noEmit
+
+      - name: Typecheck (app)
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Ensure production build has no sourcemaps
+        run: |
+          set -euo pipefail
+          if find dist -type f -name '*.map' | grep -q .; then
+            echo "❌ SECURITY: sourcemap files found in dist/ (must not ship source maps in production)"
+            find dist -type f -name '*.map' -maxdepth 5 -print
+            exit 1
+          fi
+
+  tauri-tests:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7
+        with:
+          toolchain: 1.83.0
+
+      - name: Cargo test (locked)
+        working-directory: src-tauri
+        run: cargo test --locked
+
+  android-assemble-release:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    env:
+      CAPACITOR_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20.19.0
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+
+      - name: Install dependencies (reproducible)
+        run: npm ci
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Sync Capacitor (Android)
+        run: npx --no-install cap sync android
+
+      - name: Ensure gradlew is executable
+        run: chmod +x android/gradlew
+
+      - name: Build release APK (smoke test)
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon

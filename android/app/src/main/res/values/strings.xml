@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ghost Privacy</string>
+    <string name="title_activity_main">Ghost Privacy</string>
+    <string name="package_name">app.ghostprivacy.mobile</string>
+    <string name="custom_url_scheme">app.ghostprivacy.mobile</string>
+</resources>
