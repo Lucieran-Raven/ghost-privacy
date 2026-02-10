@@ -37,6 +37,8 @@
     "postinstall": "node scripts/postinstall.cjs"
   },
   "dependencies": {
+    "@bugsnag/js": "^8.8.1",
+    "@bugsnag/plugin-react": "^8.8.0",
     "@capacitor/android": "^6.2.0",
     "@capacitor/core": "^6.2.0",
     "@capacitor/ios": "^6.2.1",

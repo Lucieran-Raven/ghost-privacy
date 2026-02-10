@@ -5,6 +5,7 @@ import { isTauriRuntime, setTauriContentProtected, tauriInvoke } from "@/utils/r
 import { runCertificatePinningCheck } from "@/utils/certPinning";
 import { enforceBuildIntegrityOrExit } from "@/utils/buildIntegrity";
 import { installMemoryLifecycleHandlers } from "@/utils/memory/lifecycle";
+import { initializeBugsnag } from "@/utils/bugsnag";
 
 const enableServiceWorker = import.meta.env.VITE_ENABLE_SERVICE_WORKER === 'true';
 
@@ -12,6 +13,9 @@ const bootstrap = () => {
 
 // Install memory lifecycle handlers early
 installMemoryLifecycleHandlers();
+
+// Initialize Bugsnag error monitoring
+initializeBugsnag();
 
 try {
   if (isTauriRuntime()) {
