@@ -9,7 +9,7 @@
  */
 
 import { Buffer } from 'buffer';
-import { x25519 } from '@noble/curves/ed25519';
+import { x25519 } from '@noble/curves/ed25519.js';
 
 // ============================================================================
 // Types and Interfaces
@@ -382,7 +382,7 @@ export class MultiDeviceSync {
 
   private async generateX25519Keypair(): Promise<{publicKey: Uint8Array; secretKey: Uint8Array}> {
     // Generate proper X25519 keypair using noble-curves
-    const secretKey = x25519.utils.randomPrivateKey();
+    const secretKey = x25519.utils.randomSecretKey();
     const publicKey = x25519.getPublicKey(secretKey);
     
     return { publicKey, secretKey };
