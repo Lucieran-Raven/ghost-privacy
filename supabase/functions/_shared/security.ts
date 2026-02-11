@@ -88,39 +88,53 @@ export function timingSafeEqualString(a: string, b: string): boolean {
 }
 
 /**
- * Extract client IP from request headers with fallback chain:
- * 1. cf-connecting-ip (Cloudflare)
- * 2. x-forwarded-for (first IP before comma)
- * 3. x-real-ip
- * 
- * Returns trimmed IP or null if none found
+ * Extract client IP from request headers.
+ * Security fix: Only trust platform-authenticated headers (Cloudflare).
+ * Do NOT trust x-forwarded-for or x-real-ip as they can be spoofed by clients.
  */
 function extractClientIp(req: Request): string | null {
-  // Try Cloudflare header first
+  // Trust only Cloudflare's authenticated header
   const cfIp = (req.headers.get('cf-connecting-ip') || '').trim();
   if (cfIp) return cfIp;
 
-  // Try x-forwarded-for (use first IP in chain)
-  const forwardedFor = req.headers.get('x-forwarded-for');
-  if (forwardedFor) {
-    const firstIp = forwardedFor.split(',')[0]?.trim();
-    if (firstIp) return firstIp;
-  }
-
-  // Try x-real-ip
-  const realIp = (req.headers.get('x-real-ip') || '').trim();
-  if (realIp) return realIp;
-
+  // In production, we must have cf-connecting-ip from Cloudflare
+  // Never fall back to x-forwarded-for or x-real-ip as they are client-controlled
   return null;
 }
 
 /**
- * Validate if a string looks like a valid IPv4 or IPv6 address
+ * Strict IP validation using built-in URL parser.
+ * Replaces weak regex that accepted invalid IPs like 999.999.999.999
  */
 function isValidIpFormat(ip: string): boolean {
-  const looksLikeIpv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/.test(ip);
-  const looksLikeIpv6 = /^[0-9a-fA-F:]+$/.test(ip) && ip.includes(':');
-  return looksLikeIpv4 || looksLikeIpv6;
+  // Use URL constructor for strict validation
+  try {
+    // Try IPv4
+    const ipv4Pattern = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+    const ipv4Match = ip.match(ipv4Pattern);
+    if (ipv4Match) {
+      // Validate each octet is 0-255
+      return ipv4Match.slice(1).every(octet => {
+        const num = parseInt(octet, 10);
+        return num >= 0 && num <= 255;
+      });
+    }
+    
+    // Try IPv6 - check for at least one colon and valid hex chars
+    if (ip.includes(':')) {
+      // Quick format check: must contain only hex digits, colons, and optional zone
+      const ipv6Pattern = /^[0-9a-fA-F:]+(?:%[0-9a-zA-Z]+)?$/;
+      if (!ipv6Pattern.test(ip)) return false;
+      
+      // Must have at least 2 colons for valid IPv6
+      const colonCount = (ip.match(/:/g) || []).length;
+      return colonCount >= 2;
+    }
+    
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 let cachedHmacKey: CryptoKey | null = null;

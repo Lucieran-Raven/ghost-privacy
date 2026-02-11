@@ -23,6 +23,13 @@ const errorResponse = async (req: Request, status: number, code: string) => {
     SERVER_ERROR: 'Internal error'
   };
 
+  const statusMap: Record<string, number> = {
+    INVALID_REQUEST: 400,
+    IP_UNAVAILABLE: 400,
+    NOT_FOUND: 404,
+    SERVER_ERROR: 500,
+  };
+
   return jsonResponse(
     {
       success: false,
@@ -30,7 +37,7 @@ const errorResponse = async (req: Request, status: number, code: string) => {
       code
     },
     {
-      status: 200,
+      status: statusMap[code] || 500,
       headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' }
     }
   );

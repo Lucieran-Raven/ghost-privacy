@@ -24,6 +24,14 @@ const errorResponse = (req: Request, code: string) => {
     SERVER_ERROR: 'Unable to process request',
   };
 
+  const statusMap: Record<string, number> = {
+    INVALID_REQUEST: 400,
+    IP_UNAVAILABLE: 400,
+    RATE_LIMITED: 429,
+    CONFLICT: 409,
+    SERVER_ERROR: 500,
+  };
+
   return jsonResponse(
     {
       success: false,
@@ -31,7 +39,7 @@ const errorResponse = (req: Request, code: string) => {
       code
     },
     {
-      status: 200,
+      status: statusMap[code] || 500,
       headers: { ...corsHeaders(req, ALLOWED_ORIGINS), 'Content-Type': 'application/json' }
     }
   );
