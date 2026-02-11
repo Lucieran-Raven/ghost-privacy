@@ -88,14 +88,15 @@ export class IPFSStorage {
       // Generate random encryption key
       encryptionKey = crypto.getRandomValues(new Uint8Array(32));
       
-      // Encrypt data with ChaCha20-Poly1305
-      const encrypted = await this.encryptChaCha20(data, encryptionKey);
+      // Encrypt data with AES-GCM
+      const encrypted = await this.encryptAESGCM(data, encryptionKey);
       
       // Wrap with metadata
       const metadata = {
         version: 'ghost-v1',
         encrypted: true,
-        nonce: Buffer.from(encrypted.nonce).toString('base64'),
+        iv: Buffer.from(encrypted.iv).toString('base64'),
+        tag: Buffer.from(encrypted.tag).toString('base64'),
         originalSize: data.length,
         filename,
         timestamp: Date.now(),
@@ -165,9 +166,10 @@ export class IPFSStorage {
         throw new Error('Encryption key required for encrypted content');
       }
 
-      const nonce = Buffer.from(metadata.nonce, 'base64');
-      data = await this.decryptChaCha20(
-        { ciphertext, nonce },
+      const iv = Buffer.from(metadata.iv, 'base64');
+      const tag = Buffer.from(metadata.tag, 'base64');
+      data = await this.decryptAESGCM(
+        { ciphertext, iv, tag },
         encryptionKey
       );
     } else {
@@ -391,80 +393,65 @@ export class IPFSStorage {
     }
   }
 
-  private async encryptChaCha20(
+  private async encryptAESGCM(
     plaintext: Uint8Array,
     key: Uint8Array
-  ): Promise<{ ciphertext: Uint8Array; nonce: Uint8Array }> {
-    const nonce = crypto.getRandomValues(new Uint8Array(12)) as Uint8Array;
+  ): Promise<{ ciphertext: Uint8Array; iv: Uint8Array; tag: Uint8Array }> {
+    // Generate random IV (12 bytes for AES-GCM)
+    const iv = crypto.getRandomValues(new Uint8Array(12)) as Uint8Array;
     
-    // Simplified ChaCha20 - actual implementation uses proper stream cipher
-    const ciphertext = new Uint8Array(plaintext.length);
-    const keystream = await this.generateKeystream(key, nonce, plaintext.length);
+    // Import key for WebCrypto
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      key,
+      { name: 'AES-GCM' },
+      false,
+      ['encrypt']
+    );
     
-    for (let i = 0; i < plaintext.length; i++) {
-      ciphertext[i] = plaintext[i] ^ keystream[i];
-    }
+    // Encrypt using AES-GCM (WebCrypto handles authentication tag internally)
+    const ciphertextWithTag = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      cryptoKey,
+      plaintext
+    );
+    
+    // Split ciphertext and authentication tag (last 16 bytes)
+    const encrypted = new Uint8Array(ciphertextWithTag);
+    const ciphertext = encrypted.slice(0, -16);
+    const tag = encrypted.slice(-16);
 
-    return { ciphertext, nonce };
+    return { ciphertext, iv, tag };
   }
 
-  private async decryptChaCha20(
-    encrypted: { ciphertext: Uint8Array; nonce: Uint8Array },
+  private async decryptAESGCM(
+    encrypted: { ciphertext: Uint8Array; iv: Uint8Array; tag: Uint8Array },
     key: Uint8Array
   ): Promise<Uint8Array> {
-    const { ciphertext, nonce } = encrypted;
+    const { ciphertext, iv, tag } = encrypted;
     
-    const plaintext = new Uint8Array(ciphertext.length);
-    const keystream = await this.generateKeystream(key, nonce, ciphertext.length);
+    // Reconstruct ciphertext + tag for WebCrypto
+    const combined = new Uint8Array(ciphertext.length + tag.length);
+    combined.set(ciphertext, 0);
+    combined.set(tag, ciphertext.length);
     
-    for (let i = 0; i < ciphertext.length; i++) {
-      plaintext[i] = ciphertext[i] ^ keystream[i];
-    }
-
-    return plaintext;
-  }
-
-  private async generateKeystream(
-    key: Uint8Array,
-    nonce: Uint8Array,
-    length: number
-  ): Promise<Uint8Array> {
-    // Simplified - actual ChaCha20 quarter-round function
-    const keystream = new Uint8Array(length);
-    const state = new Uint8Array(64);
+    // Import key for WebCrypto
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      key,
+      { name: 'AES-GCM' },
+      false,
+      ['decrypt']
+    );
     
-    // Set ChaCha20 constants "expand 32-byte k"
-    const constants = new TextEncoder().encode('expand 32-byte k');
-    state.set(constants, 0);
-    
-    // Set key (32 bytes)
-    state.set(key, 16);
-    
-    // Set counter and nonce (12 bytes)
-    state.set(nonce, 52);
+    // Decrypt (will throw if authentication tag is invalid)
+    const plaintext = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      cryptoKey,
+      combined
+    );
 
-    // Generate keystream blocks
-    let offset = 0;
-    let counter = 0;
-    
-    while (offset < length) {
-      // Set counter (4 bytes)
-      const counterBytes = new Uint8Array(4);
-      new DataView(counterBytes.buffer).setUint32(0, counter, true);
-      state.set(counterBytes, 48);
-
-      // Hash block (simplified)
-      const block = await crypto.subtle.digest('SHA-256', state as unknown as ArrayBuffer);
-      const blockArray = new Uint8Array(block);
-
-      const toCopy = Math.min(64, length - offset);
-      keystream.set(blockArray.slice(0, toCopy), offset);
-      
-      offset += toCopy;
-      counter++;
-    }
-
-    return keystream;
+    return new Uint8Array(plaintext);
   }
 
   private async getCurrentEpoch(): Promise<number> {
