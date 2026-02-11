@@ -1,7 +1,7 @@
 {
   "name": "vite_react_shadcn_ts",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.4.0",
   "packageManager": "npm@10.9.3",
   "engines": {
     "node": ">=20 <23",
@@ -37,8 +37,6 @@
     "postinstall": "node scripts/postinstall.cjs"
   },
   "dependencies": {
-    "@bugsnag/js": "^8.8.1",
-    "@bugsnag/plugin-react": "^8.8.0",
     "@capacitor/android": "^6.2.0",
     "@capacitor/core": "^6.2.0",
     "@capacitor/ios": "^6.2.1",

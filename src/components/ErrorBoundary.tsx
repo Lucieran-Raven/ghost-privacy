@@ -1,5 +1,4 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
-import { notifyBugsnag } from '@/utils/bugsnag';
 
 interface Props {
   children: ReactNode;
@@ -31,9 +30,6 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Report to Bugsnag for crash analytics
-    notifyBugsnag(error, 'ErrorBoundary');
-    
     void error;
     void errorInfo;
     void IS_DEV;
